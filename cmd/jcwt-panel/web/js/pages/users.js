@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — Users Management Page (Admin Only)
 import { request } from '../api.js';
-import { icons, showToast, showModal, closeModal, escapeHtml } from '../app.js';
+import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'User Management';
@@ -186,7 +186,7 @@ export async function render(container) {
             btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
                 const username = btn.dataset.username;
-                if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+                if (!await showConfirm('Delete User', `Delete user "${username}"? This cannot be undone.`, 'Delete', 'btn-danger')) return;
 
                 try {
                     await request(`/api/users?id=${id}`, { method: 'DELETE' });

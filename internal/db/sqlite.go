@@ -47,6 +47,7 @@ func Open(dataDir string) (*DB, error) {
 	conn.Exec("ALTER TABLE admin_users ADD COLUMN role TEXT DEFAULT 'admin'")
 	conn.Exec("ALTER TABLE admin_users ADD COLUMN email TEXT DEFAULT ''")
 	conn.Exec("ALTER TABLE sites ADD COLUMN delete_protection INTEGER DEFAULT 0")
+	conn.Exec("ALTER TABLE admin_users ADD COLUMN totp_secret TEXT DEFAULT ''")
 
 	return &DB{Conn: conn}, nil
 }
@@ -114,6 +115,19 @@ func (d *DB) AdminCount() (int, error) {
 	var count int
 	err := d.Conn.QueryRow("SELECT COUNT(*) FROM admin_users").Scan(&count)
 	return count, err
+}
+
+// --- TOTP queries ---
+
+func (d *DB) GetTOTPSecret(userID int64) (string, error) {
+	var secret string
+	err := d.Conn.QueryRow("SELECT COALESCE(totp_secret, '') FROM admin_users WHERE id = ?", userID).Scan(&secret)
+	return secret, err
+}
+
+func (d *DB) SetTOTPSecret(userID int64, secret string) error {
+	_, err := d.Conn.Exec("UPDATE admin_users SET totp_secret = ? WHERE id = ?", secret, userID)
+	return err
 }
 
 // --- Site queries ---

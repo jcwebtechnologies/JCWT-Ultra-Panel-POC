@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — Databases Page
 import { databases, dbUsers, sites } from '../api.js';
-import { icons, showToast, showModal, closeModal, escapeHtml } from '../app.js';
+import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'Databases';
@@ -107,7 +107,7 @@ export async function render(container) {
 
                 tabContent.querySelectorAll('.del-db').forEach(btn => {
                     btn.addEventListener('click', async () => {
-                        if (!confirm(`Delete database "${btn.dataset.name}"? This is irreversible!`)) return;
+                        if (!await showConfirm('Delete Database', `Delete database "${btn.dataset.name}"? This is irreversible and will drop the database from MariaDB.`, 'Delete', 'btn-danger')) return;
                         try {
                             await databases.delete(btn.dataset.id);
                             showToast('Database deleted', 'success');
@@ -227,7 +227,7 @@ export async function render(container) {
 
                 tabContent.querySelectorAll('.del-user').forEach(btn => {
                     btn.addEventListener('click', async () => {
-                        if (!confirm(`Delete user "${btn.dataset.user}"?`)) return;
+                        if (!await showConfirm('Delete User', `Delete database user "${btn.dataset.user}"? This cannot be undone.`, 'Delete', 'btn-danger')) return;
                         try {
                             await dbUsers.delete(btn.dataset.id);
                             showToast('User deleted', 'success');

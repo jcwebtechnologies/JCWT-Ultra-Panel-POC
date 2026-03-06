@@ -75,19 +75,19 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
     <title>%s — Site Ready</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .card { max-width: 640px; width: 90%%; background: #1e293b; border-radius: 16px; padding: 48px; border: 1px solid #334155; }
-        h1 { font-size: 2rem; background: linear-gradient(135deg, #818cf8, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
-        .subtitle { color: #94a3b8; margin-bottom: 32px; }
-        .badge { display: inline-block; background: #312e81; color: #a5b4fc; padding: 6px 14px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; margin-bottom: 24px; }
-        .steps { background: #0f172a; border-radius: 12px; padding: 24px; margin-top: 24px; }
-        .steps h3 { color: #818cf8; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
-        .step { display: flex; gap: 12px; margin-bottom: 12px; font-size: 0.9rem; color: #94a3b8; }
-        .step-num { background: #334155; color: #818cf8; width: 24px; height: 24px; border-radius: 50%%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; flex-shrink: 0; }
-        code { background: #334155; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #e2e8f0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f8fafc 0%%, #e2e8f0 100%%); color: #334155; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card { max-width: 640px; width: 90%%; background: #ffffff; border-radius: 16px; padding: 48px; border: 1px solid #e2e5ef; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+        h1 { font-size: 2rem; background: linear-gradient(135deg, #6366f1, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+        .subtitle { color: #64748b; margin-bottom: 32px; }
+        .badge { display: inline-block; background: #eef2ff; color: #6366f1; padding: 6px 14px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; margin-bottom: 24px; }
+        .steps { background: #f8fafc; border-radius: 12px; padding: 24px; margin-top: 24px; border: 1px solid #e2e5ef; }
+        .steps h3 { color: #6366f1; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+        .step { display: flex; gap: 12px; margin-bottom: 12px; font-size: 0.9rem; color: #64748b; }
+        .step-num { background: #eef2ff; color: #6366f1; width: 24px; height: 24px; border-radius: 50%%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; flex-shrink: 0; }
+        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #334155; }
         .info { display: flex; gap: 20px; margin-top: 24px; flex-wrap: wrap; }
-        .info-item { font-size: 0.85rem; color: #64748b; }
-        .info-item strong { color: #94a3b8; }
+        .info-item { font-size: 0.85rem; color: #94a3b8; }
+        .info-item strong { color: #64748b; }
     </style>
 </head>
 <body>
@@ -119,19 +119,19 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
     <title>%s — Site Ready</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .card { max-width: 640px; width: 90%%; background: #1e293b; border-radius: 16px; padding: 48px; border: 1px solid #334155; }
-        h1 { font-size: 2rem; background: linear-gradient(135deg, #34d399, #10b981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
-        .subtitle { color: #94a3b8; margin-bottom: 32px; }
-        .badge { display: inline-block; background: #064e3b; color: #6ee7b7; padding: 6px 14px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; margin-bottom: 24px; }
-        .steps { background: #0f172a; border-radius: 12px; padding: 24px; margin-top: 24px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f8fafc 0%%, #e2e8f0 100%%); color: #334155; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card { max-width: 640px; width: 90%%; background: #ffffff; border-radius: 16px; padding: 48px; border: 1px solid #e2e5ef; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+        h1 { font-size: 2rem; background: linear-gradient(135deg, #10b981, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+        .subtitle { color: #64748b; margin-bottom: 32px; }
+        .badge { display: inline-block; background: #ecfdf5; color: #10b981; padding: 6px 14px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; margin-bottom: 24px; }
+        .steps { background: #f8fafc; border-radius: 12px; padding: 24px; margin-top: 24px; border: 1px solid #e2e5ef; }
         .steps h3 { color: #10b981; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
-        .step { display: flex; gap: 12px; margin-bottom: 12px; font-size: 0.9rem; color: #94a3b8; }
-        .step-num { background: #334155; color: #10b981; width: 24px; height: 24px; border-radius: 50%%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; flex-shrink: 0; }
-        code { background: #334155; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #e2e8f0; }
+        .step { display: flex; gap: 12px; margin-bottom: 12px; font-size: 0.9rem; color: #64748b; }
+        .step-num { background: #ecfdf5; color: #10b981; width: 24px; height: 24px; border-radius: 50%%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; flex-shrink: 0; }
+        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #334155; }
         .info { display: flex; gap: 20px; margin-top: 24px; flex-wrap: wrap; }
-        .info-item { font-size: 0.85rem; color: #64748b; }
-        .info-item strong { color: #94a3b8; }
+        .info-item { font-size: 0.85rem; color: #94a3b8; }
+        .info-item strong { color: #64748b; }
     </style>
 </head>
 <body>

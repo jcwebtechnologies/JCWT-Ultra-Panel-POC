@@ -285,36 +285,22 @@ session_destroy();
         .icon { font-size: 3rem; margin-bottom: 1rem; }
         h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.5rem; color: #1e293b; }
         p { color: #64748b; line-height: 1.6; margin-bottom: 1.5rem; }
-        a.btn { display: inline-block; padding: 0.6rem 1.5rem; background: #6366f1; color: #fff;
-            text-decoration: none; border-radius: 8px; font-weight: 500; font-size: 0.9rem;
-            transition: background 0.2s; margin-bottom: 1rem; }
-        a.btn:hover { background: #4f46e5; }
+        .btn { display: inline-block; padding: 0.6rem 1.5rem; background: #6366f1; color: #fff;
+            border: none; border-radius: 8px; font-weight: 500; font-size: 0.9rem;
+            cursor: pointer; transition: background 0.2s; margin-bottom: 1rem; }
+        .btn:hover { background: #4f46e5; }
         .badge { display: inline-block; padding: 0.35rem 0.9rem; background: #f1f5f9;
             border-radius: 999px; font-size: 0.75rem; color: #94a3b8; }
-        .countdown { color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.5rem; }
     </style>
 </head>
 <body>
     <div class="card">
         <div class="icon">🔒</div>
         <h1>Session Ended</h1>
-        <p>Your phpMyAdmin session has ended.</p>
-        <a class="btn" id="backBtn" href="javascript:void(0)">← Back to Database Management</a>
-        <div class="countdown" id="countdown">Redirecting in 5 seconds...</div>
+        <p>Your phpMyAdmin session has ended.<br>You may close this tab and open phpMyAdmin again from the panel when needed.</p>
+        <button class="btn" onclick="window.close()">Close This Window</button>
         <div class="badge">Powered by JCWT Ultra Panel</div>
     </div>
-    <script>
-        // Build panel URL from current host (panel runs on port 8443)
-        var panelUrl = 'https://' + window.location.hostname + ':8443/#/databases';
-        document.getElementById('backBtn').href = panelUrl;
-        var sec = 5;
-        var el = document.getElementById('countdown');
-        var timer = setInterval(function(){
-            sec--;
-            if(sec <= 0){ clearInterval(timer); window.location.href = panelUrl; }
-            else { el.textContent = 'Redirecting in ' + sec + ' seconds...'; }
-        }, 1000);
-    </script>
 </body>
 </html>
 SIGNONPHP

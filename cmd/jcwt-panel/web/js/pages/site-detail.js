@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — Site Detail Page (SSL, PHP Settings, Cron, Files)
 import { sites, phpVersions, ssl, phpSettings, cron, files, databases } from '../api.js';
-import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes } from '../app.js';
+import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes, showConfirm } from '../app.js';
 import { request } from '../api.js';
 
 export async function render(container, siteId) {
@@ -171,6 +171,17 @@ function renderOverview(el, site, versions, siteId) {
 }
 
 async function renderPHP(el, siteId) {
+    const phpOpts = {
+        memory_limit: ['128M', '256M', '512M', '768M', '1024M', '2048M'],
+        max_execution_time: ['30', '60', '120', '300', '600', '900'],
+        max_input_time: ['60', '120', '300', '600', '900'],
+        max_input_vars: ['1000', '2000', '3000', '5000', '10000'],
+        post_max_size: ['32M', '64M', '128M', '256M', '512M', '1024M'],
+        upload_max_filesize: ['32M', '64M', '128M', '256M', '512M', '1024M'],
+    };
+    function opts(key, current) {
+        return phpOpts[key].map(v => `<option value="${v}" ${String(v) === String(current) ? 'selected' : ''}>${v}</option>`).join('');
+    }
     try {
         const settings = await phpSettings.get(siteId);
         el.innerHTML = `
@@ -180,31 +191,31 @@ async function renderPHP(el, siteId) {
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">memory_limit</label>
-                        <input type="text" class="form-input" id="php-memory" value="${settings.memory_limit || '256M'}">
+                        <select class="form-select" id="php-memory">${opts('memory_limit', settings.memory_limit || '256M')}</select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">max_execution_time</label>
-                        <input type="number" class="form-input" id="php-exec-time" value="${settings.max_execution_time || 30}">
+                        <select class="form-select" id="php-exec-time">${opts('max_execution_time', settings.max_execution_time || 30)}</select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">max_input_time</label>
-                        <input type="number" class="form-input" id="php-input-time" value="${settings.max_input_time || 60}">
+                        <select class="form-select" id="php-input-time">${opts('max_input_time', settings.max_input_time || 60)}</select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">max_input_vars</label>
-                        <input type="number" class="form-input" id="php-input-vars" value="${settings.max_input_vars || 1000}">
+                        <select class="form-select" id="php-input-vars">${opts('max_input_vars', settings.max_input_vars || 1000)}</select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">post_max_size</label>
-                        <input type="text" class="form-input" id="php-post-max" value="${settings.post_max_size || '64M'}">
+                        <select class="form-select" id="php-post-max">${opts('post_max_size', settings.post_max_size || '64M')}</select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">upload_max_filesize</label>
-                        <input type="text" class="form-input" id="php-upload-max" value="${settings.upload_max_filesize || '64M'}">
+                        <select class="form-select" id="php-upload-max">${opts('upload_max_filesize', settings.upload_max_filesize || '64M')}</select>
                     </div>
                 </div>
                 <div class="form-group">
@@ -297,7 +308,7 @@ function renderSSL(el, site, siteId) {
     });
 
     document.getElementById('ssl-disable')?.addEventListener('click', async () => {
-        if (!confirm('Disable SSL for this site?')) return;
+        if (!await showConfirm('Disable SSL', 'Disable SSL for this site? The site will no longer be served over HTTPS.', 'Disable SSL', 'btn-danger')) return;
         try {
             await ssl.disable(siteId);
             showToast('SSL disabled', 'success');
@@ -559,7 +570,7 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
             btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
                 const name = btn.dataset.name;
-                if (!confirm(`Delete database "${name}"? This will also drop it from MariaDB.`)) return;
+                if (!await showConfirm('Delete Database', `Delete database "${name}"? This will also drop it from MariaDB.`, 'Delete', 'btn-danger')) return;
                 try {
                     await databases.delete(id);
                     showToast(`Database ${name} deleted`, 'success');
@@ -597,7 +608,7 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
     }
 }
 
-// ---- Security Tab (Basic Auth) ----
+// ---- Security Tab (Basic Auth + Deletion Protection) ----
 async function renderSecurity(container, site, siteId, refreshTabs) {
     const basicAuthEnabled = site.basic_auth_enabled === 1 || site.basic_auth_enabled === true;
     const deleteProtected = site.delete_protection === 1 || site.delete_protection === true;
@@ -608,25 +619,6 @@ async function renderSecurity(container, site, siteId, refreshTabs) {
 
     container.innerHTML = `
     <div class="card" style="margin-bottom: var(--space-4);">
-        <div class="card-header">
-            <h3 class="card-title">Deletion Protection</h3>
-        </div>
-        <div style="padding: var(--space-4);">
-            <p style="color: var(--text-secondary); margin-bottom: var(--space-4); font-size: var(--font-size-sm);">
-                Prevent accidental deletion of this site. While enabled, the site cannot be deleted until this toggle is turned off.
-            </p>
-            <div class="settings-row">
-                <div class="settings-row-label">Enable Deletion Protection<small>Block site deletion</small></div>
-                <div>
-                    <label class="toggle">
-                        <input type="checkbox" id="delete-protection-toggle" ${deleteProtected ? 'checked' : ''}>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="card">
         <div class="card-header">
             <h3 class="card-title">Basic Authentication</h3>
         </div>
@@ -660,12 +652,28 @@ async function renderSecurity(container, site, siteId, refreshTabs) {
                 </div>
                 <button class="btn btn-sm btn-secondary" id="add-auth-user" style="margin-top: var(--space-2);">${icons.plus} Add User</button>
             </div>
-
-            <div style="margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--border-primary);">
-                <button class="btn btn-primary" id="save-basic-auth">Save Security Settings</button>
+        </div>
+    </div>
+    <div class="card" style="margin-bottom: var(--space-4);">
+        <div class="card-header">
+            <h3 class="card-title">Deletion Protection</h3>
+        </div>
+        <div style="padding: var(--space-4);">
+            <p style="color: var(--text-secondary); margin-bottom: var(--space-4); font-size: var(--font-size-sm);">
+                Prevent accidental deletion of this site. While enabled, the site cannot be deleted until this toggle is turned off.
+            </p>
+            <div class="settings-row">
+                <div class="settings-row-label">Enable Deletion Protection<small>Block site deletion</small></div>
+                <div>
+                    <label class="toggle">
+                        <input type="checkbox" id="delete-protection-toggle" ${deleteProtected ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
-    </div>`;
+    </div>
+    <button class="btn btn-primary" id="save-basic-auth">Save Security Settings</button>`;
 
     // Toggle show/hide users section
     document.getElementById('basic-auth-toggle')?.addEventListener('change', (e) => {

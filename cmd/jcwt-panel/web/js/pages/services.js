@@ -1,6 +1,8 @@
 // JCWT Ultra Panel — Services Page
 import { request } from '../api.js';
-import { showToast, icons } from '../app.js';
+import { showToast, showConfirm, icons } from '../app.js';
+
+let lastRefreshTime = 0;
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'Services';
@@ -18,7 +20,15 @@ export async function render(container) {
             <div class="empty-state"><div class="empty-state-title">Loading services...</div></div>
         </div>`;
 
-    document.getElementById('refresh-services')?.addEventListener('click', () => loadServices(container));
+    document.getElementById('refresh-services')?.addEventListener('click', () => {
+        const now = Date.now();
+        if (now - lastRefreshTime < 3000) {
+            showToast('Please wait a moment before refreshing again', 'warning');
+            return;
+        }
+        lastRefreshTime = now;
+        loadServices(container);
+    });
     await loadServices(container);
 }
 
@@ -80,7 +90,7 @@ async function loadServices(container) {
         listEl.querySelectorAll('.restart-service').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const name = btn.dataset.service;
-                if (!confirm(`Restart ${name}? This may briefly interrupt service.`)) return;
+                if (!await showConfirm('Restart Service', `Restart ${name}? This may briefly interrupt the service.`, 'Restart', 'btn-primary')) return;
                 btn.disabled = true;
                 btn.innerHTML = `<span class="nav-icon">${icons.refresh}</span> Restarting...`;
                 try {

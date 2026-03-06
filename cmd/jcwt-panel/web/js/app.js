@@ -1,5 +1,5 @@
 // JCWT Ultra Panel — SPA Core
-import { auth, setCsrfToken, settings as settingsApi, request } from './api.js';
+import { auth, setCsrfToken, settings as settingsApi, request, twofa } from './api.js';
 
 // ---- State ----
 let currentUser = null;
@@ -79,6 +79,37 @@ export function closeModal() {
     if (existing) existing.remove();
 }
 
+// ---- Confirm Dialog (replaces window.confirm) ----
+export function showConfirm(title, message, confirmText = 'Confirm', confirmClass = 'btn-danger') {
+    return new Promise((resolve) => {
+        closeModal();
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal" style="max-width: 440px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">${escapeHtml(title)}</h3>
+                    <button class="modal-close" id="confirm-close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6;">${escapeHtml(message)}</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="confirm-cancel-btn">Cancel</button>
+                    <button class="btn ${confirmClass}" id="confirm-ok-btn">${escapeHtml(confirmText)}</button>
+                </div>
+            </div>
+        `;
+        const cleanup = (result) => { overlay.remove(); resolve(result); };
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+        overlay.querySelector('#confirm-close-btn').addEventListener('click', () => cleanup(false));
+        overlay.querySelector('#confirm-cancel-btn').addEventListener('click', () => cleanup(false));
+        overlay.querySelector('#confirm-ok-btn').addEventListener('click', () => cleanup(true));
+        document.body.appendChild(overlay);
+    });
+}
+
 // ---- Utilities ----
 export function escapeHtml(str) {
     if (!str) return '';
@@ -154,9 +185,129 @@ function showPasswordChangeModal() {
     });
 }
 
+async function show2FAModal() {
+    try {
+        const status = await twofa.status();
+        if (status.enabled) {
+            // 2FA is enabled — show disable option
+            const content = `
+                <div style="text-align: center; margin-bottom: var(--space-4);">
+                    <div style="width: 56px; height: 56px; background: var(--status-success-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-3); font-size: 1.5rem;">🛡️</div>
+                    <h3 style="font-weight: 600; margin-bottom: var(--space-2);">2FA is Enabled</h3>
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm);">Your account is protected with two-factor authentication.</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Enter your password to disable 2FA</label>
+                    <input type="password" class="form-input" id="twofa-disable-pwd" placeholder="Current password" required>
+                </div>
+            `;
+            const footer = `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-danger" id="twofa-disable-btn">Disable 2FA</button>
+            `;
+            const modal = showModal('Two-Factor Authentication', content, footer);
+            modal.querySelector('#twofa-disable-btn')?.addEventListener('click', async () => {
+                const pwd = modal.querySelector('#twofa-disable-pwd').value;
+                if (!pwd) { showToast('Password is required', 'error'); return; }
+                try {
+                    await twofa.disable(pwd);
+                    closeModal();
+                    showToast('Two-factor authentication disabled', 'success');
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        } else {
+            // 2FA is disabled — show setup flow
+            const setupContent = `
+                <div style="text-align: center; margin-bottom: var(--space-4);">
+                    <div style="width: 56px; height: 56px; background: var(--accent-primary-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-3); font-size: 1.5rem;">🔐</div>
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm);">Add an extra layer of security to your account using an authenticator app.</p>
+                </div>
+                <div id="twofa-setup-area" style="text-align: center;">
+                    <button class="btn btn-primary" id="twofa-generate-btn">Generate Secret Key</button>
+                </div>
+            `;
+            const footer = `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+            `;
+            const modal = showModal('Set Up Two-Factor Auth', setupContent, footer);
+
+            modal.querySelector('#twofa-generate-btn')?.addEventListener('click', async () => {
+                const btn = modal.querySelector('#twofa-generate-btn');
+                btn.disabled = true;
+                btn.textContent = 'Generating...';
+                try {
+                    const data = await twofa.setup();
+                    const area = modal.querySelector('#twofa-setup-area');
+                    area.innerHTML = `
+                        <div style="text-align: left;">
+                            <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
+                                <strong>Step 1:</strong> Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), or enter the key manually.
+                            </p>
+                            <div style="text-align: center; margin-bottom: var(--space-4);">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.uri)}"
+                                     alt="2FA QR Code" style="border-radius: var(--radius-md); border: 1px solid var(--border-primary); padding: var(--space-2); background: white;">
+                            </div>
+                            <div style="margin-bottom: var(--space-4);">
+                                <label class="form-label">Manual Entry Key:</label>
+                                <div style="display: flex; gap: var(--space-2);">
+                                    <input type="text" class="form-input mono" value="${data.secret}" readonly id="twofa-secret-display" style="font-size: var(--font-size-xs);">
+                                    <button class="btn btn-sm btn-secondary" id="twofa-copy-secret" title="Copy">📋</button>
+                                </div>
+                            </div>
+                            <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
+                                <strong>Step 2:</strong> Enter the 6-digit code from your authenticator app to verify.
+                            </p>
+                            <div class="form-group">
+                                <input type="text" class="form-input" id="twofa-verify-code" placeholder="000000" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code"
+                                    style="text-align: center; font-size: var(--font-size-lg); letter-spacing: 0.3em; font-weight: 600;">
+                            </div>
+                            <button class="btn btn-primary" id="twofa-enable-btn" style="width: 100%;">Verify & Enable 2FA</button>
+                        </div>
+                    `;
+                    // Store secret for enable call
+                    const secret = data.secret;
+
+                    modal.querySelector('#twofa-copy-secret')?.addEventListener('click', () => {
+                        navigator.clipboard.writeText(secret).then(() => showToast('Secret copied!', 'success')).catch(() => {
+                            modal.querySelector('#twofa-secret-display').select();
+                            showToast('Select and copy the key manually', 'info');
+                        });
+                    });
+
+                    modal.querySelector('#twofa-enable-btn')?.addEventListener('click', async () => {
+                        const code = modal.querySelector('#twofa-verify-code').value.trim();
+                        if (!code || code.length !== 6) {
+                            showToast('Enter a 6-digit code', 'error');
+                            return;
+                        }
+                        const enableBtn = modal.querySelector('#twofa-enable-btn');
+                        enableBtn.disabled = true;
+                        enableBtn.textContent = 'Verifying...';
+                        try {
+                            await twofa.enable(secret, code);
+                            closeModal();
+                            showToast('Two-factor authentication enabled!', 'success');
+                        } catch (err) {
+                            showToast(err.message, 'error');
+                            enableBtn.disabled = false;
+                            enableBtn.textContent = 'Verify & Enable 2FA';
+                        }
+                    });
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Generate Secret Key';
+                }
+            });
+        }
+    } catch (err) {
+        showToast('Failed to load 2FA status: ' + err.message, 'error');
+    }
+}
+
 // ---- Theme ----
 function initTheme() {
-    const saved = localStorage.getItem('jcwt-theme') || 'dark';
+    const saved = localStorage.getItem('jcwt-theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
 }
 
@@ -248,6 +399,9 @@ function renderLayout(pageName) {
                             <div class="user-dropdown-divider"></div>
                             <a class="user-dropdown-item" id="dropdown-change-pwd">
                                 <span class="nav-icon">${icons.key}</span> Change Password
+                            </a>
+                            <a class="user-dropdown-item" id="dropdown-2fa">
+                                <span class="nav-icon">${icons.lock}</span> Two-Factor Auth
                             </a>
                             <div class="user-dropdown-divider"></div>
                             <a class="user-dropdown-item" id="dropdown-logout" style="color: var(--status-error);">
@@ -362,6 +516,11 @@ async function navigate() {
     document.getElementById('dropdown-change-pwd')?.addEventListener('click', () => {
         document.getElementById('user-dropdown')?.classList.remove('open');
         showPasswordChangeModal();
+    });
+
+    document.getElementById('dropdown-2fa')?.addEventListener('click', () => {
+        document.getElementById('user-dropdown')?.classList.remove('open');
+        show2FAModal();
     });
 
     document.getElementById('dropdown-logout')?.addEventListener('click', async () => {

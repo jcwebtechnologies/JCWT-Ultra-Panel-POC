@@ -1,5 +1,5 @@
-// JCWT Ultra Panel — Login Page (Dynamic Branding + reCAPTCHA)
-import { auth, setCsrfToken, request } from '../api.js';
+// JCWT Ultra Panel — Login Page (Dynamic Branding + reCAPTCHA + 2FA)
+import { auth, setCsrfToken, request, twofa } from '../api.js';
 
 let recaptchaLoaded = false;
 
@@ -100,6 +100,13 @@ export async function render(container) {
 
         try {
             const data = await auth.login(username, password, captchaToken);
+
+            // Check if 2FA is required
+            if (data.requires_2fa) {
+                show2FAStep(container, data.twofa_token, panelName, logoUrl);
+                return;
+            }
+
             setCsrfToken(data.csrf_token);
             window.location.hash = '#/dashboard';
         } catch (err) {
@@ -119,4 +126,64 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+function show2FAStep(container, twofaToken, panelName, logoUrl) {
+    container.innerHTML = `
+    <div class="login-page">
+        <div class="login-card">
+            <div class="login-logo">
+                ${logoUrl
+                    ? `<img src="${logoUrl}" alt="${panelName}" style="width: 48px; height: 48px; border-radius: 12px; margin-bottom: 8px;">`
+                    : `<div class="logo-icon">${panelName.charAt(0)}</div>`
+                }
+                <h1>Two-Factor Authentication</h1>
+                <p>Enter the 6-digit code from your authenticator app</p>
+            </div>
+            <div class="login-error" id="twofa-error"></div>
+            <form class="login-form" id="twofa-form">
+                <div class="form-group">
+                    <label class="form-label">Verification Code</label>
+                    <input type="text" class="form-input" id="twofa-code" placeholder="000000" autocomplete="one-time-code" required maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autofocus
+                        style="text-align: center; font-size: var(--font-size-2xl); letter-spacing: 0.5em; font-weight: 600;">
+                </div>
+                <button type="submit" class="btn btn-primary login-btn" id="twofa-submit">
+                    Verify
+                </button>
+            </form>
+            <div style="margin-top: var(--space-4); text-align: center;">
+                <a href="#/login" style="color: var(--text-tertiary); font-size: var(--font-size-sm); text-decoration: none;">← Back to Login</a>
+            </div>
+        </div>
+    </div>`;
+
+    document.getElementById('twofa-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const code = document.getElementById('twofa-code').value.trim();
+        const errorEl = document.getElementById('twofa-error');
+        const submitBtn = document.getElementById('twofa-submit');
+
+        if (!code || code.length !== 6) {
+            errorEl.textContent = 'Please enter a 6-digit code';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Verifying...';
+        errorEl.style.display = 'none';
+
+        try {
+            const data = await twofa.verify(twofaToken, code);
+            setCsrfToken(data.csrf_token);
+            window.location.hash = '#/dashboard';
+        } catch (err) {
+            errorEl.textContent = err.message || 'Invalid code';
+            errorEl.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Verify';
+            document.getElementById('twofa-code').value = '';
+            document.getElementById('twofa-code').focus();
+        }
+    });
 }

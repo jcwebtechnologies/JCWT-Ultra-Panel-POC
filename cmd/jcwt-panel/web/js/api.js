@@ -140,3 +140,12 @@ export const services = {
     list: () => request('/api/services'),
     restart: (name) => request('/api/services', { method: 'POST', body: JSON.stringify({ service: name }) }),
 };
+
+// Two-Factor Authentication
+export const twofa = {
+    status: () => request('/api/auth/2fa?action=status'),
+    setup: () => request('/api/auth/2fa?action=setup', { method: 'POST' }),
+    enable: (secret, code) => request('/api/auth/2fa?action=enable', { method: 'POST', body: JSON.stringify({ secret, code }) }),
+    disable: (password) => request('/api/auth/2fa?action=disable', { method: 'POST', body: JSON.stringify({ password }) }),
+    verify: (token, code) => request('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ token, code }) }),
+};

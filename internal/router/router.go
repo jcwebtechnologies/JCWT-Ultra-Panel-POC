@@ -25,6 +25,12 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	// --- Auth endpoints (no auth required) ---
 	loginHandler := &authHandler{db: database, auth: authMgr}
 	mux.Handle("/api/auth/login", middleware.RateLimit(loginHandler))
+
+	// 2FA endpoints
+	twofaHandler := &handlers.TwoFAHandler{DB: database, AuthMgr: authMgr}
+	mux.Handle("/api/auth/2fa", middleware.RequireAuth(middleware.RequireCSRF(twofaHandler)))
+	mux.Handle("/api/auth/2fa/verify", middleware.RateLimit(http.HandlerFunc(twofaHandler.Verify)))
+
 	mux.HandleFunc("/api/auth/logout", func(w http.ResponseWriter, r *http.Request) {
 		sessionID := auth.GetSessionID(r)
 		if sessionID != "" {
@@ -316,6 +322,16 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(`{"success":false,"error":"invalid credentials"}`))
+		return
+	}
+
+	// Check if 2FA is enabled for this user
+	totpSecret, _ := h.db.GetTOTPSecret(id)
+	if totpSecret != "" {
+		// Don't create session — create pending 2FA token
+		pendingToken := h.auth.Create2FAPendingToken(id, req.Username, role)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"success":true,"data":{"requires_2fa":true,"twofa_token":"` + pendingToken + `"}}`))
 		return
 	}
 

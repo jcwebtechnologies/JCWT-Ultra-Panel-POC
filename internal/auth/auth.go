@@ -19,18 +19,28 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
+// TwoFAPending represents a pending 2FA verification during login
+type TwoFAPending struct {
+	UserID    int64
+	Username  string
+	Role      string
+	ExpiresAt time.Time
+}
+
 // Manager handles authentication and sessions
 type Manager struct {
-	sessions map[string]*Session
-	mu       sync.RWMutex
-	timeout  time.Duration
+	sessions     map[string]*Session
+	twoFAPending map[string]*TwoFAPending
+	mu           sync.RWMutex
+	timeout      time.Duration
 }
 
 // NewManager creates a new auth manager
 func NewManager(timeoutMinutes int) *Manager {
 	m := &Manager{
-		sessions: make(map[string]*Session),
-		timeout:  time.Duration(timeoutMinutes) * time.Minute,
+		sessions:     make(map[string]*Session),
+		twoFAPending: make(map[string]*TwoFAPending),
+		timeout:      time.Duration(timeoutMinutes) * time.Minute,
 	}
 	go m.cleanup()
 	return m
@@ -102,6 +112,43 @@ func (m *Manager) DestroySession(sessionID string) {
 	m.mu.Unlock()
 }
 
+// Create2FAPendingToken creates a temporary token for 2FA verification during login
+func (m *Manager) Create2FAPendingToken(userID int64, username, role string) string {
+	token := generateToken(32)
+	m.mu.Lock()
+	m.twoFAPending[token] = &TwoFAPending{
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+	}
+	m.mu.Unlock()
+	return token
+}
+
+// Get2FAPending retrieves a pending 2FA token
+func (m *Manager) Get2FAPending(token string) (*TwoFAPending, bool) {
+	m.mu.RLock()
+	pending, ok := m.twoFAPending[token]
+	m.mu.RUnlock()
+	if !ok || time.Now().After(pending.ExpiresAt) {
+		if ok {
+			m.mu.Lock()
+			delete(m.twoFAPending, token)
+			m.mu.Unlock()
+		}
+		return nil, false
+	}
+	return pending, true
+}
+
+// Consume2FAPending removes a pending token after successful verification
+func (m *Manager) Consume2FAPending(token string) {
+	m.mu.Lock()
+	delete(m.twoFAPending, token)
+	m.mu.Unlock()
+}
+
 // SetSessionCookie sets the session cookie on the response
 func SetSessionCookie(w http.ResponseWriter, sessionID string) {
 	http.SetCookie(w, &http.Cookie{
@@ -151,6 +198,11 @@ func (m *Manager) cleanup() {
 		for id, sess := range m.sessions {
 			if now.After(sess.ExpiresAt) {
 				delete(m.sessions, id)
+			}
+		}
+		for token, pending := range m.twoFAPending {
+			if now.After(pending.ExpiresAt) {
+				delete(m.twoFAPending, token)
 			}
 		}
 		m.mu.Unlock()

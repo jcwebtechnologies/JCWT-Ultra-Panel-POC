@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — Sites Page
 import { sites, phpVersions } from '../api.js';
-import { icons, showToast, showModal, closeModal, escapeHtml } from '../app.js';
+import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'Sites';
@@ -168,7 +168,7 @@ export async function render(container) {
             btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
                 const domain = btn.dataset.domain;
-                if (confirm(`Delete site "${domain}"? This will remove all configs, the system user, and web files.`)) {
+                if (await showConfirm('Delete Site', `Delete site "${domain}"? This will remove all configs, the system user, and web files. This action cannot be undone.`, 'Delete Site', 'btn-danger')) {
                     try {
                         await sites.delete(id);
                         showToast('Site deleted', 'success');

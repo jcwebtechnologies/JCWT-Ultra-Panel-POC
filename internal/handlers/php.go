@@ -49,6 +49,13 @@ func (h *PHPHandler) get(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, settings)
 }
 
+// Allowed PHP setting values
+var allowedMemoryLimit = map[string]bool{"128M": true, "256M": true, "512M": true, "768M": true, "1024M": true, "2048M": true}
+var allowedExecTime = map[int]bool{30: true, 60: true, 120: true, 300: true, 600: true, 900: true}
+var allowedInputTime = map[int]bool{60: true, 120: true, 300: true, 600: true, 900: true}
+var allowedInputVars = map[int]bool{1000: true, 2000: true, 3000: true, 5000: true, 10000: true}
+var allowedSizeLimit = map[string]bool{"32M": true, "64M": true, "128M": true, "256M": true, "512M": true, "1024M": true}
+
 func (h *PHPHandler) update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SiteID            int64  `json:"site_id"`
@@ -62,6 +69,32 @@ func (h *PHPHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate values against allowlists
+	if !allowedMemoryLimit[req.MemoryLimit] {
+		jsonError(w, "Invalid memory_limit value — settings may have been tampered with", http.StatusBadRequest)
+		return
+	}
+	if !allowedExecTime[req.MaxExecutionTime] {
+		jsonError(w, "Invalid max_execution_time value — settings may have been tampered with", http.StatusBadRequest)
+		return
+	}
+	if !allowedInputTime[req.MaxInputTime] {
+		jsonError(w, "Invalid max_input_time value — settings may have been tampered with", http.StatusBadRequest)
+		return
+	}
+	if !allowedInputVars[req.MaxInputVars] {
+		jsonError(w, "Invalid max_input_vars value — settings may have been tampered with", http.StatusBadRequest)
+		return
+	}
+	if !allowedSizeLimit[req.PostMaxSize] {
+		jsonError(w, "Invalid post_max_size value — settings may have been tampered with", http.StatusBadRequest)
+		return
+	}
+	if !allowedSizeLimit[req.UploadMaxFilesize] {
+		jsonError(w, "Invalid upload_max_filesize value — settings may have been tampered with", http.StatusBadRequest)
 		return
 	}
 
