@@ -66,7 +66,7 @@ function renderDashboard(container, stats) {
     </div>
 
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: var(--space-4);">
-        <div class="card">
+        <div class="card" id="resources-card" style="position: relative;">
             <div class="card-header">
                 <h3 class="card-title">System Resources</h3>
                 <div class="auto-refresh-control">
@@ -85,11 +85,19 @@ function renderDashboard(container, stats) {
             </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="server-info-card" style="position: relative;">
             <div class="card-header">
                 <h3 class="card-title">Server Information</h3>
             </div>
-            <div class="info-grid" style="grid-template-columns: 1fr;">
+            <div class="info-grid" id="server-info-content" style="grid-template-columns: 1fr;">
+                ${renderServerInfo(stats)}
+            </div>
+        </div>
+    </div>`;
+}
+
+function renderServerInfo(stats) {
+    return `
                 ${(stats.ipv4_addresses && stats.ipv4_addresses.length > 0) ? `
                 <div class="info-item">
                     <span class="info-label">IPv4 Address${stats.ipv4_addresses.length > 1 ? 'es' : ''}</span>
@@ -115,10 +123,7 @@ function renderDashboard(container, stats) {
                 <div class="info-item">
                     <span class="info-label">Hostname</span>
                     <span class="info-value mono">${stats.hostname || 'N/A'}</span>
-                </div>
-            </div>
-        </div>
-    </div>`;
+                </div>`;
 }
 
 function renderResources(stats) {
@@ -165,17 +170,51 @@ function setupAutoRefresh(container) {
     }
 }
 
+function showCardOverlay(cardId) {
+    const card = document.getElementById(cardId);
+    if (!card) return;
+    // Remove existing overlay if present
+    card.querySelector('.refresh-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'refresh-overlay';
+    overlay.innerHTML = '<div class="refresh-spinner"></div>';
+    card.appendChild(overlay);
+}
+
+function hideCardOverlay(cardId) {
+    const card = document.getElementById(cardId);
+    if (!card) return;
+    card.querySelector('.refresh-overlay')?.remove();
+}
+
 async function refreshResources() {
     try {
+        showCardOverlay('resources-card');
+        showCardOverlay('server-info-card');
+
         const stats = await dashboard.stats();
+
         const el = document.getElementById('resource-stats');
         if (el) {
             el.innerHTML = renderResources(stats);
         } else {
             // Page navigated away, clean up
             if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+            return;
         }
+
+        // Also update server info
+        const infoEl = document.getElementById('server-info-content');
+        if (infoEl) {
+            infoEl.innerHTML = renderServerInfo(stats);
+            bindCopyButtons(document.getElementById('server-info-card'));
+        }
+
+        hideCardOverlay('resources-card');
+        hideCardOverlay('server-info-card');
     } catch (err) {
+        hideCardOverlay('resources-card');
+        hideCardOverlay('server-info-card');
         // Silent fail on auto-refresh
     }
 }

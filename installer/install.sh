@@ -285,17 +285,36 @@ session_destroy();
         .icon { font-size: 3rem; margin-bottom: 1rem; }
         h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.5rem; color: #1e293b; }
         p { color: #64748b; line-height: 1.6; margin-bottom: 1.5rem; }
+        a.btn { display: inline-block; padding: 0.6rem 1.5rem; background: #6366f1; color: #fff;
+            text-decoration: none; border-radius: 8px; font-weight: 500; font-size: 0.9rem;
+            transition: background 0.2s; margin-bottom: 1rem; }
+        a.btn:hover { background: #4f46e5; }
         .badge { display: inline-block; padding: 0.35rem 0.9rem; background: #f1f5f9;
             border-radius: 999px; font-size: 0.75rem; color: #94a3b8; }
+        .countdown { color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.5rem; }
     </style>
 </head>
 <body>
     <div class="card">
         <div class="icon">🔒</div>
         <h1>Session Ended</h1>
-        <p>Your phpMyAdmin session has ended.<br>Please return to the panel and open phpMyAdmin again from the database section.</p>
+        <p>Your phpMyAdmin session has ended.</p>
+        <a class="btn" id="backBtn" href="javascript:void(0)">← Back to Database Management</a>
+        <div class="countdown" id="countdown">Redirecting in 5 seconds...</div>
         <div class="badge">Powered by JCWT Ultra Panel</div>
     </div>
+    <script>
+        // Build panel URL from current host (panel runs on port 8443)
+        var panelUrl = 'https://' + window.location.hostname + ':8443/#/databases';
+        document.getElementById('backBtn').href = panelUrl;
+        var sec = 5;
+        var el = document.getElementById('countdown');
+        var timer = setInterval(function(){
+            sec--;
+            if(sec <= 0){ clearInterval(timer); window.location.href = panelUrl; }
+            else { el.textContent = 'Redirecting in ' + sec + ' seconds...'; }
+        }, 1000);
+    </script>
 </body>
 </html>
 SIGNONPHP
@@ -393,6 +412,43 @@ PMANGINX
     UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils"
     apt_run apt-get install -y $UTIL_PKGS
     log_ok "Utilities installed"
+
+    # ---- Redis Server ----
+    step_header "Installing Redis Server"
+    log_info "Installing Redis..."
+    apt_run apt-get install -y redis-server
+    # Harden Redis configuration
+    REDIS_CONF="/etc/redis/redis.conf"
+    if [ -f "$REDIS_CONF" ]; then
+        # Bind to localhost only (no external access)
+        sed -i 's/^bind .*/bind 127.0.0.1 ::1/' "$REDIS_CONF"
+        # Set memory limit and eviction policy
+        sed -i 's/^# maxmemory .*/maxmemory 128mb/' "$REDIS_CONF"
+        if ! grep -q "^maxmemory " "$REDIS_CONF"; then
+            echo "maxmemory 128mb" >> "$REDIS_CONF"
+        fi
+        sed -i 's/^# maxmemory-policy .*/maxmemory-policy allkeys-lru/' "$REDIS_CONF"
+        if ! grep -q "^maxmemory-policy " "$REDIS_CONF"; then
+            echo "maxmemory-policy allkeys-lru" >> "$REDIS_CONF"
+        fi
+        # Use systemd supervision
+        sed -i 's/^supervised .*/supervised systemd/' "$REDIS_CONF"
+        # Disable dangerous commands
+        if ! grep -q "^rename-command FLUSHDB" "$REDIS_CONF"; then
+            echo 'rename-command FLUSHDB ""' >> "$REDIS_CONF"
+            echo 'rename-command FLUSHALL ""' >> "$REDIS_CONF"
+            echo 'rename-command DEBUG ""' >> "$REDIS_CONF"
+        fi
+        # Disable RDB snapshots for cache-only use (reduce disk I/O)
+        sed -i 's/^save /#save /' "$REDIS_CONF"
+        if ! grep -q "^save \"\"" "$REDIS_CONF"; then
+            echo 'save ""' >> "$REDIS_CONF"
+        fi
+    fi
+    systemctl restart redis-server
+    systemctl enable redis-server > /dev/null 2>&1
+    REDIS_VER=$(redis-server --version 2>/dev/null | awk '{print $3}' | sed 's/v=//' || echo "unknown")
+    log_ok "Redis ${BOLD}${REDIS_VER}${NC} installed and secured (localhost only, 128MB limit)"
 
     # ---- File Browser ----
     # Detect IPv4/IPv6 connectivity for download fallback logic
@@ -556,6 +612,17 @@ EOF
     log_detail "  • gzip compression enabled (level 5)"
     log_detail "  • Security headers: X-Frame-Options, X-Content-Type-Options, etc."
 
+    # Generate self-signed cert for nginx default HTTPS catch-all
+    log_info "Generating nginx default SSL certificate..."
+    mkdir -p /etc/nginx/ssl
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/default.key \
+        -out /etc/nginx/ssl/default.crt \
+        -subj "/CN=localhost/O=Default/C=US" 2>/dev/null
+    chmod 600 /etc/nginx/ssl/default.key
+    chmod 644 /etc/nginx/ssl/default.crt
+    log_ok "Nginx default SSL certificate generated"
+
     # Default catch-all vhost — shows a welcome page for DNS pointing to this server
     # that doesn't match any configured site (prevents panel login from showing)
     log_info "Creating default catch-all vhost..."
@@ -705,6 +772,30 @@ configure_php() {
     for VER in 8.2 8.3 8.4 8.5; do
         if [ -d "/etc/php/$VER/fpm" ]; then
             log_info "Starting PHP-FPM ${BOLD}$VER${NC}..."
+
+            # Apply security hardening to php.ini (FPM + CLI)
+            for PHPINI in /etc/php/$VER/fpm/php.ini /etc/php/$VER/cli/php.ini; do
+                if [ -f "$PHPINI" ]; then
+                    # Session security
+                    sed -i 's/^session\.cookie_httponly.*/session.cookie_httponly = 1/' "$PHPINI"
+                    sed -i 's/^;session\.cookie_httponly.*/session.cookie_httponly = 1/' "$PHPINI"
+                    sed -i 's/^session\.cookie_secure.*/session.cookie_secure = 1/' "$PHPINI"
+                    sed -i 's/^;session\.cookie_secure.*/session.cookie_secure = 1/' "$PHPINI"
+                    sed -i 's/^session\.use_strict_mode.*/session.use_strict_mode = 1/' "$PHPINI"
+                    sed -i 's/^;session\.use_strict_mode.*/session.use_strict_mode = 1/' "$PHPINI"
+                    sed -i 's/^session\.use_only_cookies.*/session.use_only_cookies = 1/' "$PHPINI"
+                    sed -i 's/^session\.cookie_samesite.*/session.cookie_samesite = Lax/' "$PHPINI"
+                    sed -i 's/^;session\.cookie_samesite.*/session.cookie_samesite = Lax/' "$PHPINI"
+                    # Hide PHP version
+                    sed -i 's/^expose_php.*/expose_php = Off/' "$PHPINI"
+                    # Disable dangerous URL functions
+                    sed -i 's/^allow_url_fopen.*/allow_url_fopen = Off/' "$PHPINI"
+                    sed -i 's/^allow_url_include.*/allow_url_include = Off/' "$PHPINI"
+                    # Limit request data
+                    sed -i 's/^max_input_vars.*/max_input_vars = 5000/' "$PHPINI"
+                fi
+            done
+
             systemctl restart php${VER}-fpm 2>/dev/null || true
             systemctl enable php${VER}-fpm 2>/dev/null || true
 
@@ -756,17 +847,6 @@ setup_panel() {
     chmod 644 "$DATA_DIR/tls/panel.crt"
     log_detail "Certificate: $DATA_DIR/tls/panel.crt"
     log_detail "Private Key: $DATA_DIR/tls/panel.key (mode 600)"
-
-    # Generate self-signed cert for nginx default HTTPS catch-all
-    log_info "Generating nginx default SSL certificate..."
-    mkdir -p /etc/nginx/ssl
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -keyout /etc/nginx/ssl/default.key \
-        -out /etc/nginx/ssl/default.crt \
-        -subj "/CN=localhost/O=Default/C=US" 2>/dev/null
-    chmod 600 /etc/nginx/ssl/default.key
-    chmod 644 /etc/nginx/ssl/default.crt
-    log_ok "Nginx default SSL certificate generated"
 
     chown -R "$PANEL_USER:$PANEL_USER" "$DATA_DIR"
     chown -R "$PANEL_USER:$PANEL_USER" "$LOG_DIR"
@@ -1006,6 +1086,7 @@ print_banner() {
     echo -e "  ─────────────────────────────────────────"
     echo -e "  Nginx .............. $(get_status nginx)"
     echo -e "  MariaDB ............ $(get_status mariadb)"
+    echo -e "  Redis .............. $(get_status redis-server)"
     echo -e "  JCWT Panel ......... $(get_status jcwt-panel)"
     for VER in 8.2 8.3 8.4 8.5; do
         if systemctl list-unit-files "php${VER}-fpm.service" > /dev/null 2>&1; then

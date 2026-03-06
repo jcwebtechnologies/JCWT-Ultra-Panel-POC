@@ -74,7 +74,6 @@ type PanelSettings struct {
 	AccentColor    string `json:"accent_color"`
 	FooterText     string `json:"footer_text"`
 	SessionTimeout int    `json:"session_timeout"`
-	AllowSignup    bool   `json:"allow_signup"`
 }
 
 // FileEntry represents a file or directory in the file manager

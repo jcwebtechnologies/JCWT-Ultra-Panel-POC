@@ -600,12 +600,32 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
 // ---- Security Tab (Basic Auth) ----
 async function renderSecurity(container, site, siteId, refreshTabs) {
     const basicAuthEnabled = site.basic_auth_enabled === 1 || site.basic_auth_enabled === true;
+    const deleteProtected = site.delete_protection === 1 || site.delete_protection === true;
     let authUsers = [];
     try {
         authUsers = site.basic_auth_users ? JSON.parse(site.basic_auth_users) : [];
     } catch { authUsers = []; }
 
     container.innerHTML = `
+    <div class="card" style="margin-bottom: var(--space-4);">
+        <div class="card-header">
+            <h3 class="card-title">Deletion Protection</h3>
+        </div>
+        <div style="padding: var(--space-4);">
+            <p style="color: var(--text-secondary); margin-bottom: var(--space-4); font-size: var(--font-size-sm);">
+                Prevent accidental deletion of this site. While enabled, the site cannot be deleted until this toggle is turned off.
+            </p>
+            <div class="settings-row">
+                <div class="settings-row-label">Enable Deletion Protection<small>Block site deletion</small></div>
+                <div>
+                    <label class="toggle">
+                        <input type="checkbox" id="delete-protection-toggle" ${deleteProtected ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Basic Authentication</h3>
@@ -718,6 +738,7 @@ async function renderSecurity(container, site, siteId, refreshTabs) {
                     site_id: parseInt(siteId),
                     basic_auth_enabled: enabled,
                     basic_auth_users: users,
+                    delete_protection: document.getElementById('delete-protection-toggle').checked,
                 }),
             });
             showToast('Security settings saved!', 'success');

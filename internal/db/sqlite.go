@@ -46,6 +46,7 @@ func Open(dataDir string) (*DB, error) {
 	conn.Exec("ALTER TABLE panel_settings ADD COLUMN timezone TEXT DEFAULT 'UTC'")
 	conn.Exec("ALTER TABLE admin_users ADD COLUMN role TEXT DEFAULT 'admin'")
 	conn.Exec("ALTER TABLE admin_users ADD COLUMN email TEXT DEFAULT ''")
+	conn.Exec("ALTER TABLE sites ADD COLUMN delete_protection INTEGER DEFAULT 0")
 
 	return &DB{Conn: conn}, nil
 }
@@ -149,10 +150,10 @@ func (d *DB) ListSites() ([]map[string]interface{}, error) {
 
 func (d *DB) GetSite(id int64) (map[string]interface{}, error) {
 	var domain, aliases, sysUser, siteType, phpVer, proxyUrl, webRoot, sslType, certPath, keyPath, createdAt string
-	var basicAuthEnabled int
+	var basicAuthEnabled, deleteProtection int
 	var basicAuthUsers string
-	err := d.Conn.QueryRow("SELECT domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, ssl_cert_path, ssl_key_path, created_at, COALESCE(basic_auth_enabled,0), COALESCE(basic_auth_users,'') FROM sites WHERE id = ?", id).
-		Scan(&domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &certPath, &keyPath, &createdAt, &basicAuthEnabled, &basicAuthUsers)
+	err := d.Conn.QueryRow("SELECT domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, ssl_cert_path, ssl_key_path, created_at, COALESCE(basic_auth_enabled,0), COALESCE(basic_auth_users,''), COALESCE(delete_protection,0) FROM sites WHERE id = ?", id).
+		Scan(&domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &certPath, &keyPath, &createdAt, &basicAuthEnabled, &basicAuthUsers, &deleteProtection)
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +162,7 @@ func (d *DB) GetSite(id int64) (map[string]interface{}, error) {
 		"site_type": siteType, "php_version": phpVer, "proxy_url": proxyUrl, "web_root": webRoot,
 		"ssl_type": sslType, "ssl_cert_path": certPath, "ssl_key_path": keyPath, "created_at": createdAt,
 		"basic_auth_enabled": basicAuthEnabled, "basic_auth_users": basicAuthUsers,
+		"delete_protection": deleteProtection,
 	}, nil
 }
 
@@ -391,32 +393,28 @@ func (d *DB) DeleteCronJob(id int64) error {
 func (d *DB) GetPanelSettings() (map[string]interface{}, error) {
 	var name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText string
 	var recaptchaSiteKey, recaptchaSecretKey, timezone string
-	var sessionTimeout, allowSignup int
+	var sessionTimeout int
 	err := d.Conn.QueryRow(
-		"SELECT panel_name, panel_tagline, logo_url, favicon_url, primary_color, accent_color, footer_text, session_timeout, allow_signup, COALESCE(recaptcha_site_key,''), COALESCE(recaptcha_secret_key,''), COALESCE(timezone,'UTC') FROM panel_settings WHERE id = 1",
-	).Scan(&name, &tagline, &logoURL, &faviconURL, &primaryColor, &accentColor, &footerText, &sessionTimeout, &allowSignup, &recaptchaSiteKey, &recaptchaSecretKey, &timezone)
+		"SELECT panel_name, panel_tagline, logo_url, favicon_url, primary_color, accent_color, footer_text, session_timeout, COALESCE(recaptcha_site_key,''), COALESCE(recaptcha_secret_key,''), COALESCE(timezone,'UTC') FROM panel_settings WHERE id = 1",
+	).Scan(&name, &tagline, &logoURL, &faviconURL, &primaryColor, &accentColor, &footerText, &sessionTimeout, &recaptchaSiteKey, &recaptchaSecretKey, &timezone)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]interface{}{
 		"panel_name": name, "panel_tagline": tagline, "logo_url": logoURL,
 		"favicon_url": faviconURL, "primary_color": primaryColor, "accent_color": accentColor,
-		"footer_text": footerText, "session_timeout": sessionTimeout, "allow_signup": allowSignup == 1,
+		"footer_text": footerText, "session_timeout": sessionTimeout,
 		"recaptcha_site_key": recaptchaSiteKey, "recaptcha_secret_key": recaptchaSecretKey,
 		"timezone": timezone,
 	}, nil
 }
 
-func (d *DB) UpdatePanelSettings(name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText string, sessionTimeout int, allowSignup bool, recaptchaSiteKey, recaptchaSecretKey, timezone string) error {
-	as := 0
-	if allowSignup {
-		as = 1
-	}
+func (d *DB) UpdatePanelSettings(name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText string, sessionTimeout int, recaptchaSiteKey, recaptchaSecretKey, timezone string) error {
 	_, err := d.Conn.Exec(`UPDATE panel_settings SET
 		panel_name=?, panel_tagline=?, logo_url=?, favicon_url=?,
 		primary_color=?, accent_color=?, footer_text=?,
-		session_timeout=?, allow_signup=?, recaptcha_site_key=?, recaptcha_secret_key=?, timezone=? WHERE id = 1`,
-		name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText, sessionTimeout, as, recaptchaSiteKey, recaptchaSecretKey, timezone,
+		session_timeout=?, recaptcha_site_key=?, recaptcha_secret_key=?, timezone=? WHERE id = 1`,
+		name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText, sessionTimeout, recaptchaSiteKey, recaptchaSecretKey, timezone,
 	)
 	return err
 }

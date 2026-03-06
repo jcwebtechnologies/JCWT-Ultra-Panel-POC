@@ -200,6 +200,28 @@ a:hover {
     }
 }
 
+/* ---- Dashboard Refresh Overlay ---- */
+.refresh-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-card);
+    opacity: 0.7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    border-radius: var(--radius-lg);
+    pointer-events: none;
+}
+.refresh-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--border-secondary);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
 /* =============================================
    Layout
    ============================================= */

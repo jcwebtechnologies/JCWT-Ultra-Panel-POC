@@ -13,13 +13,14 @@ import (
 
 // Allowed services whitelist — prevents arbitrary service control
 var allowedServices = map[string]string{
-	"nginx":     "nginx",
-	"mariadb":   "mariadb",
-	"php8.2":    "php8.2-fpm",
-	"php8.3":    "php8.3-fpm",
-	"php8.4":    "php8.4-fpm",
-	"php8.5":    "php8.5-fpm",
-	"jcwt-panel": "jcwt-panel",
+	"nginx":       "nginx",
+	"mariadb":     "mariadb",
+	"redis":       "redis-server",
+	"php8.2":      "php8.2-fpm",
+	"php8.3":      "php8.3-fpm",
+	"php8.4":      "php8.4-fpm",
+	"php8.5":      "php8.5-fpm",
+	"jcwt-panel":  "jcwt-panel",
 }
 
 type ServicesHandler struct {

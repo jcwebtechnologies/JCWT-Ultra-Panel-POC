@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS sites (
     ssl_key_path TEXT DEFAULT '',
     basic_auth_enabled INTEGER DEFAULT 0,
     basic_auth_users TEXT DEFAULT '',
+    delete_protection INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

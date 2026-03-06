@@ -91,15 +91,6 @@ export async function render(container) {
                     </div>
                 </div>
                 <div class="settings-row">
-                    <div class="settings-row-label">Allow Signup<small>Allow new admin registrations</small></div>
-                    <div>
-                        <label class="toggle">
-                            <input type="checkbox" id="s-signup" ${cfg.allow_signup ? 'checked' : ''}>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
-                <div class="settings-row">
                     <div class="settings-row-label">Server Timezone<small>Timezone for the server and logs</small></div>
                     <div>
                         <select class="form-select" id="s-timezone" style="max-width: 280px;">
@@ -201,7 +192,6 @@ export async function render(container) {
                     accent_color: document.getElementById('s-accent-hex').value,
                     footer_text: document.getElementById('s-footer').value,
                     session_timeout: parseInt(document.getElementById('s-timeout').value),
-                    allow_signup: document.getElementById('s-signup').checked,
                     recaptcha_site_key: document.getElementById('s-recaptcha-site').value.trim(),
                     recaptcha_secret_key: document.getElementById('s-recaptcha-secret').value.trim(),
                     timezone: document.getElementById('s-timezone').value,

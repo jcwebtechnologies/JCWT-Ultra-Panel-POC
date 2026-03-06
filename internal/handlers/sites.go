@@ -349,6 +349,14 @@ func (h *SitesHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check deletion protection
+	if dp, ok := site["delete_protection"]; ok {
+		if dpInt, ok2 := dp.(int); ok2 && dpInt == 1 {
+			jsonError(w, "This site has deletion protection enabled. Disable it in the Security tab first.", http.StatusForbidden)
+			return
+		}
+	}
+
 	domain := site["domain"].(string)
 	sysUser := site["system_user"].(string)
 	phpVersion := site["php_version"].(string)
@@ -399,9 +407,10 @@ func jsonError(w http.ResponseWriter, msg string, status int) {
 
 func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SiteID           int64                    `json:"site_id"`
-		BasicAuthEnabled bool                     `json:"basic_auth_enabled"`
-		BasicAuthUsers   []map[string]interface{} `json:"basic_auth_users"`
+		SiteID            int64                    `json:"site_id"`
+		BasicAuthEnabled  bool                     `json:"basic_auth_enabled"`
+		BasicAuthUsers    []map[string]interface{} `json:"basic_auth_users"`
+		DeleteProtection  *bool                    `json:"delete_protection,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -438,7 +447,12 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 		enabled = 1
 	}
 
-	_, err = h.DB.Conn.Exec("UPDATE sites SET basic_auth_enabled = ?, basic_auth_users = ? WHERE id = ?", enabled, string(usersJSON), req.SiteID)
+	dp := 0
+	if req.DeleteProtection != nil && *req.DeleteProtection {
+		dp = 1
+	}
+
+	_, err = h.DB.Conn.Exec("UPDATE sites SET basic_auth_enabled = ?, basic_auth_users = ?, delete_protection = ? WHERE id = ?", enabled, string(usersJSON), dp, req.SiteID)
 	if err != nil {
 		jsonError(w, "failed to save security settings", http.StatusInternalServerError)
 		return

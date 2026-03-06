@@ -64,7 +64,6 @@ func (h *SettingsHandler) update(w http.ResponseWriter, r *http.Request) {
 		AccentColor        string `json:"accent_color"`
 		FooterText         string `json:"footer_text"`
 		SessionTimeout     int    `json:"session_timeout"`
-		AllowSignup        bool   `json:"allow_signup"`
 		RecaptchaSiteKey   string `json:"recaptcha_site_key"`
 		RecaptchaSecretKey string `json:"recaptcha_secret_key"`
 		Timezone           string `json:"timezone"`
@@ -115,7 +114,7 @@ func (h *SettingsHandler) update(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.UpdatePanelSettings(
 		req.PanelName, req.PanelTagline, req.LogoURL, req.FaviconURL,
 		req.PrimaryColor, req.AccentColor, req.FooterText,
-		req.SessionTimeout, req.AllowSignup,
+		req.SessionTimeout,
 		req.RecaptchaSiteKey, req.RecaptchaSecretKey,
 		req.Timezone,
 	); err != nil {
