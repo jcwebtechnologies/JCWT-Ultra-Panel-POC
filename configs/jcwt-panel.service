@@ -1,0 +1,21 @@
+[Unit]
+Description=JCWT Ultra Panel - IPv6-Native Hosting Control Panel
+After=network.target mariadb.service nginx.service
+Wants=mariadb.service nginx.service
+
+[Service]
+Type=simple
+User=jcwt-panel
+Group=jcwt-panel
+ExecStart=/usr/local/bin/jcwt-panel --data-dir /var/lib/jcwt-panel --listen [::]:8443
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/jcwt-panel/panel.log
+StandardError=append:/var/log/jcwt-panel/panel-error.log
+
+# Note: No ProtectSystem — panel needs to create users (/etc/passwd), manage nginx/php configs
+NoNewPrivileges=false
+ProtectHome=false
+
+[Install]
+WantedBy=multi-user.target

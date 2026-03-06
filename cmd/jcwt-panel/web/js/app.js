@@ -1,0 +1,409 @@
+// JCWT Ultra Panel — SPA Core
+import { auth, setCsrfToken, settings as settingsApi, request } from './api.js';
+
+// ---- State ----
+let currentUser = null;
+let currentRole = null;
+let panelSettings = null;
+
+// ---- Icons (inline SVG) ----
+export const icons = {
+    dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+    sites: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    database: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>',
+    upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>',
+    menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+    code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
+    key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
+};
+
+// ---- Toast Notifications ----
+export function showToast(message, type = 'info') {
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <span class="toast-message">${escapeHtml(message)}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+    `;
+    container.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 4000);
+}
+
+// ---- Modal ----
+export function showModal(title, content, footer = '') {
+    closeModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'modal-overlay';
+    overlay.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">${escapeHtml(title)}</h3>
+                <button class="modal-close" onclick="document.getElementById('modal-overlay').remove()">×</button>
+            </div>
+            <div class="modal-body">${content}</div>
+            ${footer ? `<div class="modal-footer">${footer}</div>` : ''}
+        </div>
+    `;
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+export function closeModal() {
+    const existing = document.getElementById('modal-overlay');
+    if (existing) existing.remove();
+}
+
+// ---- Utilities ----
+export function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+export function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+export function getPanelSettings() {
+    return panelSettings;
+}
+
+// ---- Password Change ----
+function showPasswordChangeModal() {
+    const content = `
+        <form id="change-password-form">
+            <div class="form-group">
+                <label class="form-label">Current Password</label>
+                <input type="password" class="form-input" id="cp-current" required minlength="1" placeholder="Enter current password">
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" class="form-input" id="cp-new" required minlength="6" placeholder="Min. 6 characters">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <input type="password" class="form-input" id="cp-confirm" required minlength="6" placeholder="Repeat new password">
+            </div>
+        </form>
+    `;
+    const footer = `
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-primary" id="cp-submit-btn">Change Password</button>
+    `;
+    const modal = showModal('Change Password', content, footer);
+
+    modal.querySelector('#cp-submit-btn')?.addEventListener('click', async () => {
+        const current = modal.querySelector('#cp-current').value;
+        const newPw = modal.querySelector('#cp-new').value;
+        const confirm = modal.querySelector('#cp-confirm').value;
+
+        if (!current || !newPw || !confirm) {
+            showToast('Please fill in all fields', 'error');
+            return;
+        }
+        if (newPw.length < 6) {
+            showToast('New password must be at least 6 characters', 'error');
+            return;
+        }
+        if (newPw !== confirm) {
+            showToast('New passwords do not match', 'error');
+            return;
+        }
+
+        try {
+            await request('/api/auth/change-password', {
+                method: 'POST',
+                body: JSON.stringify({ current_password: current, new_password: newPw }),
+            });
+            closeModal();
+            showToast('Password changed successfully!', 'success');
+        } catch (err) {
+            showToast(err.message || 'Failed to change password', 'error');
+        }
+    });
+}
+
+// ---- Theme ----
+function initTheme() {
+    const saved = localStorage.getItem('jcwt-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('jcwt-theme', next);
+}
+
+// ---- Sidebar / Layout ----
+function renderLayout(pageName) {
+    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const brandName = panelSettings?.panel_name || 'JCWT Ultra Panel';
+    const tagline = panelSettings?.panel_tagline || 'IPv6-Native Hosting';
+
+    return `
+    <div class="app-layout">
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">J</div>
+                <div class="sidebar-brand">
+                    <span class="sidebar-brand-name">${escapeHtml(brandName)}</span>
+                    <span class="sidebar-brand-tagline">${escapeHtml(tagline)}</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <a href="#/dashboard" class="nav-item ${pageName === 'dashboard' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.dashboard}</span> Dashboard
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <a href="#/sites" class="nav-item ${pageName === 'sites' || pageName === 'site-detail' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.sites}</span> Sites
+                    </a>
+                    <a href="#/databases" class="nav-item ${pageName === 'databases' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.database}</span> Databases
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <a href="#/services" class="nav-item ${pageName === 'services' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.server}</span> Services
+                    </a>
+                    ${currentRole === 'admin' || currentRole === 'manager' ? `
+                    <a href="#/settings" class="nav-item ${pageName === 'settings' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.settings}</span> Settings
+                    </a>` : ''}
+                    ${currentRole === 'admin' ? `
+                    <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.key}</span> Users
+                    </a>` : ''}
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <a href="#" class="nav-item" id="logout-btn">
+                    <span class="nav-icon">${icons.logout}</span> Logout
+                </a>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="main-header">
+                <div class="main-header-left">
+                    <button class="mobile-menu-btn" id="mobile-menu-btn">
+                        <span class="nav-icon">${icons.menu}</span>
+                    </button>
+                    <h1 class="page-title" id="page-title"></h1>
+                </div>
+                <div class="main-header-right">
+                    <button class="theme-toggle" id="theme-toggle" title="Toggle theme"></button>
+                    <div class="user-menu-wrapper" style="position: relative;">
+                        <div class="user-menu" id="user-menu" style="cursor:pointer" title="Account menu">
+                            <div class="user-avatar">${currentUser ? currentUser[0].toUpperCase() : 'A'}</div>
+                            <span class="user-menu-name">${escapeHtml(currentUser || 'Admin')}</span>
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5l3 3 3-3"/></svg>
+                        </div>
+                        <div class="user-dropdown" id="user-dropdown">
+                            <div class="user-dropdown-header">
+                                <div class="user-dropdown-avatar">${currentUser ? currentUser[0].toUpperCase() : 'A'}</div>
+                                <div>
+                                    <div style="font-weight: 600; font-size: var(--font-size-sm);">${escapeHtml(currentUser || 'Admin')}</div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--text-tertiary);">Administrator</div>
+                                </div>
+                            </div>
+                            <div class="user-dropdown-divider"></div>
+                            <a class="user-dropdown-item" id="dropdown-change-pwd">
+                                <span class="nav-icon">${icons.key}</span> Change Password
+                            </a>
+                            <div class="user-dropdown-divider"></div>
+                            <a class="user-dropdown-item" id="dropdown-logout" style="color: var(--status-error);">
+                                <span class="nav-icon">${icons.logout}</span> Sign Out
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <div class="main-body" id="page-content">
+                <div class="loading-screen"><div class="loading-spinner"></div></div>
+            </div>
+        </main>
+    </div>`;
+}
+
+// ---- Router ----
+const routes = {};
+
+export function registerPage(path, renderFn) {
+    routes[path] = renderFn;
+}
+
+async function navigate() {
+    const hash = window.location.hash || '#/dashboard';
+    const path = hash.replace('#', '');
+
+    // Check authentication
+    try {
+        const authData = await auth.check();
+        if (!authData.authenticated) {
+            if (path !== '/login') {
+                window.location.hash = '#/login';
+                return;
+            }
+        } else {
+            currentUser = authData.username;
+            currentRole = authData.role || 'admin';
+            setCsrfToken(authData.csrf_token);
+
+            if (path === '/login') {
+                window.location.hash = '#/dashboard';
+                return;
+            }
+        }
+    } catch {
+        if (path !== '/login') {
+            window.location.hash = '#/login';
+            return;
+        }
+    }
+
+    // Login page special case
+    if (path === '/login') {
+        const loginModule = await import('./pages/login.js');
+        const app = document.getElementById('app');
+        app.innerHTML = '';
+        loginModule.render(app);
+        return;
+    }
+
+    // Load panel settings if not loaded
+    if (!panelSettings) {
+        try {
+            panelSettings = await settingsApi.get();
+        } catch {
+            panelSettings = {};
+        }
+    }
+
+    // Determine page name from path
+    let pageName = path.split('/')[1] || 'dashboard';
+    let param = path.split('/')[2] || null;
+
+    const app = document.getElementById('app');
+    app.innerHTML = renderLayout(pageName);
+
+    // Bind layout events
+    document.getElementById('logout-btn')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await auth.logout();
+        window.location.hash = '#/login';
+    });
+
+    document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
+
+    document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebar-overlay').classList.toggle('active');
+    });
+
+    document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebar-overlay').classList.remove('active');
+    });
+
+    // User dropdown menu
+    document.getElementById('user-menu')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dropdown = document.getElementById('user-dropdown');
+        dropdown?.classList.toggle('open');
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('user-dropdown');
+        if (dropdown && !e.target.closest('.user-menu-wrapper')) {
+            dropdown.classList.remove('open');
+        }
+    });
+
+    document.getElementById('dropdown-change-pwd')?.addEventListener('click', () => {
+        document.getElementById('user-dropdown')?.classList.remove('open');
+        showPasswordChangeModal();
+    });
+
+    document.getElementById('dropdown-logout')?.addEventListener('click', async () => {
+        await auth.logout();
+        window.location.hash = '#/login';
+    });
+
+    // Close sidebar on nav click (mobile)
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            document.getElementById('sidebar')?.classList.remove('open');
+            document.getElementById('sidebar-overlay')?.classList.remove('active');
+        });
+    });
+
+    // Render page content
+    const pageContent = document.getElementById('page-content');
+    const routeKey = pageName === 'site-detail' ? '/site-detail' : `/${pageName}`;
+
+    if (routes[routeKey]) {
+        await routes[routeKey](pageContent, param);
+    } else {
+        // Lazy load page modules
+        try {
+            const module = await import(`./pages/${pageName}.js`);
+            routes[routeKey] = module.render;
+            await module.render(pageContent, param);
+        } catch (err) {
+            pageContent.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <div class="empty-state-title">Page Not Found</div>
+                    <div class="empty-state-text">The page you're looking for doesn't exist.</div>
+                    <a href="#/dashboard" class="btn btn-primary">Go to Dashboard</a>
+                </div>`;
+        }
+    }
+}
+
+// ---- Init ----
+document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    window.addEventListener('hashchange', navigate);
+    navigate();
+});

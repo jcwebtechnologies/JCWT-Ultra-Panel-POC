@@ -1,0 +1,973 @@
+#!/usr/bin/env bash
+# ============================================================================
+# JCWT Ultra Panel — One-Command Installer
+# IPv6-Native Lightweight Web Hosting Control Panel for ARM64 EC2
+# ============================================================================
+set -uo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+PANEL_USER="jcwt-panel"
+PANEL_PORT="8443"
+DATA_DIR="/var/lib/jcwt-panel"
+PANEL_BIN="/usr/local/bin/jcwt-panel"
+CONFIG_DIR="/etc/jcwt-panel"
+LOG_DIR="/var/log/jcwt-panel"
+
+# Step tracking
+STEP_CURRENT=0
+STEP_TOTAL=12
+
+# Verbose mode (pass -v or --verbose)
+VERBOSE=false
+for arg in "$@"; do
+    case "$arg" in
+        -v|--verbose) VERBOSE=true ;;
+    esac
+done
+
+# Helper: run apt-get with or without verbose output
+apt_run() {
+    if [ "$VERBOSE" = true ]; then
+        "$@"
+    else
+        "$@" 2>&1 | { grep -E "^Setting up|^Unpacking|^E:" || true; } | while read -r line; do
+            log_detail "$line"
+        done
+    fi
+}
+
+log_info()    { echo -e "  ${BLUE}INFO${NC}  $1"; }
+log_ok()      { echo -e "  ${GREEN} OK ${NC}  $1"; }
+log_warn()    { echo -e "  ${YELLOW}WARN${NC}  $1"; }
+log_error()   { echo -e "  ${RED}FAIL${NC}  $1"; }
+log_detail()  { echo -e "        ${DIM}→ $1${NC}"; }
+log_pkg()     { echo -e "        ${DIM}  ├─ $1${NC}"; }
+log_pkg_last(){ echo -e "        ${DIM}  └─ $1${NC}"; }
+
+step_header() {
+    STEP_CURRENT=$((STEP_CURRENT + 1))
+    echo ""
+    echo -e "${BOLD}${PURPLE}[$STEP_CURRENT/$STEP_TOTAL]${NC} ${BOLD}$1${NC}"
+    echo -e "${DIM}$(printf '%.0s─' $(seq 1 60))${NC}"
+}
+
+# ---- Pre-flight checks ----
+preflight() {
+    echo ""
+    echo -e "${PURPLE}${BOLD}"
+    echo "  ╔══════════════════════════════════════════════╗"
+    echo "  ║                                              ║"
+    echo "  ║        JCWT Ultra Panel Installer            ║"
+    echo "  ║      IPv6-Native ARM64 Hosting Panel         ║"
+    echo "  ║                                              ║"
+    echo "  ╚══════════════════════════════════════════════╝"
+    echo -e "${NC}"
+
+    if [[ $EUID -ne 0 ]]; then
+        log_error "This script must be run as root (use: sudo bash install.sh)"
+        exit 1
+    fi
+
+    step_header "Pre-flight Checks"
+
+    # Check architecture
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+        log_ok "Architecture: ${BOLD}$ARCH${NC} (ARM64)"
+    else
+        log_warn "Expected ARM64 (aarch64), got: $ARCH"
+        log_warn "Continuing anyway, but this panel is optimized for ARM64"
+    fi
+
+    # Check OS
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        log_ok "Operating System: ${BOLD}$PRETTY_NAME${NC}"
+    fi
+
+    # Kernel
+    log_info "Kernel: $(uname -r)"
+
+    # Detect IPv6
+    if ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
+        IPV6_ADDR=$(ip -6 addr show scope global | grep "inet6" | head -1 | awk '{print $2}' | cut -d'/' -f1)
+        log_ok "IPv6 detected: ${BOLD}$IPV6_ADDR${NC}"
+    else
+        log_warn "No global IPv6 address detected — using ::1 as fallback"
+        IPV6_ADDR="::1"
+    fi
+
+    # Check IPv4
+    if ip -4 addr show scope global 2>/dev/null | grep -q "inet "; then
+        IPV4_ADDR=$(ip -4 addr show scope global | grep "inet " | head -1 | awk '{print $2}' | cut -d'/' -f1)
+        log_info "IPv4 also available: $IPV4_ADDR (panel will bind IPv6 only)"
+    else
+        log_ok "IPv6-only environment confirmed"
+    fi
+
+    # Memory
+    TOTAL_MEM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo "unknown")
+    log_info "Total RAM: ${TOTAL_MEM_MB} MB"
+
+    # Create swap if RAM < 1024MB and no swap exists (prevents OOM on t4g.nano)
+    SWAP_TOTAL=$(awk '/SwapTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo "0")
+    if [ "$TOTAL_MEM_MB" -lt 1024 ] 2>/dev/null && [ "$SWAP_TOTAL" -lt 100 ] 2>/dev/null; then
+        if [ ! -f /swapfile ]; then
+            log_warn "Low RAM detected (${TOTAL_MEM_MB}MB). Creating 1GB swap file to prevent OOM..."
+            dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none 2>/dev/null
+            chmod 600 /swapfile
+            mkswap /swapfile >/dev/null 2>&1
+            swapon /swapfile
+            # Make persistent
+            if ! grep -q '/swapfile' /etc/fstab 2>/dev/null; then
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
+            log_ok "1GB swap file created and activated"
+        else
+            swapon /swapfile 2>/dev/null || true
+            log_ok "Swap file already exists"
+        fi
+    fi
+
+    # Disk
+    DISK_AVAIL=$(df -h / | awk 'NR==2 {print $4}')
+    log_info "Disk available: $DISK_AVAIL"
+}
+
+# ---- Install system packages ----
+install_packages() {
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Clean up any broken repo files from a previous failed install
+    if [ -f /etc/apt/sources.list.d/ondrej-php.list ]; then
+        log_warn "Removing leftover ondrej-php.list from previous run..."
+        rm -f /etc/apt/sources.list.d/ondrej-php.list
+    fi
+    if [ -f /etc/apt/trusted.gpg.d/ondrej-php.gpg ]; then
+        rm -f /etc/apt/trusted.gpg.d/ondrej-php.gpg
+    fi
+    if [ -f /usr/share/keyrings/ondrej-php.gpg ]; then
+        rm -f /usr/share/keyrings/ondrej-php.gpg
+    fi
+
+    step_header "Updating System Packages"
+    log_info "Running apt-get update..."
+    if [ "$VERBOSE" = true ]; then
+        apt-get update || true
+    else
+        apt-get update -qq 2>&1 | tail -3 || true
+    fi
+    log_ok "Package lists updated"
+
+    # Upgrade existing packages
+    log_info "Checking for system upgrades..."
+    UPGRADABLE=$(apt list --upgradable 2>/dev/null | grep -v "^Listing" | grep -c "/" || true)
+    UPGRADABLE=${UPGRADABLE:-0}
+    if [ "$UPGRADABLE" -gt 0 ] 2>/dev/null; then
+        log_info "Upgrading $UPGRADABLE packages..."
+        apt_run apt-get upgrade -y
+        log_ok "System packages upgraded"
+    else
+        log_ok "System already up to date"
+    fi
+
+    step_header "Adding PHP Repository"
+    log_info "Installing software-properties-common..."
+    apt_run apt-get install -y software-properties-common
+    log_ok "software-properties-common ready"
+
+    log_info "Adding ppa:ondrej/php repository..."
+    # Try add-apt-repository with a 30s timeout (hangs on IPv6-only due to keyserver)
+    if timeout 30 add-apt-repository -y ppa:ondrej/php >/dev/null 2>&1; then
+        log_detail "Successfully added via add-apt-repository"
+    else
+        log_warn "add-apt-repository failed or timed out (common on IPv6-only EC2). Falling back to manual method..."
+        # Download GPG key directly via HTTPS (works on IPv6)
+        curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x14aa40ec0831756756d7f66c4f4ea0aae5267a6c" \
+            | gpg --batch --yes --dearmor -o /etc/apt/trusted.gpg.d/ondrej-php.gpg 2>/dev/null
+        chmod 644 /etc/apt/trusted.gpg.d/ondrej-php.gpg
+        OS_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+        echo "deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu $OS_CODENAME main" > /etc/apt/sources.list.d/ondrej-php.list
+        log_detail "Added repo for Ubuntu $OS_CODENAME via manual fallback"
+    fi
+
+    log_info "Refreshing package lists..."
+    if [ "$VERBOSE" = true ]; then
+        apt-get update || true
+    else
+        apt-get update -qq 2>&1 | tail -3 || true
+    fi
+    log_ok "Ondrej PHP PPA added"
+
+    step_header "Installing Core Services"
+
+    # ---- Nginx ----
+    log_info "Installing Nginx web server..."
+    apt_run apt-get install -y nginx
+    NGINX_VER=$(nginx -v 2>&1 | awk -F/ '{print $2}' || echo "unknown")
+    log_ok "Nginx ${BOLD}v${NGINX_VER}${NC} installed"
+
+    # ---- MariaDB ----
+    log_info "Installing MariaDB server and client..."
+    apt_run apt-get install -y mariadb-server mariadb-client
+    MARIA_VER=$(mariadbd --version 2>/dev/null | awk '{print $3}' || mysql --version 2>/dev/null | awk '{print $5}' | tr -d ',' || echo "unknown")
+    log_ok "MariaDB ${BOLD}${MARIA_VER}${NC} installed"
+
+    # ---- phpMyAdmin ----
+    log_info "Installing phpMyAdmin..."
+    echo "phpmyadmin phpmyadmin/reconfigure-webserver multiselect" | debconf-set-selections 2>/dev/null || true
+    echo "phpmyadmin phpmyadmin/dbconfig-install boolean false" | debconf-set-selections 2>/dev/null || true
+    apt_run apt-get install -y phpmyadmin
+
+    # Remove any phpMyAdmin nginx configs the package may drop in conf.d
+    # (these contain bare 'location' blocks that are invalid at http{} level)
+    rm -f /etc/nginx/conf.d/phpmyadmin.conf
+    rm -f /etc/nginx/conf.d/jcwt-phpmyadmin.conf
+    rm -f /etc/nginx/conf.d/*phpmyadmin*
+
+    if [ -d /usr/share/phpmyadmin ]; then
+        # Configure signon auth (auto-login from panel)
+        mkdir -p /etc/phpmyadmin/conf.d
+        cat > /etc/phpmyadmin/conf.d/jcwt-signon.php << 'PMACONF'
+<?php
+$cfg['Servers'][1]['auth_type'] = 'signon';
+$cfg['Servers'][1]['SignonSession'] = 'SignonSession';
+$cfg['Servers'][1]['SignonURL'] = '/pma/signon_auto.php';
+$cfg['Servers'][1]['host'] = 'localhost';
+$cfg['LoginCookieValidity'] = 1800;
+$cfg['SendErrorReports'] = 'never';
+$cfg['Servers'][1]['hide_db'] = '^(information_schema|performance_schema|mysql|sys|phpmyadmin)$';
+PMACONF
+
+        # Nginx snippet for /pma/ URL (included inside server blocks via 'include')
+        mkdir -p /etc/nginx/snippets
+        cat > /etc/nginx/snippets/phpmyadmin.conf << 'PMANGINX'
+# JCWT Ultra Panel — phpMyAdmin location block (included inside server{})
+location /pma/ {
+    alias /usr/share/phpmyadmin/;
+    index index.php;
+    location ~ ^/pma/(.*\.php)$ {
+        alias /usr/share/phpmyadmin/$1;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME /usr/share/phpmyadmin/$1;
+        include fastcgi_params;
+    }
+    location ~* ^/pma/(.+\.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
+        alias /usr/share/phpmyadmin/$1;
+    }
+}
+PMANGINX
+        log_ok "phpMyAdmin installed (signon auth via panel)"
+    else
+        log_warn "phpMyAdmin directory not found"
+        # Create empty snippet so nginx include doesn't fail
+        mkdir -p /etc/nginx/snippets
+        echo "# phpMyAdmin not installed" > /etc/nginx/snippets/phpmyadmin.conf
+    fi
+
+    step_header "Installing PHP Versions"
+
+    PHP_EXTENSIONS="fpm cli mysql curl gd mbstring xml zip intl bcmath opcache readline redis sqlite3"
+
+    for VER in 8.2 8.3 8.4; do
+        log_info "Installing PHP ${BOLD}$VER${NC} Core..."
+        
+        # Install Core first to reduce apt memory pressure on 512MB instances (t4g.nano)
+        apt_run apt-get install -y php${VER}-fpm php${VER}-cli
+
+        log_info "Installing PHP ${BOLD}$VER${NC} Extensions..."
+        
+        # Build extension package list
+        PKG_LIST=""
+        for EXT in $PHP_EXTENSIONS; do
+            if [[ "$EXT" != "fpm" && "$EXT" != "cli" ]]; then
+                PKG_LIST="$PKG_LIST php${VER}-${EXT}"
+            fi
+        done
+
+        # Show what we're installing
+        EXT_COUNT=$(echo "$PHP_EXTENSIONS" | wc -w | tr -d ' ')
+        log_detail "Installing extensions: $(echo $PKG_LIST | sed 's/php[0-9.]*-//g' | sed 's/ /, /g')"
+
+        # Install extensions in a separate transaction
+        apt_run apt-get install -y $PKG_LIST
+
+        # Verify
+        PHP_FULL_VER=$(php${VER} -v 2>/dev/null | head -1 | awk '{print $2}' || echo "$VER.x")
+        log_ok "PHP ${BOLD}${PHP_FULL_VER}${NC} installed with ${EXT_COUNT} extensions"
+    done
+
+    # PHP 8.5 — try but don't fail (some extensions may not exist yet)
+    if apt-cache show php8.5-fpm > /dev/null 2>&1; then
+        log_info "Installing PHP ${BOLD}8.5${NC} with extensions..."
+        PHP85_INSTALLED=0
+        PHP85_SKIPPED=0
+        for EXT in $PHP_EXTENSIONS; do
+            PKG="php8.5-${EXT}"
+            if apt-cache show "$PKG" > /dev/null 2>&1; then
+                if apt-get install -y "$PKG" > /dev/null 2>&1; then
+                    log_pkg "$PKG"
+                    PHP85_INSTALLED=$((PHP85_INSTALLED + 1))
+                else
+                    log_pkg "$PKG (failed)"
+                    PHP85_SKIPPED=$((PHP85_SKIPPED + 1))
+                fi
+            else
+                PHP85_SKIPPED=$((PHP85_SKIPPED + 1))
+            fi
+        done
+        if [ "$PHP85_INSTALLED" -gt 0 ]; then
+            PHP85_VER=$(php8.5 -v 2>/dev/null | head -1 | awk '{print $2}' || echo "8.5.x")
+            log_ok "PHP ${BOLD}${PHP85_VER}${NC} installed ($PHP85_INSTALLED extensions, $PHP85_SKIPPED skipped)"
+        else
+            log_warn "PHP 8.5 packages exist but none installed successfully"
+        fi
+    else
+        log_warn "PHP 8.5 is not yet available in the repository — skipping"
+    fi
+
+    # ---- Utilities ----
+    log_info "Installing utilities (openssl, ufw, curl, wget, jq, gcc)..."
+    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils"
+    apt_run apt-get install -y $UTIL_PKGS
+    log_ok "Utilities installed"
+
+    # ---- File Browser ----
+    # Detect IPv4/IPv6 connectivity for download fallback logic
+    HAS_IPV4=$(ip -4 addr show scope global 2>/dev/null | grep -c inet || echo "0")
+    HAS_IPV6=$(ip -6 addr show scope global 2>/dev/null | grep -c inet6 || echo "0")
+
+    log_info "Installing File Browser (file manager)..."
+    if [ -f /usr/local/bin/filebrowser ]; then
+        FB_VER=$(/usr/local/bin/filebrowser version 2>/dev/null | head -1 || echo "unknown")
+        log_ok "File Browser already installed: $FB_VER"
+    else
+        FB_INSTALLED=false
+
+        # Method 1: Official install script (may hang on IPv6-only)
+        log_info "  → Trying official install script..."
+        timeout 30 bash -c 'curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash' >/dev/null 2>&1
+        if [ -f /usr/local/bin/filebrowser ]; then
+            FB_INSTALLED=true
+        fi
+
+        # Method 2: Direct binary download from GitHub releases
+        if [ "$FB_INSTALLED" = false ]; then
+            log_warn "  → Official script failed/timed out. Trying direct binary download..."
+            FB_ARCH="linux-amd64"
+            if [ "$(uname -m)" = "aarch64" ]; then
+                FB_ARCH="linux-arm64"
+            fi
+            FB_URL="https://github.com/filebrowser/filebrowser/releases/latest/download/${FB_ARCH}-filebrowser.tar.gz"
+            if timeout 30 wget -q -O /tmp/filebrowser.tar.gz "$FB_URL" 2>/dev/null || \
+               timeout 30 curl -fsSL -o /tmp/filebrowser.tar.gz "$FB_URL" 2>/dev/null; then
+                tar -xzf /tmp/filebrowser.tar.gz -C /tmp/ filebrowser 2>/dev/null
+                if [ -f /tmp/filebrowser ]; then
+                    mv /tmp/filebrowser /usr/local/bin/filebrowser
+                    chmod +x /usr/local/bin/filebrowser
+                    FB_INSTALLED=true
+                fi
+                rm -f /tmp/filebrowser.tar.gz
+            fi
+        fi
+
+        # Method 3: Try via DNS64/NAT64 (for pure IPv6 instances)
+        if [ "$FB_INSTALLED" = false ] && [ "$HAS_IPV6" -gt 0 ] && [ "$HAS_IPV4" -eq 0 ]; then
+            log_warn "  → Direct download failed. Trying via DNS64 NAT64 proxy..."
+            FB_ARCH="linux-amd64"
+            if [ "$(uname -m)" = "aarch64" ]; then
+                FB_ARCH="linux-arm64"
+            fi
+            # Use dns64.dns.google as resolver for NAT64
+            FB_URL="https://github.com/filebrowser/filebrowser/releases/latest/download/${FB_ARCH}-filebrowser.tar.gz"
+            if timeout 30 wget -q --dns-servers=2001:4860:4860::6464 -O /tmp/filebrowser.tar.gz "$FB_URL" 2>/dev/null; then
+                tar -xzf /tmp/filebrowser.tar.gz -C /tmp/ filebrowser 2>/dev/null
+                if [ -f /tmp/filebrowser ]; then
+                    mv /tmp/filebrowser /usr/local/bin/filebrowser
+                    chmod +x /usr/local/bin/filebrowser
+                    FB_INSTALLED=true
+                fi
+                rm -f /tmp/filebrowser.tar.gz
+            fi
+        fi
+
+        if [ "$FB_INSTALLED" = true ] && [ -f /usr/local/bin/filebrowser ]; then
+            FB_VER=$(/usr/local/bin/filebrowser version 2>/dev/null | head -1 || echo "unknown")
+            log_ok "File Browser ${BOLD}${FB_VER}${NC} installed"
+        else
+            log_warn "File Browser installation failed — file manager will be unavailable"
+            log_warn "  → You can install manually later: curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash"
+        fi
+    fi
+}
+
+# ---- Configure MariaDB for IPv6 ----
+configure_mariadb() {
+    step_header "Configuring MariaDB for IPv6"
+
+    log_info "Writing IPv6 bind configuration..."
+    cat > /etc/mysql/mariadb.conf.d/60-jcwt-ipv6.cnf << 'EOF'
+[mysqld]
+# JCWT Ultra Panel - IPv6 Configuration
+bind-address = ::1
+skip-name-resolve
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+innodb_buffer_pool_size = 128M
+innodb_log_file_size = 32M
+max_connections = 50
+EOF
+    log_detail "Config written: /etc/mysql/mariadb.conf.d/60-jcwt-ipv6.cnf"
+    log_detail "bind-address = ::1 (IPv6 localhost only)"
+    log_detail "charset = utf8mb4, max_connections = 50"
+
+    log_info "Restarting MariaDB..."
+    systemctl restart mariadb
+    systemctl enable mariadb > /dev/null 2>&1
+    log_ok "MariaDB restarted and enabled"
+
+    log_info "Securing MariaDB installation..."
+    mysql -u root -e "DELETE FROM mysql.user WHERE User='';" 2>/dev/null || true
+    log_detail "Removed anonymous users"
+    mysql -u root -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" 2>/dev/null || true
+    log_detail "Restricted root to local connections only"
+    mysql -u root -e "DROP DATABASE IF EXISTS test;" 2>/dev/null || true
+    log_detail "Removed test database"
+    mysql -u root -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+
+    log_ok "MariaDB secured and configured for IPv6"
+}
+
+# ---- Configure Nginx for IPv6 ----
+configure_nginx() {
+    step_header "Configuring Nginx for IPv6"
+
+    log_info "Removing default site..."
+    rm -f /etc/nginx/sites-enabled/default
+    log_detail "Disabled: /etc/nginx/sites-enabled/default"
+
+    # Comment out conflicting directives in the default nginx.conf
+    # Ubuntu's nginx.conf already contains: gzip, server_tokens, client_max_body_size, etc.
+    log_info "Patching default nginx.conf to avoid directive conflicts..."
+
+    # Comment out gzip in default nginx.conf to avoid duplicate
+    if grep -q "^[[:space:]]*gzip on;" /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i 's/^\([[:space:]]*\)gzip on;/\1# gzip on; # Managed by JCWT Panel/' /etc/nginx/nginx.conf
+        log_detail "Commented out default 'gzip on' in nginx.conf"
+    fi
+    if grep -q "^[[:space:]]*gzip_" /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i 's/^\([[:space:]]*\)gzip_\(.*\)/\1# gzip_\2 # Managed by JCWT Panel/' /etc/nginx/nginx.conf
+        log_detail "Commented out default gzip_* directives in nginx.conf"
+    fi
+    if grep -q "^[[:space:]]*server_tokens" /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i 's/^\([[:space:]]*\)server_tokens\(.*\)/\1# server_tokens\2 # Managed by JCWT Panel/' /etc/nginx/nginx.conf
+        log_detail "Commented out default 'server_tokens' in nginx.conf"
+    fi
+
+    log_info "Writing JCWT optimization config..."
+    cat > /etc/nginx/conf.d/jcwt-optimization.conf << 'EOF'
+# JCWT Ultra Panel - Nginx Optimizations
+# This file manages all compression, security headers, and limits
+
+# Upload size
+client_max_body_size 100M;
+
+# Hide server version
+server_tokens off;
+
+# Compression
+gzip on;
+gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
+gzip_min_length 256;
+gzip_vary on;
+gzip_comp_level 5;
+gzip_proxied any;
+
+# Security headers (applied globally)
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-XSS-Protection "1; mode=block" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+EOF
+    log_detail "Config written: /etc/nginx/conf.d/jcwt-optimization.conf"
+    log_detail "  • client_max_body_size = 100M"
+    log_detail "  • gzip compression enabled (level 5)"
+    log_detail "  • Security headers: X-Frame-Options, X-Content-Type-Options, etc."
+
+    # Default catch-all vhost — shows a welcome page for DNS pointing to this server
+    # that doesn't match any configured site (prevents panel login from showing)
+    log_info "Creating default catch-all vhost..."
+    mkdir -p /var/www/default
+    cat > /var/www/default/index.html << 'DEFAULTHTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #334155;
+        }
+        .container {
+            text-align: center;
+            padding: 3rem 2rem;
+            max-width: 520px;
+        }
+        .icon {
+            width: 80px; height: 80px;
+            margin: 0 auto 1.5rem;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 32px rgba(99,102,241,0.25);
+        }
+        .icon svg { width: 40px; height: 40px; }
+        h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.75rem; color: #1e293b; }
+        p { font-size: 1.05rem; line-height: 1.7; color: #64748b; margin-bottom: 0.5rem; }
+        .badge {
+            display: inline-block; margin-top: 1.5rem; padding: 0.4rem 1rem;
+            background: #f1f5f9; border-radius: 999px;
+            font-size: 0.8rem; color: #94a3b8; letter-spacing: 0.02em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+        </div>
+        <h1>Welcome</h1>
+        <p>This server is operational and ready to serve your website.</p>
+        <p>If you are the owner, please configure your domain in the hosting panel.</p>
+        <div class="badge">Powered by JCWT Ultra Panel</div>
+    </div>
+</body>
+</html>
+DEFAULTHTML
+
+    cat > /etc/nginx/sites-available/000-default.conf << 'DEFAULTVHOST'
+# JCWT Ultra Panel — Default catch-all vhost
+# Serves a welcome page for any domain not matching a configured site
+server {
+    listen [::]:80 default_server;
+    server_name _;
+
+    root /var/www/default;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # phpMyAdmin (if installed)
+    include /etc/nginx/snippets/phpmyadmin.conf;
+
+    # Prevent access to hidden files
+    location ~ /\. {
+        deny all;
+    }
+}
+DEFAULTVHOST
+    ln -sf /etc/nginx/sites-available/000-default.conf /etc/nginx/sites-enabled/000-default.conf
+    log_ok "Default catch-all vhost created"
+
+    log_info "Testing Nginx configuration..."
+    if nginx -t 2>&1; then
+        log_ok "Nginx config test passed"
+    else
+        log_error "Nginx config test FAILED — dumping error:"
+        nginx -t 2>&1 || true
+        log_warn "Attempting to fix by removing problematic configs and retesting..."
+        # Remove configs that may have bare location blocks or conflicts
+        rm -f /etc/nginx/conf.d/jcwt-phpmyadmin.conf
+        rm -f /etc/nginx/conf.d/phpmyadmin.conf
+        rm -f /etc/nginx/conf.d/*phpmyadmin*
+        if nginx -t 2>/dev/null; then
+            log_warn "Removed conflicting phpMyAdmin config from conf.d — Nginx works now"
+        else
+            rm -f /etc/nginx/conf.d/jcwt-optimization.conf
+            if nginx -t 2>/dev/null; then
+                log_warn "Removed jcwt-optimization.conf — Nginx works with defaults"
+            fi
+        fi
+    fi
+
+    log_info "Restarting Nginx..."
+    systemctl restart nginx
+    systemctl enable nginx > /dev/null 2>&1
+    log_ok "Nginx configured and running"
+}
+
+# ---- Configure PHP-FPM ----
+configure_php() {
+    step_header "Configuring PHP-FPM Services"
+
+    mkdir -p /var/log/php
+
+    for VER in 8.2 8.3 8.4 8.5; do
+        if [ -d "/etc/php/$VER/fpm" ]; then
+            log_info "Starting PHP-FPM ${BOLD}$VER${NC}..."
+            systemctl restart php${VER}-fpm 2>/dev/null || true
+            systemctl enable php${VER}-fpm 2>/dev/null || true
+
+            # Show socket path
+            SOCK_PATH="/run/php/php${VER}-fpm.sock"
+            if [ -S "$SOCK_PATH" ]; then
+                log_detail "Socket: $SOCK_PATH"
+                log_ok "PHP-FPM $VER active"
+            else
+                log_detail "Socket not found at $SOCK_PATH (may use TCP)"
+                log_ok "PHP-FPM $VER started"
+            fi
+        fi
+    done
+}
+
+# ---- Create panel user and directories ----
+setup_panel() {
+    step_header "Setting Up Panel User & Directories"
+
+    # Create panel system user
+    if ! id "$PANEL_USER" > /dev/null 2>&1; then
+        log_info "Creating system user: ${BOLD}$PANEL_USER${NC}..."
+        useradd --system --shell /usr/sbin/nologin --home-dir "$DATA_DIR" "$PANEL_USER"
+        log_ok "System user '$PANEL_USER' created"
+    else
+        log_ok "System user '$PANEL_USER' already exists"
+    fi
+
+    # Create directories
+    log_info "Creating directory structure..."
+    mkdir -p "$DATA_DIR"/{tls,ssl,uploads}
+    mkdir -p "$CONFIG_DIR"
+    mkdir -p "$LOG_DIR"
+    log_detail "$DATA_DIR/"
+    log_detail "├── tls/     (panel TLS certificates)"
+    log_detail "├── ssl/     (site SSL certificates)"
+    log_detail "└── uploads/ (logo, favicon uploads)"
+    log_detail "$LOG_DIR/ (panel logs)"
+
+    # Generate self-signed TLS cert for panel
+    log_info "Generating panel TLS certificate (10-year self-signed)..."
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout "$DATA_DIR/tls/panel.key" \
+        -out "$DATA_DIR/tls/panel.crt" \
+        -subj "/CN=JCWT-Ultra-Panel/O=JCWT/C=US" 2>/dev/null
+
+    chmod 600 "$DATA_DIR/tls/panel.key"
+    chmod 644 "$DATA_DIR/tls/panel.crt"
+    log_detail "Certificate: $DATA_DIR/tls/panel.crt"
+    log_detail "Private Key: $DATA_DIR/tls/panel.key (mode 600)"
+
+    chown -R "$PANEL_USER:$PANEL_USER" "$DATA_DIR"
+    chown -R "$PANEL_USER:$PANEL_USER" "$LOG_DIR"
+
+    log_ok "Panel directories created and secured"
+}
+
+# ---- Install panel binary ----
+install_binary() {
+    step_header "Installing Panel Binary"
+
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    PROJECT_DIR="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd || echo "")"
+
+    # Check if the binary exists in the current directory or build it
+    if [ -f "./jcwt-panel" ]; then
+        log_info "Found pre-built binary in current directory"
+        cp ./jcwt-panel "$PANEL_BIN"
+        log_ok "Binary copied to $PANEL_BIN"
+    elif [ -f "$PROJECT_DIR/jcwt-panel" ]; then
+        log_info "Found pre-built binary in project root"
+        cp "$PROJECT_DIR/jcwt-panel" "$PANEL_BIN"
+        log_ok "Binary copied to $PANEL_BIN"
+    elif [ -f "$PROJECT_DIR/cmd/jcwt-panel/main.go" ]; then
+        log_info "Source code found — building from source..."
+
+        if ! command -v go > /dev/null 2>&1; then
+            log_info "Go not found — installing Go toolchain..."
+
+            # Detect architecture for Go download
+            case "$(uname -m)" in
+                aarch64|arm64) GO_ARCH="arm64" ;;
+                x86_64)        GO_ARCH="amd64" ;;
+                *)             GO_ARCH="amd64" ;;
+            esac
+
+            GOVERSION="1.22.5"
+            GO_URL="https://go.dev/dl/go${GOVERSION}.linux-${GO_ARCH}.tar.gz"
+            log_detail "Downloading: $GO_URL"
+            wget -q --show-progress "$GO_URL" -O /tmp/go.tar.gz
+            tar -C /usr/local -xzf /tmp/go.tar.gz
+            export PATH=$PATH:/usr/local/go/bin
+            rm /tmp/go.tar.gz
+            log_ok "Go ${GOVERSION} (${GO_ARCH}) installed"
+        else
+            GO_INSTALLED=$(go version | awk '{print $3}')
+            log_ok "Go already installed: $GO_INSTALLED"
+        fi
+
+        export PATH=$PATH:/usr/local/go/bin
+
+        cd "$PROJECT_DIR"
+
+        log_info "Downloading Go dependencies..."
+        go mod tidy 2>&1 | { grep -v "^$" || true; } | while read -r line; do
+            log_detail "$line"
+        done
+        log_ok "Dependencies resolved (go.sum generated)"
+
+        log_info "Building JCWT Ultra Panel binary (this may take a minute)..."
+        log_detail "CGO_ENABLED=1 go build -o $PANEL_BIN ./cmd/jcwt-panel/"
+        if CGO_ENABLED=1 go build -o "$PANEL_BIN" ./cmd/jcwt-panel/ 2>&1; then
+            log_ok "Compilation successful"
+        else
+            log_error "Compilation failed — see errors above"
+        fi
+
+        cd - > /dev/null
+
+        if [ ! -f "$PANEL_BIN" ]; then
+            log_error "Build failed — binary not created at $PANEL_BIN"
+            log_error "Check: cd $PROJECT_DIR && go build -v ./cmd/jcwt-panel/"
+            exit 1
+        fi
+        log_ok "Panel binary built successfully"
+    else
+        log_error "Panel binary not found!"
+        log_error "Either:"
+        log_error "  • Place a pre-built 'jcwt-panel' binary in the current directory"
+        log_error "  • Or run this installer from the project root (with cmd/jcwt-panel/main.go)"
+        exit 1
+    fi
+
+    chmod +x "$PANEL_BIN"
+    chown root:root "$PANEL_BIN"
+
+    BIN_SIZE=$(du -h "$PANEL_BIN" | awk '{print $1}')
+    log_ok "Binary installed: $PANEL_BIN ($BIN_SIZE)"
+}
+
+# ---- Install systemd service ----
+install_service() {
+    step_header "Installing Systemd Service"
+
+    log_info "Writing service unit file..."
+    cat > /etc/systemd/system/jcwt-panel.service << EOF
+[Unit]
+Description=JCWT Ultra Panel - IPv6-Native Hosting Control Panel
+After=network.target mariadb.service nginx.service
+Wants=mariadb.service nginx.service
+
+[Service]
+Type=simple
+User=$PANEL_USER
+Group=$PANEL_USER
+ExecStart=$PANEL_BIN --data-dir $DATA_DIR --listen [::]:$PANEL_PORT
+Restart=always
+RestartSec=5
+StandardOutput=append:$LOG_DIR/panel.log
+StandardError=append:$LOG_DIR/panel-error.log
+
+# Note: No ProtectSystem — panel needs to create users (/etc/passwd), manage nginx/php configs
+NoNewPrivileges=false
+ProtectHome=false
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    log_detail "Service: /etc/systemd/system/jcwt-panel.service"
+    log_detail "User: $PANEL_USER"
+    log_detail "Exec: $PANEL_BIN --data-dir $DATA_DIR --listen [::]:$PANEL_PORT"
+
+    log_info "Configuring sudo privileges..."
+    cat > /etc/sudoers.d/jcwt-panel << 'EOF'
+# JCWT Ultra Panel - Required privileges for system management
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/userdel *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/groupdel *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl restart nginx
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl restart php*
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/nginx -t
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysql *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/crontab *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/openssl *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/bash *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ls *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/cat *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ln *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/timedatectl *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/curl *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
+EOF
+    chmod 440 /etc/sudoers.d/jcwt-panel
+    log_detail "Sudoers: /etc/sudoers.d/jcwt-panel (mode 440)"
+
+    systemctl daemon-reload
+    systemctl enable jcwt-panel > /dev/null 2>&1
+
+    log_info "Starting JCWT Ultra Panel service..."
+    if systemctl start jcwt-panel; then
+        sleep 2
+        if systemctl is-active --quiet jcwt-panel; then
+            log_ok "Panel service is running!"
+        else
+            log_warn "Panel service started but may have issues"
+            log_warn "Check logs: journalctl -u jcwt-panel -n 20"
+        fi
+    else
+        log_error "Failed to start panel service"
+        log_error "Check: journalctl -u jcwt-panel -n 20"
+    fi
+}
+
+# ---- Configure Firewall ----
+configure_firewall() {
+    step_header "Configuring IPv6 Firewall"
+
+    log_info "Ensuring UFW supports IPv6..."
+    sed -i 's/IPV6=no/IPV6=yes/' /etc/default/ufw 2>/dev/null || true
+    log_detail "SET IPV6=yes in /etc/default/ufw"
+
+    log_info "Resetting firewall rules..."
+    ufw --force reset > /dev/null 2>&1
+
+    log_info "Setting default policies..."
+    ufw default deny incoming > /dev/null 2>&1
+    ufw default allow outgoing > /dev/null 2>&1
+    log_detail "Default: deny incoming, allow outgoing"
+
+    log_info "Adding firewall rules..."
+    ufw allow 22/tcp > /dev/null 2>&1
+    log_detail "ALLOW 22/tcp   — SSH"
+    ufw allow 80/tcp > /dev/null 2>&1
+    log_detail "ALLOW 80/tcp   — HTTP"
+    ufw allow 443/tcp > /dev/null 2>&1
+    log_detail "ALLOW 443/tcp  — HTTPS"
+    ufw allow ${PANEL_PORT}/tcp > /dev/null 2>&1
+    log_detail "ALLOW ${PANEL_PORT}/tcp — JCWT Panel"
+
+    ufw --force enable > /dev/null 2>&1
+    log_ok "Firewall enabled with IPv6 support"
+}
+
+# ---- Print completion banner ----
+print_banner() {
+    echo ""
+    echo ""
+
+    # Get service statuses with colors
+    get_status() {
+        local status
+        status=$(systemctl is-active "$1" 2>/dev/null || echo "inactive")
+        if [ "$status" = "active" ]; then
+            echo -e "${GREEN}● active${NC}"
+        else
+            echo -e "${RED}● $status${NC}"
+        fi
+    }
+
+    echo -e "${GREEN}${BOLD}"
+    echo "  ╔══════════════════════════════════════════════════════════╗"
+    echo "  ║                                                          ║"
+    echo -e "  ║   ${PURPLE}✨ JCWT Ultra Panel installed successfully! ✨${GREEN}       ║"
+    echo "  ║                                                          ║"
+    echo "  ╚══════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+
+    echo -e "  ${BOLD}Access Your Panel${NC}"
+    echo -e "  ─────────────────────────────────────────"
+    echo -e "  ${CYAN}URL:${NC}       https://[${IPV6_ADDR}]:${PANEL_PORT}"
+    echo -e "  ${CYAN}Username:${NC}  admin"
+    echo -e "  ${CYAN}Password:${NC}  admin"
+    echo ""
+    echo -e "  ${RED}${BOLD}⚠  CHANGE THE DEFAULT PASSWORD IMMEDIATELY!${NC}"
+    echo ""
+
+    echo -e "  ${BOLD}Service Status${NC}"
+    echo -e "  ─────────────────────────────────────────"
+    echo -e "  Nginx .............. $(get_status nginx)"
+    echo -e "  MariaDB ............ $(get_status mariadb)"
+    echo -e "  JCWT Panel ......... $(get_status jcwt-panel)"
+    for VER in 8.2 8.3 8.4 8.5; do
+        if systemctl list-unit-files "php${VER}-fpm.service" > /dev/null 2>&1; then
+            echo -e "  PHP-FPM $VER ........ $(get_status php${VER}-fpm)"
+        fi
+    done
+    echo ""
+
+    echo -e "  ${BOLD}Important Paths${NC}"
+    echo -e "  ─────────────────────────────────────────"
+    echo -e "  ${DIM}Panel logs:${NC}    $LOG_DIR/panel.log"
+    echo -e "  ${DIM}Panel data:${NC}    $DATA_DIR/"
+    echo -e "  ${DIM}Nginx sites:${NC}   /etc/nginx/sites-available/"
+    echo -e "  ${DIM}PHP configs:${NC}   /etc/php/"
+    echo -e "  ${DIM}Web roots:${NC}     /home/<user>/htdocs/"
+    echo ""
+
+    echo -e "  ${BOLD}Useful Commands${NC}"
+    echo -e "  ─────────────────────────────────────────"
+    echo -e "  ${DIM}Panel status:${NC}  systemctl status jcwt-panel"
+    echo -e "  ${DIM}Panel logs:${NC}    tail -f $LOG_DIR/panel.log"
+    echo -e "  ${DIM}Restart:${NC}       systemctl restart jcwt-panel"
+    echo ""
+}
+
+# ---- Main ----
+main() {
+    START_TIME=$(date +%s)
+
+    preflight
+    install_packages
+    configure_mariadb
+    configure_nginx
+    configure_php
+    setup_panel
+    install_binary
+    install_service
+    configure_firewall
+
+    END_TIME=$(date +%s)
+    ELAPSED=$((END_TIME - START_TIME))
+    MINUTES=$((ELAPSED / 60))
+    SECONDS_REM=$((ELAPSED % 60))
+
+    print_banner
+    echo -e "  ${DIM}Installation completed in ${MINUTES}m ${SECONDS_REM}s${NC}"
+    echo ""
+}
+
+main "$@"

@@ -1,0 +1,142 @@
+// JCWT Ultra Panel — API Client
+// Handles all API communication with CSRF token management
+
+let csrfToken = '';
+
+export function setCsrfToken(token) {
+    csrfToken = token;
+}
+
+export function getCsrfToken() {
+    return csrfToken;
+}
+
+export async function request(url, options = {}) {
+    const defaults = {
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+    };
+
+    if (options.method && options.method !== 'GET') {
+        defaults.headers['X-CSRF-Token'] = csrfToken;
+    }
+
+    // Don't set Content-Type for FormData
+    if (options.body instanceof FormData) {
+        delete defaults.headers['Content-Type'];
+    }
+
+    const config = { ...defaults, ...options };
+    if (options.headers) {
+        config.headers = { ...defaults.headers, ...options.headers };
+    }
+
+    const response = await fetch(url, config);
+
+    if (response.status === 401) {
+        window.location.hash = '#/login';
+        throw new Error('Unauthorized');
+    }
+
+    // Handle non-JSON responses (file downloads)
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('application/json')) {
+        return response;
+    }
+
+    const data = await response.json();
+    if (!data.success) {
+        throw new Error(data.error || 'Unknown error');
+    }
+
+    return data.data;
+}
+
+// Auth
+export const auth = {
+    check: () => request('/api/auth/check'),
+    login: (username, password, captchaToken = '') => request('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password, captcha_token: captchaToken }),
+    }),
+    logout: () => request('/api/auth/logout', { method: 'POST' }),
+    changePassword: (data) => request('/api/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// Dashboard
+export const dashboard = {
+    stats: () => request('/api/dashboard'),
+};
+
+// Sites
+export const sites = {
+    list: () => request('/api/sites'),
+    get: (id) => request(`/api/sites?id=${id}`),
+    create: (data) => request('/api/sites', { method: 'POST', body: JSON.stringify(data) }),
+    update: (data) => request('/api/sites', { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => request(`/api/sites?id=${id}`, { method: 'DELETE' }),
+};
+
+// Databases
+export const databases = {
+    list: () => request('/api/databases'),
+    create: (data) => request('/api/databases', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id) => request(`/api/databases?id=${id}`, { method: 'DELETE' }),
+};
+
+// DB Users
+export const dbUsers = {
+    list: () => request('/api/db-users'),
+    create: (data) => request('/api/db-users', { method: 'POST', body: JSON.stringify(data) }),
+    changePassword: (data) => request('/api/db-users', { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => request(`/api/db-users?id=${id}`, { method: 'DELETE' }),
+};
+
+// SSL
+export const ssl = {
+    selfSigned: (siteId) => request(`/api/ssl?action=self-signed&site_id=${siteId}`, { method: 'POST' }),
+    custom: (siteId, formData) => request(`/api/ssl?action=custom&site_id=${siteId}`, { method: 'POST', body: formData }),
+    disable: (siteId) => request(`/api/ssl?action=disable&site_id=${siteId}`, { method: 'POST' }),
+};
+
+// Cron
+export const cron = {
+    list: (siteId) => request(`/api/cron?site_id=${siteId}`),
+    create: (data) => request('/api/cron', { method: 'POST', body: JSON.stringify(data) }),
+    update: (data) => request('/api/cron', { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id, siteId) => request(`/api/cron?id=${id}&site_id=${siteId}`, { method: 'DELETE' }),
+};
+
+// Files (File Browser)
+export const files = {
+    list: (siteId) => request(`/api/files?site_id=${siteId}`),
+    stop: (siteId) => request(`/api/files?site_id=${siteId}`, { method: 'DELETE' }),
+};
+
+// PHP Settings
+export const phpSettings = {
+    get: (siteId) => request(`/api/php-settings?site_id=${siteId}`),
+    update: (data) => request('/api/php-settings', { method: 'PUT', body: JSON.stringify(data) }),
+};
+
+// PHP Versions
+export const phpVersions = {
+    list: () => request('/api/php-versions'),
+};
+
+// Panel Settings
+export const settings = {
+    get: () => request('/api/settings'),
+    getPublic: () => request('/api/settings/public'),
+    update: (data) => request('/api/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    uploadLogo: (formData) => request('/api/settings?action=upload-logo', { method: 'POST', body: formData }),
+    uploadFavicon: (formData) => request('/api/settings?action=upload-favicon', { method: 'POST', body: formData }),
+};
+
+// Services
+export const services = {
+    list: () => request('/api/services'),
+    restart: (name) => request('/api/services', { method: 'POST', body: JSON.stringify({ service: name }) }),
+};
