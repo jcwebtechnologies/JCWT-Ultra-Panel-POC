@@ -1260,6 +1260,9 @@ a:hover {
     margin-bottom: var(--space-4);
     padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--border-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 
 .settings-row {
@@ -1393,9 +1396,10 @@ a:hover {
         gap: var(--space-3);
     }
 
+    /* Page header: stack vertically, buttons auto-width */
     .page-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
         gap: var(--space-3);
     }
 
@@ -1406,6 +1410,20 @@ a:hover {
     .page-header-left p {
         font-size: var(--font-size-xs);
         word-break: break-all;
+    }
+
+    .page-header .btn {
+        align-self: flex-start;
+        width: auto;
+    }
+
+    /* Page title in header: always visible */
+    .page-title {
+        font-size: var(--font-size-base);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 180px;
     }
 
     .form-row {
@@ -1468,14 +1486,15 @@ a:hover {
         font-size: var(--font-size-xs);
     }
 
+    /* Table action buttons: inline, compact */
     .table-actions {
-        flex-direction: column;
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--space-1);
     }
 
     .table-actions .btn {
-        width: 100%;
-        justify-content: center;
+        width: auto;
         font-size: 11px;
         padding: var(--space-1) var(--space-2);
     }
@@ -1492,8 +1511,8 @@ a:hover {
     }
 
     .card-header .btn {
-        width: 100%;
-        justify-content: center;
+        width: auto;
+        align-self: flex-start;
     }
 
     /* Info grid stacking */
@@ -1554,14 +1573,9 @@ a:hover {
         grid-template-columns: 1fr !important;
     }
 
-    /* Site detail buttons row */
-    [style*="display: flex"][style*="gap"][style*="flex-wrap"] {
-        flex-direction: column;
-    }
-
-    [style*="display: flex"][style*="gap"][style*="flex-wrap"] .btn {
-        width: 100%;
-        justify-content: center;
+    /* Dashboard two-column grid → stacked */
+    [style*="grid-template-columns: repeat(auto-fit, minmax(380px"] {
+        grid-template-columns: 1fr !important;
     }
 
     /* Settings page */
@@ -1577,6 +1591,37 @@ a:hover {
     .settings-row-label small {
         font-size: 11px;
     }
+
+    /* Stat card: compact */
+    .stat-card {
+        padding: var(--space-3);
+        gap: var(--space-3);
+    }
+
+    .stat-icon {
+        width: 38px;
+        height: 38px;
+    }
+
+    .stat-value {
+        font-size: var(--font-size-xl);
+    }
+
+    /* Site detail overview info grid */
+    .info-item {
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    /* Prevent button stretching in site detail */
+    #tab-content .btn {
+        width: auto;
+    }
+
+    /* Form groups in site detail layout */
+    .form-group .btn {
+        width: auto;
+    }
 }
 
 /* ---- Small Mobile (≤ 480px) — compact ---- */
@@ -1588,6 +1633,11 @@ a:hover {
 
     .login-card h2 {
         font-size: var(--font-size-lg);
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-2);
     }
 
     .stat-card {
@@ -1604,11 +1654,6 @@ a:hover {
         font-size: var(--font-size-lg);
     }
 
-    .stats-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: var(--space-2);
-    }
-
     .main-header {
         padding: 0 var(--space-3);
     }
@@ -1618,7 +1663,8 @@ a:hover {
     }
 
     .page-title {
-        font-size: var(--font-size-base);
+        font-size: var(--font-size-sm);
+        max-width: 140px;
     }
 
     .card {
@@ -1626,10 +1672,11 @@ a:hover {
         border-radius: var(--radius-md);
     }
 
-    /* Buttons: full-width on tiny screens where appropriate */
+    /* Page header buttons: still auto-width, not full */
     .page-header .btn {
-        width: 100%;
-        justify-content: center;
+        width: auto;
+        font-size: var(--font-size-xs);
+        padding: var(--space-2) var(--space-3);
     }
 
     .modal {
@@ -1656,6 +1703,23 @@ a:hover {
     .user-dropdown {
         right: calc(-1 * var(--space-3));
         min-width: 200px;
+    }
+
+    /* Tabs: even smaller */
+    .tab {
+        padding: var(--space-1) var(--space-2);
+        font-size: 11px;
+    }
+
+    /* Settings section title */
+    .settings-section-title {
+        font-size: var(--font-size-sm);
+    }
+
+    /* File breadcrumb: wrap */
+    .file-breadcrumb {
+        flex-wrap: wrap;
+        font-size: var(--font-size-xs);
     }
 }
 

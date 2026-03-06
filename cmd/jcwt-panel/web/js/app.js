@@ -29,6 +29,13 @@ export const icons = {
     server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
     key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
+    palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="0.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="0.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="0.5" fill="currentColor"/><circle cx="6.5" cy="12" r="0.5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>',
+    target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+    shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    alertTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
 };
 
 // ---- Toast Notifications ----
@@ -192,7 +199,7 @@ async function show2FAModal() {
             // 2FA is enabled — show disable option
             const content = `
                 <div style="text-align: center; margin-bottom: var(--space-4);">
-                    <div style="width: 56px; height: 56px; background: var(--status-success-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-3); font-size: 1.5rem;">🛡️</div>
+                    <div style="width: 56px; height: 56px; background: var(--status-success-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-3);"><span class="nav-icon" style="width:28px;height:28px;color:var(--status-success)">${icons.shield}</span></div>
                     <h3 style="font-weight: 600; margin-bottom: var(--space-2);">2FA is Enabled</h3>
                     <p style="color: var(--text-secondary); font-size: var(--font-size-sm);">Your account is protected with two-factor authentication.</p>
                 </div>
@@ -219,7 +226,7 @@ async function show2FAModal() {
             // 2FA is disabled — show setup flow
             const setupContent = `
                 <div style="text-align: center; margin-bottom: var(--space-4);">
-                    <div style="width: 56px; height: 56px; background: var(--accent-primary-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-3); font-size: 1.5rem;">🔐</div>
+                    <div style="width: 56px; height: 56px; background: var(--accent-primary-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-3);"><span class="nav-icon" style="width:28px;height:28px;color:var(--accent-primary)">${icons.lock}</span></div>
                     <p style="color: var(--text-secondary); font-size: var(--font-size-sm);">Add an extra layer of security to your account using an authenticator app.</p>
                 </div>
                 <div id="twofa-setup-area" style="text-align: center;">
@@ -251,7 +258,7 @@ async function show2FAModal() {
                                 <label class="form-label">Manual Entry Key:</label>
                                 <div style="display: flex; gap: var(--space-2);">
                                     <input type="text" class="form-input mono" value="${data.secret}" readonly id="twofa-secret-display" style="font-size: var(--font-size-xs);">
-                                    <button class="btn btn-sm btn-secondary" id="twofa-copy-secret" title="Copy">📋</button>
+                                    <button class="btn btn-sm btn-secondary" id="twofa-copy-secret" title="Copy"><span class="nav-icon" style="width:14px;height:14px">${icons.copy}</span></button>
                                 </div>
                             </div>
                             <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
@@ -551,7 +558,7 @@ async function navigate() {
         } catch (err) {
             pageContent.innerHTML = `
                 <div class="empty-state">
-                    <div class="empty-state-icon">🔍</div>
+                    <div class="empty-state-icon"><span class="nav-icon" style="width:48px;height:48px;color:var(--text-tertiary)">${icons.search}</span></div>
                     <div class="empty-state-title">Page Not Found</div>
                     <div class="empty-state-text">The page you're looking for doesn't exist.</div>
                     <a href="#/dashboard" class="btn btn-primary">Go to Dashboard</a>

@@ -54,7 +54,7 @@ var allowedMemoryLimit = map[string]bool{"128M": true, "256M": true, "512M": tru
 var allowedExecTime = map[int]bool{30: true, 60: true, 120: true, 300: true, 600: true, 900: true}
 var allowedInputTime = map[int]bool{60: true, 120: true, 300: true, 600: true, 900: true}
 var allowedInputVars = map[int]bool{1000: true, 2000: true, 3000: true, 5000: true, 10000: true}
-var allowedSizeLimit = map[string]bool{"32M": true, "64M": true, "128M": true, "256M": true, "512M": true, "1024M": true}
+var allowedSizeLimit = map[string]bool{"2M": true, "4M": true, "8M": true, "16M": true, "32M": true, "64M": true, "128M": true, "256M": true, "512M": true, "1024M": true}
 
 func (h *PHPHandler) update(w http.ResponseWriter, r *http.Request) {
 	var req struct {

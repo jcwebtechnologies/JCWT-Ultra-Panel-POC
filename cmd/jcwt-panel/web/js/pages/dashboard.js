@@ -19,7 +19,7 @@ export async function render(container) {
         setupAutoRefresh(container);
     } catch (err) {
         container.innerHTML = `<div class="empty-state">
-            <div class="empty-state-icon">⚠️</div>
+            <div class="empty-state-icon"><span class="nav-icon" style="width:48px;height:48px;color:var(--status-warning)">${icons.alertTriangle}</span></div>
             <div class="empty-state-title">Failed to load dashboard</div>
             <div class="empty-state-text">${err.message}</div>
         </div>`;
@@ -101,12 +101,12 @@ function renderServerInfo(stats) {
                 ${(stats.ipv4_addresses && stats.ipv4_addresses.length > 0) ? `
                 <div class="info-item">
                     <span class="info-label">IPv4 Address${stats.ipv4_addresses.length > 1 ? 'es' : ''}</span>
-                    <span class="info-value">${stats.ipv4_addresses.map(ip => `<code class="ip-copy" data-ip="${ip}" style="cursor:pointer; padding: 2px 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: var(--font-size-sm);" title="Click to copy">${ip} 📋</code>`).join(' ')}</span>
+                    <span class="info-value">${stats.ipv4_addresses.map(ip => `<span class="ip-copy" data-ip="${ip}" style="cursor:pointer; padding: 2px 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: var(--font-size-sm); display: inline-flex; align-items: center; gap: 4px;" title="Click to copy">${ip} <span class="nav-icon" style="width:12px;height:12px;opacity:0.6">${icons.copy}</span></span>`).join(' ')}</span>
                 </div>` : ''}
                 ${(stats.ipv6_addresses && stats.ipv6_addresses.length > 0) ? `
                 <div class="info-item">
                     <span class="info-label">IPv6 Address${stats.ipv6_addresses.length > 1 ? 'es' : ''}</span>
-                    <span class="info-value" style="flex-wrap: wrap;">${stats.ipv6_addresses.map(ip => `<code class="ip-copy" data-ip="${ip}" style="cursor:pointer; padding: 2px 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: var(--font-size-xs); word-break: break-all;" title="Click to copy">${ip} 📋</code>`).join(' ')}</span>
+                    <span class="info-value" style="flex-wrap: wrap;">${stats.ipv6_addresses.map(ip => `<span class="ip-copy" data-ip="${ip}" style="cursor:pointer; padding: 2px 8px; background: var(--bg-tertiary); border-radius: var(--radius-sm); font-size: var(--font-size-xs); word-break: break-all; display: inline-flex; align-items: center; gap: 4px;" title="Click to copy">${ip} <span class="nav-icon" style="width:12px;height:12px;opacity:0.6">${icons.copy}</span></span>`).join(' ')}</span>
                 </div>` : ''}
                 <div class="info-item">
                     <span class="info-label">Architecture</span>

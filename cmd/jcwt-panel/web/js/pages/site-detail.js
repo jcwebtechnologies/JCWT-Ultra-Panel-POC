@@ -176,8 +176,8 @@ async function renderPHP(el, siteId) {
         max_execution_time: ['30', '60', '120', '300', '600', '900'],
         max_input_time: ['60', '120', '300', '600', '900'],
         max_input_vars: ['1000', '2000', '3000', '5000', '10000'],
-        post_max_size: ['32M', '64M', '128M', '256M', '512M', '1024M'],
-        upload_max_filesize: ['32M', '64M', '128M', '256M', '512M', '1024M'],
+        post_max_size: ['2M', '4M', '8M', '16M', '32M', '64M', '128M', '256M', '512M', '1024M'],
+        upload_max_filesize: ['2M', '4M', '8M', '16M', '32M', '64M', '128M', '256M', '512M', '1024M'],
     };
     function opts(key, current) {
         return phpOpts[key].map(v => `<option value="${v}" ${String(v) === String(current) ? 'selected' : ''}>${v}</option>`).join('');
@@ -194,13 +194,13 @@ async function renderPHP(el, siteId) {
                         <select class="form-select" id="php-memory">${opts('memory_limit', settings.memory_limit || '256M')}</select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">max_execution_time</label>
+                        <label class="form-label">max_execution_time <span style="font-weight:400;color:var(--text-tertiary)">(seconds)</span></label>
                         <select class="form-select" id="php-exec-time">${opts('max_execution_time', settings.max_execution_time || 30)}</select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">max_input_time</label>
+                        <label class="form-label">max_input_time <span style="font-weight:400;color:var(--text-tertiary)">(seconds)</span></label>
                         <select class="form-select" id="php-input-time">${opts('max_input_time', settings.max_input_time || 60)}</select>
                     </div>
                     <div class="form-group">
