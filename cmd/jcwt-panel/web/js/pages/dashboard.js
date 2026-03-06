@@ -136,7 +136,7 @@ function renderResources(stats) {
         <div>
             <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-2);">
                 <span style="font-size: var(--font-size-sm); color: var(--text-secondary);">Disk Usage</span>
-                <span style="font-size: var(--font-size-sm); font-weight: 600;">${stats.disk_used_gb || 0} / ${stats.disk_total_gb || 0} GB (${stats.disk_used_pct || 0}%)</span>
+                <span style="font-size: var(--font-size-sm); font-weight: 600;">${stats.disk_used_gb || 0} GB / ${stats.disk_total_gb || 0} GB (${stats.disk_used_pct || 0}%)</span>
             </div>
             <div class="progress-bar">
                 <div class="progress-fill" style="width: ${stats.disk_used_pct || 0}%"></div>

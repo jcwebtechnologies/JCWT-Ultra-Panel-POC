@@ -490,7 +490,7 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 			exec.Command("sudo", "rm", "-f", htpasswdPath).Run()
 		}
 
-		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, nginx.VHostData{
+		err = nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, nginx.VHostData{
 			Domain:           domain,
 			Aliases:          aliases,
 			User:             sysUser,
@@ -503,7 +503,16 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 			SSLKeyPath:       sslKey,
 			BasicAuthEnabled: req.BasicAuthEnabled,
 		})
-		nginx.Reload()
+		if err != nil {
+			log.Printf("Failed to write vhost for %s: %v", domain, err)
+			jsonError(w, "failed to update nginx config", http.StatusInternalServerError)
+			return
+		}
+		if err := nginx.TestAndReload(); err != nil {
+			log.Printf("Nginx test/reload failed for %s: %v", domain, err)
+			jsonError(w, "nginx configuration error — check server logs", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	jsonSuccess(w, map[string]interface{}{"updated": true})

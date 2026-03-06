@@ -66,6 +66,14 @@ func (h *DatabasesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if database name already exists in panel DB
+	var existCount int
+	h.DB.Conn.QueryRow("SELECT COUNT(*) FROM databases WHERE db_name = ?", req.DBName).Scan(&existCount)
+	if existCount > 0 {
+		jsonError(w, "a database with this name already exists", http.StatusConflict)
+		return
+	}
+
 	// Create in MariaDB
 	if err := system.MariaDBCreateDatabase(req.DBName); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -162,6 +170,14 @@ func (h *DBUsersHandler) create(w http.ResponseWriter, r *http.Request) {
 	h.DB.Conn.QueryRow("SELECT db_name FROM databases WHERE id = ?", req.DatabaseID).Scan(&dbName)
 	if dbName == "" {
 		jsonError(w, "database not found", http.StatusNotFound)
+		return
+	}
+
+	// Check if username already exists in panel DB
+	var existCount int
+	h.DB.Conn.QueryRow("SELECT COUNT(*) FROM db_users WHERE username = ?", req.Username).Scan(&existCount)
+	if existCount > 0 {
+		jsonError(w, "a database user with this username already exists", http.StatusConflict)
 		return
 	}
 

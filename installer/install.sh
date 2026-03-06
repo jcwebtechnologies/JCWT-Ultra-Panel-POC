@@ -241,12 +241,64 @@ install_packages() {
 <?php
 $cfg['Servers'][1]['auth_type'] = 'signon';
 $cfg['Servers'][1]['SignonSession'] = 'SignonSession';
-$cfg['Servers'][1]['SignonURL'] = '/pma/signon_auto.php';
+$cfg['Servers'][1]['SignonURL'] = '/pma/jcwt_signon.php';
+$cfg['Servers'][1]['LogoutURL'] = '/pma/jcwt_signon.php';
 $cfg['Servers'][1]['host'] = 'localhost';
 $cfg['LoginCookieValidity'] = 1800;
 $cfg['SendErrorReports'] = 'never';
 $cfg['Servers'][1]['hide_db'] = '^(information_schema|performance_schema|mysql|sys|phpmyadmin)$';
+// Suppress configuration storage warnings
+$cfg['PmaNoRelation_DisableWarning'] = true;
+$cfg['SuhosinDisableWarning'] = true;
+$cfg['LoginCookieDeleteAll'] = true;
 PMACONF
+
+        # Set session.gc_maxlifetime to match cookie validity (1800s)
+        for PHPINI in /etc/php/*/fpm/php.ini /etc/php/*/cli/php.ini; do
+            if [ -f "$PHPINI" ]; then
+                sed -i 's/^session\.gc_maxlifetime.*/session.gc_maxlifetime = 1800/' "$PHPINI" 2>/dev/null || true
+            fi
+        done
+
+        # Create persistent signon landing page (shown on logout / expired session)
+        cat > /usr/share/phpmyadmin/jcwt_signon.php << 'SIGNONPHP'
+<?php
+session_name('SignonSession');
+session_start();
+// Clear any stale session data
+$_SESSION = array();
+session_destroy();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>phpMyAdmin — Session Ended</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); color: #334155; }
+        .card { text-align: center; background: #fff; padding: 3rem 2.5rem; border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 440px; }
+        .icon { font-size: 3rem; margin-bottom: 1rem; }
+        h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.5rem; color: #1e293b; }
+        p { color: #64748b; line-height: 1.6; margin-bottom: 1.5rem; }
+        .badge { display: inline-block; padding: 0.35rem 0.9rem; background: #f1f5f9;
+            border-radius: 999px; font-size: 0.75rem; color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🔒</div>
+        <h1>Session Ended</h1>
+        <p>Your phpMyAdmin session has ended.<br>Please return to the panel and open phpMyAdmin again from the database section.</p>
+        <div class="badge">Powered by JCWT Ultra Panel</div>
+    </div>
+</body>
+</html>
+SIGNONPHP
 
         # Nginx snippet for /pma/ URL (included inside server blocks via 'include')
         mkdir -p /etc/nginx/snippets
@@ -591,6 +643,28 @@ server {
         deny all;
     }
 }
+
+# HTTPS catch-all — returns the same welcome page for unrecognized domains on 443
+server {
+    listen [::]:443 ssl default_server;
+    server_name _;
+
+    ssl_certificate     /etc/nginx/ssl/default.crt;
+    ssl_certificate_key /etc/nginx/ssl/default.key;
+
+    root /var/www/default;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    include /etc/nginx/snippets/phpmyadmin.conf;
+
+    location ~ /\. {
+        deny all;
+    }
+}
 DEFAULTVHOST
     ln -sf /etc/nginx/sites-available/000-default.conf /etc/nginx/sites-enabled/000-default.conf
     log_ok "Default catch-all vhost created"
@@ -682,6 +756,17 @@ setup_panel() {
     chmod 644 "$DATA_DIR/tls/panel.crt"
     log_detail "Certificate: $DATA_DIR/tls/panel.crt"
     log_detail "Private Key: $DATA_DIR/tls/panel.key (mode 600)"
+
+    # Generate self-signed cert for nginx default HTTPS catch-all
+    log_info "Generating nginx default SSL certificate..."
+    mkdir -p /etc/nginx/ssl
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/default.key \
+        -out /etc/nginx/ssl/default.crt \
+        -subj "/CN=localhost/O=Default/C=US" 2>/dev/null
+    chmod 600 /etc/nginx/ssl/default.key
+    chmod 644 /etc/nginx/ssl/default.crt
+    log_ok "Nginx default SSL certificate generated"
 
     chown -R "$PANEL_USER:$PANEL_USER" "$DATA_DIR"
     chown -R "$PANEL_USER:$PANEL_USER" "$LOG_DIR"

@@ -16,6 +16,11 @@ server {
     listen [::]:80;
     server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
 
+{{- if .BasicAuthEnabled}}
+    auth_basic "Restricted Area";
+    auth_basic_user_file /etc/nginx/htpasswd/{{.Domain}}.htpasswd;
+{{- end}}
+
 {{- if eq .SiteType "proxy"}}
     access_log /var/log/nginx/{{.Domain}}-access.log;
     error_log /var/log/nginx/{{.Domain}}-error.log;
@@ -50,11 +55,6 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
-{{- end}}
-
-{{- if .BasicAuthEnabled}}
-    auth_basic "Restricted Area";
-    auth_basic_user_file /etc/nginx/htpasswd/{{.Domain}}.htpasswd;
 {{- end}}
 
     location ~ /\.(ht|git|svn) {
@@ -83,6 +83,11 @@ server {
     ssl_prefer_server_ciphers on;
     ssl_session_cache shared:SSL:10m;
 
+{{- if .BasicAuthEnabled}}
+    auth_basic "Restricted Area";
+    auth_basic_user_file /etc/nginx/htpasswd/{{.Domain}}.htpasswd;
+{{- end}}
+
 {{- if eq .SiteType "proxy"}}
     access_log /var/log/nginx/{{.Domain}}-access.log;
     error_log /var/log/nginx/{{.Domain}}-error.log;
@@ -117,11 +122,6 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
-{{- end}}
-
-{{- if .BasicAuthEnabled}}
-    auth_basic "Restricted Area";
-    auth_basic_user_file /etc/nginx/htpasswd/{{.Domain}}.htpasswd;
 {{- end}}
 
     location ~ /\.(ht|git|svn) {

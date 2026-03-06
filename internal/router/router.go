@@ -86,10 +86,9 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		middleware.RequireRole("admin")(usersHandler),
 	)))
 
-	// phpMyAdmin auto-login
+	// phpMyAdmin auto-login (POST /api/pma returns a URL the frontend opens directly)
 	pmaHandler := &handlers.PhpMyAdminHandler{DB: database}
 	mux.Handle("/api/pma", middleware.RequireAuth(middleware.RequireCSRF(pmaHandler)))
-	mux.Handle("/pma/signon", middleware.RequireAuth(http.HandlerFunc(pmaHandler.SignonHandler())))
 
 	// Current user info
 	mux.HandleFunc("/api/me", func(w http.ResponseWriter, r *http.Request) {

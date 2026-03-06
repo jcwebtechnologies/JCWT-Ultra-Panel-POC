@@ -1,3 +1,5 @@
+## [Project in dev only mode]
+
 # JCWT Ultra Panel
 
 A lightweight, IPv6-native web hosting control panel designed for ARM64 EC2 environments. A production-ready alternative to CloudPanel/cPanel that works perfectly on IPv6-only infrastructure.
