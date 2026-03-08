@@ -265,6 +265,12 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	// Auto-generate self-signed SSL certificate
 	certPath, keyPath, sslErr := system.GenerateSelfSignedCert(h.Cfg.SSLBaseDir, req.Domain)
 	if sslErr == nil {
+		// Store in ssl_certificates table and activate
+		certID, certErr := h.DB.CreateSSLCertificate(id, "self-signed", "Self-Signed (Auto)", certPath, keyPath, true)
+		if certErr == nil {
+			h.DB.ActivateSSLCertificate(id, certID)
+		}
+
 		h.DB.UpdateSite(id, req.Domain, req.Aliases, req.SiteType, req.PHPVersion, req.ProxyURL, "self-signed", certPath, keyPath)
 		vhostData.SSLType = "self-signed"
 		vhostData.SSLCertPath = certPath

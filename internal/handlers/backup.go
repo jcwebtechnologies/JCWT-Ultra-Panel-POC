@@ -136,9 +136,12 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "full":
-		// Step 1: Copy web files into staging
+		// Step 1: Copy web files into staging using tar pipe (avoids sudo cp which may not be in sudoers)
 		htdocsStaging := filepath.Join(stagingDir, "htdocs")
-		cmd := exec.Command("sudo", "cp", "-a", webRoot, htdocsStaging)
+		os.MkdirAll(htdocsStaging, 0750)
+		pipeCmd := fmt.Sprintf("sudo tar cf - -C '%s' . | tar xf - -C '%s'",
+			webRoot, htdocsStaging)
+		cmd := exec.Command("bash", "-c", pipeCmd)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			jsonError(w, fmt.Sprintf("backup failed copying files: %s", string(output)), http.StatusInternalServerError)
 			return
@@ -166,8 +169,8 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 			os.WriteFile(cronFile, cronData, 0640)
 		}
 
-		// Step 4: Tar the entire staging directory
-		cmd = exec.Command("sudo", "tar", "-czf", backupPath, "-C", stagingDir, ".")
+		// Step 4: Tar the entire staging directory (no sudo needed — staging is panel-user owned)
+		cmd = exec.Command("tar", "-czf", backupPath, "-C", stagingDir, ".")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			jsonError(w, fmt.Sprintf("backup failed: %s", string(output)), http.StatusInternalServerError)
 			return
