@@ -59,14 +59,48 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// CPU info
 	stats["cpu_cores"] = runtime.NumCPU()
 	if cpuinfo, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		cpuModel := ""
 		for _, line := range strings.Split(string(cpuinfo), "\n") {
+			// Try standard x86 field first
 			if strings.HasPrefix(line, "model name") {
 				parts := strings.SplitN(line, ":", 2)
 				if len(parts) == 2 {
-					stats["cpu_model"] = strings.TrimSpace(parts[1])
+					cpuModel = strings.TrimSpace(parts[1])
 					break
 				}
 			}
+			// ARM/cloud fallbacks
+			if cpuModel == "" && strings.HasPrefix(line, "Model") && !strings.HasPrefix(line, "Model name") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					cpuModel = strings.TrimSpace(parts[1])
+				}
+			}
+			if cpuModel == "" && strings.HasPrefix(line, "Hardware") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					cpuModel = strings.TrimSpace(parts[1])
+				}
+			}
+		}
+		// If still empty, try lscpu
+		if cpuModel == "" {
+			if out, err := exec.Command("lscpu").Output(); err == nil {
+				for _, line := range strings.Split(string(out), "\n") {
+					if strings.HasPrefix(line, "Model name:") || strings.HasPrefix(line, "Vendor ID:") {
+						parts := strings.SplitN(line, ":", 2)
+						if len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+							cpuModel = strings.TrimSpace(parts[1])
+							if strings.HasPrefix(line, "Model name:") {
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+		if cpuModel != "" {
+			stats["cpu_model"] = cpuModel
 		}
 	}
 

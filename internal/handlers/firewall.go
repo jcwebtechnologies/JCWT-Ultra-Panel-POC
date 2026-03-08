@@ -49,7 +49,7 @@ func (h *FirewallHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	// Get ufw status
 	status := "unknown"
-	cmd := exec.Command("sudo", "ufw", "status")
+	cmd := exec.Command("ufw", "status")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		out := string(output)
@@ -170,9 +170,9 @@ func (h *FirewallHandler) toggle(w http.ResponseWriter, r *http.Request) {
 
 	var cmd *exec.Cmd
 	if req.Enable {
-		cmd = exec.Command("sudo", "ufw", "--force", "enable")
+		cmd = exec.Command("ufw", "--force", "enable")
 	} else {
-		cmd = exec.Command("sudo", "ufw", "disable")
+		cmd = exec.Command("ufw", "disable")
 	}
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -196,12 +196,12 @@ func (h *FirewallHandler) syncRulesToUFW() {
 	}
 
 	// Reset ufw (keeps defaults)
-	exec.Command("sudo", "ufw", "--force", "reset").Run()
-	exec.Command("sudo", "ufw", "default", "deny", "incoming").Run()
-	exec.Command("sudo", "ufw", "default", "allow", "outgoing").Run()
+	exec.Command("ufw", "--force", "reset").Run()
+	exec.Command("ufw", "default", "deny", "incoming").Run()
+	exec.Command("ufw", "default", "allow", "outgoing").Run()
 
 	// Always allow SSH
-	exec.Command("sudo", "ufw", "allow", "22/tcp").Run()
+	exec.Command("ufw", "allow", "22/tcp").Run()
 
 	for _, rule := range rules {
 		enabled, _ := rule["enabled"].(bool)
@@ -216,7 +216,7 @@ func (h *FirewallHandler) syncRulesToUFW() {
 		applyUFWRule(action, direction, protocol, port, source)
 	}
 
-	exec.Command("sudo", "ufw", "--force", "enable").Run()
+	exec.Command("ufw", "--force", "enable").Run()
 }
 
 func applyUFWRule(action, direction, protocol, port, source string) error {
@@ -241,7 +241,7 @@ func applyUFWRule(action, direction, protocol, port, source string) error {
 
 	args = append(args, "to", "any", "port", port)
 
-	cmd := exec.Command("sudo", args...)
+	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s: %s", err, string(output))

@@ -74,6 +74,7 @@ export const dashboard = {
 export const sites = {
     list: () => request('/api/sites'),
     get: (id) => request(`/api/sites?id=${id}`),
+    getByToken: (token) => request(`/api/sites?token=${encodeURIComponent(token)}`),
     create: (data) => request('/api/sites', { method: 'POST', body: JSON.stringify(data) }),
     update: (data) => request('/api/sites', { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => request(`/api/sites?id=${id}`, { method: 'DELETE' }),

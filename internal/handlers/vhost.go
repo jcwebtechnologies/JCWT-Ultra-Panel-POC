@@ -57,15 +57,15 @@ func (h *VhostHandler) read(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonSuccess(w, map[string]interface{}{
-		"content": string(data),
-		"path":    confPath,
+		"config": string(data),
+		"path":   confPath,
 	})
 }
 
 func (h *VhostHandler) update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SiteID  int64  `json:"site_id"`
-		Content string `json:"content"`
+		Config  string `json:"config"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -81,9 +81,9 @@ func (h *VhostHandler) update(w http.ResponseWriter, r *http.Request) {
 	domain := site["domain"].(string)
 	confPath := filepath.Join(h.Cfg.NginxSitesAvailable, domain+".conf")
 
-	// Write config via sudo tee
-	cmd := exec.Command("sudo", "tee", confPath)
-	cmd.Stdin = strings.NewReader(req.Content)
+	// Write config via tee
+	cmd := exec.Command("tee", confPath)
+	cmd.Stdin = strings.NewReader(req.Config)
 	cmd.Stdout = nil
 	if output, err := cmd.CombinedOutput(); err != nil {
 		jsonError(w, fmt.Sprintf("failed to write vhost: %s", string(output)), http.StatusInternalServerError)
@@ -137,5 +137,12 @@ func (h *VhostHandler) reset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nginx.TestAndReload()
-	jsonSuccess(w, map[string]interface{}{"message": "vhost reset to default and nginx reloaded"})
+
+	// Read back the newly generated config
+	newConf, err := os.ReadFile(filepath.Join(h.Cfg.NginxSitesAvailable, domain+".conf"))
+	if err != nil {
+		jsonSuccess(w, map[string]interface{}{"message": "vhost reset to default and nginx reloaded"})
+		return
+	}
+	jsonSuccess(w, map[string]interface{}{"message": "vhost reset to default and nginx reloaded", "config": string(newConf)})
 }

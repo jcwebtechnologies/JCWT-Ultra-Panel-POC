@@ -486,6 +486,12 @@ async function navigate() {
     // Determine page name from path
     let pageName = path.split('/')[1] || 'dashboard';
     let param = path.split('/')[2] || null;
+    let param2 = path.split('/')[3] || null;
+
+    // Routes like /sites/{token} and /sites/{token}/{section} → load site-detail
+    if (pageName === 'sites' && param) {
+        pageName = 'site-detail';
+    }
 
     const app = document.getElementById('app');
     app.innerHTML = renderLayout(pageName);
@@ -552,13 +558,13 @@ async function navigate() {
     const routeKey = pageName === 'site-detail' ? '/site-detail' : `/${pageName}`;
 
     if (routes[routeKey]) {
-        await routes[routeKey](pageContent, param);
+        await routes[routeKey](pageContent, param, param2);
     } else {
         // Lazy load page modules
         try {
             const module = await import(`./pages/${pageName}.js`);
             routes[routeKey] = module.render;
-            await module.render(pageContent, param);
+            await module.render(pageContent, param, param2);
         } catch (err) {
             pageContent.innerHTML = `
                 <div class="empty-state">

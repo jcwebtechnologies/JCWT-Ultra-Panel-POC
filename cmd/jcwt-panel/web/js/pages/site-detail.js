@@ -3,19 +3,20 @@ import { sites, phpVersions, ssl, phpSettings, cron, files, databases } from '..
 import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes, showConfirm } from '../app.js';
 import { request } from '../api.js';
 
-export async function render(container, siteId) {
+export async function render(container, siteToken, section) {
     document.getElementById('page-title').textContent = 'Site Management';
     container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
 
-    if (!siteId) { container.innerHTML = '<p>No site selected</p>'; return; }
+    if (!siteToken) { container.innerHTML = '<p>No site selected</p>'; return; }
 
     try {
         const [site, versions] = await Promise.all([
-            sites.get(siteId),
+            sites.getByToken(siteToken),
             phpVersions.list()
         ]);
 
-        let activeSection = null;
+        const siteId = site.id;
+        let activeSection = section || null;
 
         function renderPage() {
             container.innerHTML = `
@@ -27,7 +28,7 @@ export async function render(container, siteId) {
                 <a href="#/sites" class="btn btn-secondary">← Back to Sites</a>
             </div>
 
-            ${activeSection ? `<div style="margin-bottom: var(--space-4);"><button class="btn btn-sm btn-ghost" id="back-to-cards">← Back to overview</button></div>` : `
+            ${activeSection ? `<div style="margin-bottom: var(--space-4);"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-ghost">← Back to overview</a></div>` : `
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Configuration</div>
                 <div class="site-cards-grid">
@@ -96,18 +97,11 @@ export async function render(container, siteId) {
 
             <div id="section-content"></div>`;
 
-            // Bind card clicks
+            // Bind card clicks — navigate to URL-based sections
             container.querySelectorAll('.site-card').forEach(card => {
                 card.addEventListener('click', () => {
-                    activeSection = card.dataset.section;
-                    renderPage();
+                    window.location.hash = `#/sites/${siteToken}/${card.dataset.section}`;
                 });
-            });
-
-            // Back button
-            document.getElementById('back-to-cards')?.addEventListener('click', () => {
-                activeSection = null;
-                renderPage();
             });
 
             // Render active section content
@@ -244,7 +238,7 @@ function renderOverview(el, site, versions, siteId) {
 
             // Reload page
             const mod = await import('./site-detail.js');
-            mod.render(document.getElementById('page-content'), siteId);
+            mod.render(document.getElementById('page-content'), site.token, 'overview');
 
         } catch (err) { showToast(err.message, 'error'); }
     });
@@ -387,7 +381,7 @@ function renderSSL(el, site, siteId) {
                 await ssl.selfSigned(siteId);
                 showToast('Self-signed certificate generated!', 'success');
                 const mod = await import('./site-detail.js');
-                mod.render(document.getElementById('page-content'), siteId);
+                mod.render(document.getElementById('page-content'), site.token, 'ssl');
             } catch (err) { showToast(err.message, 'error'); }
         });
 
@@ -426,7 +420,7 @@ function renderSSL(el, site, siteId) {
                     closeModal();
                     showToast('Certificate uploaded & activated!', 'success');
                     const mod = await import('./site-detail.js');
-                    mod.render(document.getElementById('page-content'), siteId);
+                    mod.render(document.getElementById('page-content'), site.token, 'ssl');
                 } catch (err) { showToast(err.message, 'error'); }
             });
         });
@@ -438,7 +432,7 @@ function renderSSL(el, site, siteId) {
                 await ssl.disable(siteId);
                 showToast('SSL disabled', 'success');
                 const mod = await import('./site-detail.js');
-                mod.render(document.getElementById('page-content'), siteId);
+                mod.render(document.getElementById('page-content'), site.token, 'ssl');
             } catch (err) { showToast(err.message, 'error'); }
         });
 
@@ -446,10 +440,13 @@ function renderSSL(el, site, siteId) {
         el.querySelectorAll('.activate-cert').forEach(btn => {
             btn.addEventListener('click', async () => {
                 try {
-                    await request(`/api/ssl-certs?action=activate&id=${btn.dataset.id}&site_id=${siteId}`, { method: 'POST' });
+                    await request(`/api/ssl-certs?action=activate`, {
+                        method: 'POST',
+                        body: JSON.stringify({ cert_id: parseInt(btn.dataset.id), site_id: parseInt(siteId) }),
+                    });
                     showToast('Certificate activated!', 'success');
                     const mod = await import('./site-detail.js');
-                    mod.render(document.getElementById('page-content'), siteId);
+                    mod.render(document.getElementById('page-content'), site.token, 'ssl');
                 } catch (err) { showToast(err.message, 'error'); }
             });
         });
@@ -462,7 +459,7 @@ function renderSSL(el, site, siteId) {
                     await request(`/api/ssl-certs?id=${btn.dataset.id}&site_id=${siteId}`, { method: 'DELETE' });
                     showToast('Certificate deleted', 'success');
                     const mod = await import('./site-detail.js');
-                    mod.render(document.getElementById('page-content'), siteId);
+                    mod.render(document.getElementById('page-content'), site.token, 'ssl');
                 } catch (err) { showToast(err.message, 'error'); }
             });
         });
@@ -488,7 +485,7 @@ function renderSSL(el, site, siteId) {
                 await ssl.selfSigned(siteId);
                 showToast('Self-signed certificate generated!', 'success');
                 const mod = await import('./site-detail.js');
-                mod.render(document.getElementById('page-content'), siteId);
+                mod.render(document.getElementById('page-content'), site.token, 'ssl');
             } catch (err) { showToast(err.message, 'error'); }
         });
 
@@ -521,7 +518,7 @@ function renderSSL(el, site, siteId) {
                     closeModal();
                     showToast('Certificate uploaded!', 'success');
                     const mod = await import('./site-detail.js');
-                    mod.render(document.getElementById('page-content'), siteId);
+                    mod.render(document.getElementById('page-content'), site.token, 'ssl');
                 } catch (err) { showToast(err.message, 'error'); }
             });
         });
@@ -532,7 +529,7 @@ function renderSSL(el, site, siteId) {
                 await ssl.disable(siteId);
                 showToast('SSL disabled', 'success');
                 const mod = await import('./site-detail.js');
-                mod.render(document.getElementById('page-content'), siteId);
+                mod.render(document.getElementById('page-content'), site.token, 'ssl');
             } catch (err) { showToast(err.message, 'error'); }
         });
     });
@@ -1113,8 +1110,8 @@ async function renderBackups(container, site, siteId) {
 
         document.getElementById('save-backup-schedule')?.addEventListener('click', async () => {
             try {
-                await request('/api/backups', {
-                    method: 'PUT',
+                await request('/api/backups?action=schedule', {
+                    method: 'POST',
                     body: JSON.stringify({
                         site_id: parseInt(siteId),
                         frequency: document.getElementById('backup-frequency').value,
@@ -1143,7 +1140,10 @@ async function renderBackups(container, site, siteId) {
             btn.addEventListener('click', async () => {
                 if (!await showConfirm('Restore Backup', 'Restore this backup? Current site files will be replaced. This cannot be undone.', 'Restore', 'btn-danger')) return;
                 try {
-                    await request(`/api/backups?action=restore&id=${btn.dataset.id}&site_id=${siteId}`, { method: 'POST' });
+                    await request('/api/backups?action=restore', {
+                        method: 'POST',
+                        body: JSON.stringify({ backup_id: parseInt(btn.dataset.id) }),
+                    });
                     showToast('Backup restored successfully!', 'success');
                 } catch (err) { showToast(err.message, 'error'); }
             });

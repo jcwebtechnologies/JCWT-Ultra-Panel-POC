@@ -58,7 +58,7 @@ export async function render(container) {
                             <td style="color: var(--text-tertiary); font-size: var(--font-size-xs);">${new Date(s.created_at).toLocaleDateString()}</td>
                             <td>
                                 <div class="table-actions">
-                                    <a href="#/site-detail/${s.id}" class="btn btn-sm btn-secondary">Manage</a>
+                                    <a href="#/sites/${s.token}" class="btn btn-sm btn-secondary">Manage</a>
                                     <button class="btn btn-sm btn-danger delete-site" data-id="${s.id}" data-domain="${escapeHtml(s.domain)}">Delete</button>
                                 </div>
                             </td>

@@ -78,7 +78,7 @@ func (h *PhpMyAdminHandler) createToken(w http.ResponseWriter, r *http.Request) 
 	}
 
 	for _, sql := range cmds {
-		if out, err := exec.Command("sudo", "mysql", "-e", sql).CombinedOutput(); err != nil {
+		if out, err := exec.Command("mysql", "-e", sql).CombinedOutput(); err != nil {
 			log.Printf("PMA temp user SQL error: %s %v (sql: %s)", string(out), err, sql)
 			jsonError(w, "failed to create temporary database access", http.StatusInternalServerError)
 			return
@@ -106,7 +106,7 @@ header('Location: /pma/index.php?db=%s');
 exit;
 ?>`, tempUser, tempPass, dbName)
 
-	writeCmd := exec.Command("sudo", "tee", pmaSignonPath)
+	writeCmd := exec.Command("tee", pmaSignonPath)
 	writeCmd.Stdin = strings.NewReader(signContent)
 	writeCmd.Stdout = nil
 	if out, err := writeCmd.CombinedOutput(); err != nil {
@@ -118,11 +118,11 @@ exit;
 	// Schedule cleanup of the signon file and temp user
 	go func() {
 		time.Sleep(30 * time.Second)
-		exec.Command("sudo", "rm", "-f", pmaSignonPath).Run()
+		exec.Command("rm", "-f", pmaSignonPath).Run()
 	}()
 	go func() {
 		time.Sleep(30 * time.Minute)
-		exec.Command("sudo", "mysql", "-e",
+		exec.Command("mysql", "-e",
 			fmt.Sprintf("DROP USER IF EXISTS '%s'@'localhost'; FLUSH PRIVILEGES;", tempUser)).Run()
 		log.Printf("Cleaned up PMA temp user: %s", tempUser)
 	}()

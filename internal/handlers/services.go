@@ -104,7 +104,7 @@ func (h *ServicesHandler) restart(w http.ResponseWriter, r *http.Request) {
 	h.restartMu.Unlock()
 
 	// Restart the service
-	output, err := exec.Command("sudo", "systemctl", "restart", unitName).CombinedOutput()
+	output, err := exec.Command("systemctl", "restart", unitName).CombinedOutput()
 	if err != nil {
 		jsonError(w, "restart failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
 		return

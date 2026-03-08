@@ -1,8 +1,10 @@
 package db
 
 import (
+	cryptoRand "crypto/rand"
 	"database/sql"
 	_ "embed"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,6 +50,26 @@ func Open(dataDir string) (*DB, error) {
 	conn.Exec("ALTER TABLE admin_users ADD COLUMN email TEXT DEFAULT ''")
 	conn.Exec("ALTER TABLE sites ADD COLUMN delete_protection INTEGER DEFAULT 0")
 	conn.Exec("ALTER TABLE admin_users ADD COLUMN totp_secret TEXT DEFAULT ''")
+
+	// Add token column to sites
+	conn.Exec("ALTER TABLE sites ADD COLUMN token TEXT DEFAULT ''")
+	// Generate tokens for any existing sites that don't have one
+	rows, _ := conn.Query("SELECT id FROM sites WHERE token = '' OR token IS NULL")
+	if rows != nil {
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			rows.Scan(&id)
+			ids = append(ids, id)
+		}
+		rows.Close()
+		for _, id := range ids {
+			b := make([]byte, 8)
+			cryptoRand.Read(b)
+			token := hex.EncodeToString(b)
+			conn.Exec("UPDATE sites SET token = ? WHERE id = ?", token, id)
+		}
+	}
 
 	return &DB{Conn: conn}, nil
 }
@@ -133,7 +155,7 @@ func (d *DB) SetTOTPSecret(userID int64, secret string) error {
 // --- Site queries ---
 
 func (d *DB) ListSites() ([]map[string]interface{}, error) {
-	rows, err := d.Conn.Query("SELECT id, domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, created_at FROM sites ORDER BY id DESC")
+	rows, err := d.Conn.Query("SELECT id, COALESCE(token,''), domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, created_at FROM sites ORDER BY id DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -142,12 +164,13 @@ func (d *DB) ListSites() ([]map[string]interface{}, error) {
 	var sites []map[string]interface{}
 	for rows.Next() {
 		var id int64
-		var domain, aliases, sysUser, siteType, phpVer, proxyUrl, webRoot, sslType, createdAt string
-		if err := rows.Scan(&id, &domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &createdAt); err != nil {
+		var token, domain, aliases, sysUser, siteType, phpVer, proxyUrl, webRoot, sslType, createdAt string
+		if err := rows.Scan(&id, &token, &domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &createdAt); err != nil {
 			return nil, err
 		}
 		sites = append(sites, map[string]interface{}{
 			"id":          id,
+			"token":       token,
 			"domain":      domain,
 			"aliases":     aliases,
 			"system_user": sysUser,
@@ -163,16 +186,16 @@ func (d *DB) ListSites() ([]map[string]interface{}, error) {
 }
 
 func (d *DB) GetSite(id int64) (map[string]interface{}, error) {
-	var domain, aliases, sysUser, siteType, phpVer, proxyUrl, webRoot, sslType, certPath, keyPath, createdAt string
+	var token, domain, aliases, sysUser, siteType, phpVer, proxyUrl, webRoot, sslType, certPath, keyPath, createdAt string
 	var basicAuthEnabled, deleteProtection int
 	var basicAuthUsers string
-	err := d.Conn.QueryRow("SELECT domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, ssl_cert_path, ssl_key_path, created_at, COALESCE(basic_auth_enabled,0), COALESCE(basic_auth_users,''), COALESCE(delete_protection,0) FROM sites WHERE id = ?", id).
-		Scan(&domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &certPath, &keyPath, &createdAt, &basicAuthEnabled, &basicAuthUsers, &deleteProtection)
+	err := d.Conn.QueryRow("SELECT COALESCE(token,''), domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, ssl_cert_path, ssl_key_path, created_at, COALESCE(basic_auth_enabled,0), COALESCE(basic_auth_users,''), COALESCE(delete_protection,0) FROM sites WHERE id = ?", id).
+		Scan(&token, &domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &certPath, &keyPath, &createdAt, &basicAuthEnabled, &basicAuthUsers, &deleteProtection)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]interface{}{
-		"id": id, "domain": domain, "aliases": aliases, "system_user": sysUser,
+		"id": id, "token": token, "domain": domain, "aliases": aliases, "system_user": sysUser,
 		"site_type": siteType, "php_version": phpVer, "proxy_url": proxyUrl, "web_root": webRoot,
 		"ssl_type": sslType, "ssl_cert_path": certPath, "ssl_key_path": keyPath, "created_at": createdAt,
 		"basic_auth_enabled": basicAuthEnabled, "basic_auth_users": basicAuthUsers,
@@ -180,10 +203,24 @@ func (d *DB) GetSite(id int64) (map[string]interface{}, error) {
 	}, nil
 }
 
+func (d *DB) GetSiteByToken(token string) (map[string]interface{}, error) {
+	var id int64
+	err := d.Conn.QueryRow("SELECT id FROM sites WHERE token = ?", token).Scan(&id)
+	if err != nil {
+		return nil, err
+	}
+	return d.GetSite(id)
+}
+
 func (d *DB) CreateSite(domain, aliases, sysUser, siteType, phpVersion, proxyUrl, webRoot string) (int64, error) {
+	// Generate random token
+	b := make([]byte, 8)
+	cryptoRand.Read(b)
+	token := hex.EncodeToString(b)
+
 	res, err := d.Conn.Exec(
-		"INSERT INTO sites (domain, aliases, system_user, site_type, php_version, proxy_url, web_root) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		domain, aliases, sysUser, siteType, phpVersion, proxyUrl, webRoot,
+		"INSERT INTO sites (token, domain, aliases, system_user, site_type, php_version, proxy_url, web_root) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		token, domain, aliases, sysUser, siteType, phpVersion, proxyUrl, webRoot,
 	)
 	if err != nil {
 		return 0, err

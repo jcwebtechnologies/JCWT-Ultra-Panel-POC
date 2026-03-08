@@ -54,7 +54,7 @@ func (h *SSLCertsHandler) list(w http.ResponseWriter, r *http.Request) {
 		certs = []map[string]interface{}{}
 	}
 
-	jsonSuccess(w, certs)
+	jsonSuccess(w, map[string]interface{}{"certificates": certs})
 }
 
 func (h *SSLCertsHandler) create(w http.ResponseWriter, r *http.Request) {
