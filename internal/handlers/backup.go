@@ -204,10 +204,11 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		BackupID     int64 `json:"backup_id"`
-		RestoreFiles bool  `json:"restore_files"`
-		RestoreDBs   bool  `json:"restore_databases"`
-		RestoreCron  bool  `json:"restore_cron"`
+		BackupID       int64    `json:"backup_id"`
+		RestoreFiles   bool     `json:"restore_files"`
+		RestoreDBs     bool     `json:"restore_databases"`
+		RestoreCron    bool     `json:"restore_cron"`
+		RestoreDBNames []string `json:"restore_db_names"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -290,9 +291,20 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	if req.RestoreDBs && isNewStyle {
 		dbDir := filepath.Join(tmpDir, "databases")
 		if entries, err := os.ReadDir(dbDir); err == nil {
+			// Build allowed set if specific databases requested
+			allowedDBs := make(map[string]bool)
+			if len(req.RestoreDBNames) > 0 {
+				for _, name := range req.RestoreDBNames {
+					allowedDBs[name] = true
+				}
+			}
 			for _, entry := range entries {
 				if strings.HasSuffix(entry.Name(), ".sql.gz") {
 					dbName := strings.TrimSuffix(entry.Name(), ".sql.gz")
+					// Skip if specific databases requested and this one isn't in the list
+					if len(allowedDBs) > 0 && !allowedDBs[dbName] {
+						continue
+					}
 					dumpFile := filepath.Join(dbDir, entry.Name())
 					importCmd := fmt.Sprintf("gunzip -c %s | sudo mysql %s", dumpFile, dbName)
 					exec.Command("bash", "-c", importCmd).Run()

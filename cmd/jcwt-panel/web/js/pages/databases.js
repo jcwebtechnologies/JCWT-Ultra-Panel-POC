@@ -51,14 +51,14 @@ export async function render(container) {
                     </div>
                 ` : `
                     <div class="table-container">
-                        <table class="data-table">
+                        <table class="data-table responsive-cards">
                             <thead><tr><th>Database Name</th><th>Linked Site</th><th>Created</th><th>Actions</th></tr></thead>
                             <tbody>
                                 ${dbList.map(d => `
                                 <tr>
-                                    <td class="mono"><strong>${escapeHtml(d.db_name)}</strong></td>
-                                    <td>${d.site_domain ? escapeHtml(d.site_domain) : '<span style="color:var(--text-tertiary)">—</span>'}</td>
-                                    <td style="color:var(--text-tertiary);font-size:var(--font-size-xs);">${new Date(d.created_at).toLocaleDateString()}</td>
+                                    <td data-label="Database" class="mono"><strong>${escapeHtml(d.db_name)}</strong></td>
+                                    <td data-label="Site">${d.site_domain ? escapeHtml(d.site_domain) : '<span style="color:var(--text-tertiary)">—</span>'}</td>
+                                    <td data-label="Created" style="color:var(--text-tertiary);font-size:var(--font-size-xs);">${new Date(d.created_at).toLocaleDateString()}</td>
                                     <td><button class="btn btn-sm btn-danger del-db" data-id="${d.id}" data-name="${escapeHtml(d.db_name)}">Delete</button></td>
                                 </tr>`).join('')}
                             </tbody>
@@ -130,14 +130,14 @@ export async function render(container) {
                     </div>
                 ` : `
                     <div class="table-container">
-                        <table class="data-table">
+                        <table class="data-table responsive-cards">
                             <thead><tr><th>Username</th><th>Database</th><th>Created</th><th>Actions</th></tr></thead>
                             <tbody>
                                 ${userList.map(u => `
                                 <tr>
-                                    <td class="mono"><strong>${escapeHtml(u.username)}</strong></td>
-                                    <td class="mono">${escapeHtml(u.db_name)}</td>
-                                    <td style="color:var(--text-tertiary);font-size:var(--font-size-xs);">${new Date(u.created_at).toLocaleDateString()}</td>
+                                    <td data-label="Username" class="mono"><strong>${escapeHtml(u.username)}</strong></td>
+                                    <td data-label="Database" class="mono">${escapeHtml(u.db_name)}</td>
+                                    <td data-label="Created" style="color:var(--text-tertiary);font-size:var(--font-size-xs);">${new Date(u.created_at).toLocaleDateString()}</td>
                                     <td>
                                         <div class="table-actions">
                                             <button class="btn btn-sm btn-secondary chg-pwd" data-user="${escapeHtml(u.username)}">Password</button>

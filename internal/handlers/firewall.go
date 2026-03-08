@@ -48,6 +48,13 @@ func (h *FirewallHandler) list(w http.ResponseWriter, r *http.Request) {
 		rules = []map[string]interface{}{}
 	}
 
+	// Prepend default rules (always present, not stored in DB)
+	defaults := []map[string]interface{}{
+		{"id": int64(-1), "direction": "in", "action": "allow", "protocol": "tcp", "port": "22", "source": "", "comment": "SSH (default)", "enabled": true, "is_default": true},
+		{"id": int64(-2), "direction": "in", "action": "allow", "protocol": "tcp", "port": "443", "source": "", "comment": "HTTPS (default)", "enabled": true, "is_default": true},
+	}
+	rules = append(defaults, rules...)
+
 	// Get ufw status
 	status := "unknown"
 	cmd := exec.Command("sudo", "ufw", "status")
@@ -207,8 +214,9 @@ func (h *FirewallHandler) syncRulesToUFW() {
 	exec.Command("sudo", "ufw", "default", "deny", "incoming").Run()
 	exec.Command("sudo", "ufw", "default", "allow", "outgoing").Run()
 
-	// Always allow SSH
+	// Always allow SSH and HTTPS
 	exec.Command("sudo", "ufw", "allow", "22/tcp").Run()
+	exec.Command("sudo", "ufw", "allow", "443/tcp").Run()
 
 	for _, rule := range rules {
 		enabled, _ := rule["enabled"].(bool)

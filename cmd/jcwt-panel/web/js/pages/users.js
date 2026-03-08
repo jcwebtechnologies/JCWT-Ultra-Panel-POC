@@ -23,7 +23,7 @@ export async function render(container) {
                 <h3 class="card-title">Panel Users</h3>
             </div>
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table responsive-cards">
                     <thead>
                         <tr>
                             <th>Username</th>
@@ -36,14 +36,14 @@ export async function render(container) {
                     <tbody>
                         ${(users || []).map(u => `
                         <tr>
-                            <td><span class="mono" style="font-weight: 600;">${escapeHtml(u.username)}</span></td>
-                            <td>${u.email ? escapeHtml(u.email) : '<span style="color: var(--text-tertiary);">—</span>'}</td>
-                            <td>
+                            <td data-label="Username"><span class="mono" style="font-weight: 600;">${escapeHtml(u.username)}</span></td>
+                            <td data-label="Email">${u.email ? escapeHtml(u.email) : '<span style="color: var(--text-tertiary);">—</span>'}</td>
+                            <td data-label="Role">
                                 <span class="badge ${u.role === 'admin' ? 'badge-primary' : u.role === 'manager' ? 'badge-info' : 'badge-default'}">
                                     ${u.role === 'admin' ? '👑' : u.role === 'manager' ? '🔧' : '👁️'} ${u.role}
                                 </span>
                             </td>
-                            <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
+                            <td data-label="Created">${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
                             <td style="display: flex; gap: var(--space-1);">
                                 <button class="btn btn-sm btn-secondary edit-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}" data-role="${u.role}" data-email="${escapeHtml(u.email || '')}">Edit</button>
                                 <button class="btn btn-sm btn-danger delete-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}">Delete</button>

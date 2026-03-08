@@ -1361,6 +1361,18 @@ a:hover {
     margin-top: var(--space-1);
 }
 
+/* ---- Site Detail Meta ---- */
+.site-detail-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-top: var(--space-1);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
 /* ---- Settings Section ---- */
 .settings-section {
     margin-bottom: var(--space-8);
@@ -1592,6 +1604,75 @@ a:hover {
         -webkit-overflow-scrolling: touch;
     }
 
+    /* Responsive card tables */
+    .data-table.responsive-cards,
+    .data-table.responsive-cards thead,
+    .data-table.responsive-cards tbody,
+    .data-table.responsive-cards tr,
+    .data-table.responsive-cards th,
+    .data-table.responsive-cards td {
+        display: block;
+    }
+
+    .data-table.responsive-cards thead {
+        display: none;
+    }
+
+    .data-table.responsive-cards tbody tr {
+        background: var(--bg-card);
+        border: 1px solid var(--border-primary);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--space-3);
+        padding: var(--space-3);
+    }
+
+    .data-table.responsive-cards tbody tr:hover td {
+        background: transparent;
+    }
+
+    .data-table.responsive-cards td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--space-1) 0;
+        border-bottom: none;
+        font-size: var(--font-size-sm);
+        gap: var(--space-2);
+    }
+
+    .data-table.responsive-cards td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: var(--font-size-xs);
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        flex-shrink: 0;
+        min-width: 80px;
+    }
+
+    .data-table.responsive-cards td:last-child {
+        padding-top: var(--space-2);
+        margin-top: var(--space-1);
+        border-top: 1px solid var(--border-primary);
+        justify-content: flex-end;
+    }
+
+    .data-table.responsive-cards td:last-child::before {
+        display: none;
+    }
+
+    .data-table.responsive-cards .table-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    /* Remove table-container border when using responsive cards */
+    .table-container:has(.responsive-cards) {
+        border: none;
+        background: transparent;
+    }
+
     .data-table th,
     .data-table td {
         padding: var(--space-2) var(--space-3);
@@ -1723,6 +1804,15 @@ a:hover {
     .info-item {
         flex-direction: column;
         gap: var(--space-1);
+    }
+
+    .info-value {
+        word-break: break-all;
+    }
+
+    /* PHP pool config path wrapping */
+    .info-value.mono {
+        word-break: break-all;
     }
 
     /* Prevent button stretching in site detail */

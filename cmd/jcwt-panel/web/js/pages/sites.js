@@ -30,7 +30,7 @@ export async function render(container) {
             </div>
         ` : `
             <div class="table-container">
-                <table class="data-table">
+                <table class="data-table responsive-cards">
                     <thead>
                         <tr>
                             <th>Domain</th>
@@ -44,18 +44,18 @@ export async function render(container) {
                     <tbody>
                         ${siteList.map(s => `
                         <tr>
-                            <td>
+                            <td data-label="Domain">
                                 <strong>${escapeHtml(s.domain)}</strong>
                                 ${s.aliases ? `<br><small style="color: var(--text-tertiary);">${escapeHtml(s.aliases)}</small>` : ''}
                             </td>
-                            <td><span class="mono">${escapeHtml(s.system_user)}</span></td>
-                            <td>
+                            <td data-label="User"><span class="mono">${escapeHtml(s.system_user)}</span></td>
+                            <td data-label="Type">
                                 ${s.site_type === 'php' ? `<span class="badge badge-info">PHP ${escapeHtml(s.php_version)}</span>` : ''}
                                 ${s.site_type === 'html' ? `<span class="badge" style="background:var(--error);color:white">HTML</span>` : ''}
                                 ${s.site_type === 'proxy' ? `<span class="badge" style="background:var(--text-secondary);color:white">Proxy</span>` : ''}
                             </td>
-                            <td><span class="badge ${s.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${s.ssl_type === 'none' ? 'None' : s.ssl_type}</span></td>
-                            <td style="color: var(--text-tertiary); font-size: var(--font-size-xs);">${new Date(s.created_at).toLocaleDateString()}</td>
+                            <td data-label="SSL"><span class="badge ${s.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${s.ssl_type === 'none' ? 'None' : s.ssl_type}</span></td>
+                            <td data-label="Created" style="color: var(--text-tertiary); font-size: var(--font-size-xs);">${new Date(s.created_at).toLocaleDateString()}</td>
                             <td>
                                 <div class="table-actions">
                                     <a href="#/sites/${s.token}" class="btn btn-sm btn-secondary">Manage</a>

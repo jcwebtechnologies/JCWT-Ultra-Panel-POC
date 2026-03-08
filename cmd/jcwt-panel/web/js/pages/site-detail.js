@@ -25,9 +25,9 @@ export async function render(container, siteToken, section) {
                     <h2 style="display: flex; align-items: center; gap: var(--space-2);">
                         <a href="http://${escapeHtml(site.domain)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;" title="Open site in new tab">${escapeHtml(site.domain)} <span style="font-size: var(--font-size-xs); opacity: 0.4;">↗</span></a>
                     </h2>
-                    <div style="display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-1); color: var(--text-secondary); font-size: var(--font-size-sm);">
+                    <div class="site-detail-meta">
                         <span style="display: flex; align-items: center; gap: var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;">${icons.key}</span> ${escapeHtml(site.system_user)}</span>
-                        <span style="display: flex; align-items: center; gap: var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;">${icons.folder}</span> ${escapeHtml(site.web_root)}</span>
+                        <span style="display: flex; align-items: center; gap: var(--space-1); min-width: 0;"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;flex-shrink:0;">${icons.folder}</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(site.web_root)}</span></span>
                     </div>
                 </div>
                 <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:16px;height:16px;">${icons.sites}</span> All Sites</a>
@@ -174,8 +174,11 @@ function renderOverview(el, site, versions, siteId) {
             </div>
             <div class="form-group" id="edit-webroot-group" style="${site.site_type !== 'proxy' ? '' : 'display: none;'}">
                 <label class="form-label">Web Root</label>
-                <input type="text" class="form-input mono" id="edit-webroot" value="${escapeHtml(site.web_root)}" placeholder="/home/user/htdocs">
-                <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Must be under /home/. Changing this only updates the config — the directory must already exist.</small>
+                <div style="display: flex; align-items: center; gap: 0;">
+                    <span style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-right: none; border-radius: var(--radius-md) 0 0 var(--radius-md); padding: var(--space-2) var(--space-3); font-size: var(--font-size-sm); color: var(--text-tertiary); white-space: nowrap;">/home/${escapeHtml(site.system_user)}/</span>
+                    <input type="text" class="form-input mono" id="edit-webroot" value="${escapeHtml(site.web_root.replace('/home/' + site.system_user + '/', ''))}" placeholder="htdocs" style="border-radius: 0 var(--radius-md) var(--radius-md) 0;">
+                </div>
+                <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Changing this only updates the config — the directory must already exist.</small>
             </div>
             <div class="info-grid" style="margin-bottom: var(--space-4);">
                 <div class="info-item"><span class="info-label">System User</span><span class="info-value mono">${escapeHtml(site.system_user)}</span></div>
@@ -209,7 +212,8 @@ function renderOverview(el, site, versions, siteId) {
         const siteType = document.getElementById('edit-type').value;
         const proxyUrl = (document.getElementById('edit-proxy')?.value || '').trim();
         const domain = document.getElementById('edit-domain').value.trim();
-        const webRoot = (document.getElementById('edit-webroot')?.value || '').trim();
+        const webRootSuffix = (document.getElementById('edit-webroot')?.value || '').trim();
+        const webRoot = webRootSuffix ? `/home/${site.system_user}/${webRootSuffix}` : '';
 
         // Client-side validation
         if (!domain) {
@@ -226,10 +230,6 @@ function renderOverview(el, site, versions, siteId) {
         }
         if (siteType === 'proxy' && proxyUrl && !proxyUrl.startsWith('http')) {
             showToast('Backend URL must start with http:// or https://', 'error');
-            return;
-        }
-        if (webRoot && !webRoot.startsWith('/home/')) {
-            showToast('Web root must be under /home/', 'error');
             return;
         }
 
@@ -366,15 +366,15 @@ function renderSSL(el, site, siteId) {
                 <h3 class="card-title">Uploaded Certificates</h3>
             </div>
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table responsive-cards">
                     <thead><tr><th>Type</th><th>Label</th><th>Uploaded</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${certs.map(c => `
                         <tr>
-                            <td><span class="badge ${c.type === 'self-signed' ? 'badge-warning' : 'badge-info'}">${escapeHtml(c.type)}</span></td>
-                            <td>${escapeHtml(c.label || c.type)}</td>
-                            <td style="font-size: var(--font-size-xs);">${c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}</td>
-                            <td>${c.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge" style="background:var(--bg-tertiary);color:var(--text-tertiary)">Inactive</span>'}</td>
+                            <td data-label="Type"><span class="badge ${c.type === 'self-signed' ? 'badge-warning' : 'badge-info'}">${escapeHtml(c.type)}</span></td>
+                            <td data-label="Label">${escapeHtml(c.label || c.type)}</td>
+                            <td data-label="Uploaded" style="font-size: var(--font-size-xs);">${c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}</td>
+                            <td data-label="Status">${c.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge" style="background:var(--bg-tertiary);color:var(--text-tertiary)">Inactive</span>'}</td>
                             <td>
                                 <div class="table-actions">
                                     ${!c.active ? `<button class="btn btn-sm btn-primary activate-cert" data-id="${c.id}">Activate</button>` : ''}
@@ -542,16 +542,17 @@ async function renderCron(el, siteId) {
                 </div>
             ` : `
                 <div class="table-container" style="border: none;">
-                    <table class="data-table">
+                    <table class="data-table responsive-cards">
                         <thead><tr><th>Schedule</th><th>Command</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody>
                             ${jobs.map(j => `
                             <tr>
-                                <td class="mono">${escapeHtml(j.schedule)}</td>
-                                <td class="mono truncate" style="max-width: 300px;">${escapeHtml(j.command)}</td>
-                                <td><span class="badge ${j.enabled ? 'badge-success' : 'badge-warning'}">${j.enabled ? 'Active' : 'Paused'}</span></td>
+                                <td data-label="Schedule" class="mono">${escapeHtml(j.schedule)}</td>
+                                <td data-label="Command" class="mono truncate" style="max-width: 300px;">${escapeHtml(j.command)}</td>
+                                <td data-label="Status"><span class="badge ${j.enabled ? 'badge-success' : 'badge-warning'}">${j.enabled ? 'Active' : 'Paused'}</span></td>
                                 <td>
                                     <div class="table-actions">
+                                        <button class="btn btn-sm btn-secondary edit-cron" data-id="${j.id}" data-enabled="${j.enabled}" data-schedule="${escapeHtml(j.schedule)}" data-command="${escapeHtml(j.command)}">Edit</button>
                                         <button class="btn btn-sm btn-ghost toggle-cron" data-id="${j.id}" data-enabled="${j.enabled}" data-schedule="${escapeHtml(j.schedule)}" data-command="${escapeHtml(j.command)}">${j.enabled ? 'Pause' : 'Enable'}</button>
                                         <button class="btn btn-sm btn-danger delete-cron" data-id="${j.id}">Delete</button>
                                     </div>
@@ -606,6 +607,47 @@ async function renderCron(el, siteId) {
                     showToast('Cron job updated', 'success');
                     renderCron(el, siteId);
                 } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        el.querySelectorAll('.edit-cron').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const cronId = btn.dataset.id;
+                const currentSchedule = btn.dataset.schedule;
+                const currentCommand = btn.dataset.command;
+                const isEnabled = btn.dataset.enabled === 'true';
+                showModal('Edit Cron Job', `
+                    <div class="form-group">
+                        <label class="form-label">Schedule</label>
+                        <input type="text" class="form-input" id="edit-cron-schedule" value="${escapeHtml(currentSchedule)}">
+                        <div class="form-help">Cron expression: min hour day month weekday</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Command</label>
+                        <input type="text" class="form-input" id="edit-cron-command" value="${escapeHtml(currentCommand)}">
+                    </div>
+                `, `
+                    <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="save-edit-cron">Save Changes</button>
+                `);
+
+                document.getElementById('save-edit-cron')?.addEventListener('click', async () => {
+                    const schedule = document.getElementById('edit-cron-schedule').value.trim();
+                    const command = document.getElementById('edit-cron-command').value.trim();
+                    if (!schedule || !command) { showToast('Schedule and command are required', 'error'); return; }
+                    try {
+                        await cron.update({
+                            id: parseInt(cronId),
+                            site_id: parseInt(siteId),
+                            schedule,
+                            command,
+                            enabled: isEnabled,
+                        });
+                        closeModal();
+                        showToast('Cron job updated!', 'success');
+                        renderCron(el, siteId);
+                    } catch (err) { showToast(err.message, 'error'); }
+                });
             });
         });
 
@@ -725,15 +767,15 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
                 <div class="empty-state-text">Create a database linked to this site.</div>
             </div>` : `
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table responsive-cards">
                     <thead><tr><th>Database Name</th><th>Users</th><th>Created</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${siteDbs.map(db => {
             const dbUsers = (allUsers || []).filter(u => u.database_id === db.id);
             return `<tr>
-                                <td><span class="mono">${escapeHtml(db.db_name)}</span></td>
-                                <td>${dbUsers.length > 0 ? dbUsers.map(u => `<span class="badge badge-info">${escapeHtml(u.username)}</span>`).join(' ') : '<span style="color: var(--text-tertiary);">None</span>'}</td>
-                                <td>${db.created_at ? new Date(db.created_at).toLocaleDateString() : 'N/A'}</td>
+                                <td data-label="Database"><span class="mono">${escapeHtml(db.db_name)}</span></td>
+                                <td data-label="Users">${dbUsers.length > 0 ? dbUsers.map(u => `<span class="badge badge-info">${escapeHtml(u.username)}</span>`).join(' ') : '<span style="color: var(--text-tertiary);">None</span>'}</td>
+                                <td data-label="Created">${db.created_at ? new Date(db.created_at).toLocaleDateString() : 'N/A'}</td>
                                 <td style="display: flex; gap: var(--space-1);">
                                     <button class="btn btn-sm btn-secondary open-pma" data-id="${db.id}" data-name="${escapeHtml(db.db_name)}" title="Open phpMyAdmin">⛁ phpMyAdmin</button>
                                     <button class="btn btn-sm btn-danger delete-site-db" data-id="${db.id}" data-name="${escapeHtml(db.db_name)}">Delete</button>
@@ -852,18 +894,18 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
                 <div class="empty-state-text">${siteDbs.length === 0 ? 'Create a database first, then add users.' : 'Create a user with specific privileges for a database.'}</div>
             </div>` : `
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table responsive-cards">
                     <thead><tr><th>Username</th><th>Database</th><th>Privileges</th><th>Created</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${siteUsers.map(u => `<tr>
-                                <td>${escapeHtml(u.username)}</td>
-                                <td><span class="badge badge-info">${escapeHtml(u.db_name)}</span></td>
-                                <td>
+                                <td data-label="Username">${escapeHtml(u.username)}</td>
+                                <td data-label="Database"><span class="badge badge-info">${escapeHtml(u.db_name)}</span></td>
+                                <td data-label="Privileges">
                                     <select class="form-select form-select-sm change-privilege" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="width: auto; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
                                         ${Object.entries(privilegeLabels).map(([val, label]) => `<option value="${val}" ${u.privilege_level === val ? 'selected' : ''}>${label}</option>`).join('')}
                                     </select>
                                 </td>
-                                <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
+                                <td data-label="Created">${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
                                 <td style="display: flex; gap: var(--space-1);">
                                     <button class="btn btn-sm btn-secondary change-pwd" data-username="${escapeHtml(u.username)}" title="Change Password">${icons.key} Password</button>
                                     <button class="btn btn-sm btn-secondary open-pma-user" data-id="${u.database_id}" data-name="${escapeHtml(u.db_name)}" title="Open phpMyAdmin">⛁ phpMyAdmin</button>
@@ -1267,15 +1309,15 @@ async function renderBackups(container, site, siteId) {
                 </div>
             ` : `
                 <div class="table-responsive">
-                    <table class="data-table">
+                    <table class="data-table responsive-cards">
                         <thead><tr><th>Date</th><th>Size</th><th>Type</th><th>Method</th><th>Actions</th></tr></thead>
                         <tbody>
                             ${backups.map(b => `
                             <tr>
-                                <td>${new Date(b.created_at).toLocaleString()}</td>
-                                <td>${b.size ? formatBytes(parseInt(b.size)) : 'N/A'}</td>
-                                <td><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${b.type}</span></td>
-                                <td>${escapeHtml(b.method || 'local')}</td>
+                                <td data-label="Date">${new Date(b.created_at).toLocaleString()}</td>
+                                <td data-label="Size">${b.size ? formatBytes(parseInt(b.size)) : 'N/A'}</td>
+                                <td data-label="Type"><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${b.type}</span></td>
+                                <td data-label="Method">${escapeHtml(b.method || 'local')}</td>
                                 <td>
                                     <div class="table-actions">
                                         <button class="btn btn-sm btn-secondary download-backup" data-id="${b.id}" title="Download"><span class="nav-icon" style="width:14px;height:14px;">${icons.download}</span></button>
@@ -1339,16 +1381,32 @@ async function renderBackups(container, site, siteId) {
         container.querySelectorAll('.restore-backup').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const backupId = parseInt(btn.dataset.id);
+                // Fetch databases for this site to show per-database toggles
+                let siteDbs = [];
+                try {
+                    const allDbs = await databases.list();
+                    siteDbs = (allDbs || []).filter(db => String(db.site_id) === String(siteId));
+                } catch {}
+
+                const dbToggles = siteDbs.length > 0
+                    ? siteDbs.map(db => `
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-1) 0; padding-left: var(--space-4);">
+                            <span class="mono" style="font-size: var(--font-size-sm);">${escapeHtml(db.db_name)}</span>
+                            <label class="toggle" style="margin:0;"><input type="checkbox" class="restore-db-toggle" data-name="${escapeHtml(db.db_name)}" checked><span class="toggle-slider"></span></label>
+                        </div>`).join('')
+                    : '';
+
                 showModal('Restore Backup', `
                     <p style="margin-bottom: var(--space-3); color: var(--text-secondary);">Select which components to restore. Current data will be replaced.</p>
                     <div class="settings-row" style="margin-bottom: var(--space-3);">
                         <div class="settings-row-label">Web Files<small>Restore website files to web root</small></div>
                         <div><label class="toggle"><input type="checkbox" id="restore-files" checked><span class="toggle-slider"></span></label></div>
                     </div>
-                    <div class="settings-row" style="margin-bottom: var(--space-3);">
+                    <div class="settings-row" style="margin-bottom: var(--space-2);">
                         <div class="settings-row-label">Databases<small>Restore database SQL dumps</small></div>
                         <div><label class="toggle"><input type="checkbox" id="restore-dbs" checked><span class="toggle-slider"></span></label></div>
                     </div>
+                    <div id="restore-db-list" style="margin-bottom: var(--space-3);">${dbToggles}</div>
                     <div class="settings-row" style="margin-bottom: var(--space-3);">
                         <div class="settings-row-label">Cron Jobs<small>Restore scheduled tasks</small></div>
                         <div><label class="toggle"><input type="checkbox" id="restore-cron" checked><span class="toggle-slider"></span></label></div>
@@ -1359,6 +1417,12 @@ async function renderBackups(container, site, siteId) {
                     <button class="btn btn-danger" id="confirm-restore">Restore</button>
                 `);
 
+                // Toggle per-database list visibility based on master DB toggle
+                document.getElementById('restore-dbs')?.addEventListener('change', (e) => {
+                    const dbList = document.getElementById('restore-db-list');
+                    if (dbList) dbList.style.display = e.target.checked ? '' : 'none';
+                });
+
                 document.getElementById('confirm-restore')?.addEventListener('click', async () => {
                     const restoreFiles = document.getElementById('restore-files').checked;
                     const restoreDBs = document.getElementById('restore-dbs').checked;
@@ -1366,6 +1430,13 @@ async function renderBackups(container, site, siteId) {
                     if (!restoreFiles && !restoreDBs && !restoreCron) {
                         showToast('Select at least one component to restore', 'error');
                         return;
+                    }
+                    // Collect selected database names
+                    const restoreDBNames = [];
+                    if (restoreDBs) {
+                        document.querySelectorAll('.restore-db-toggle').forEach(cb => {
+                            if (cb.checked) restoreDBNames.push(cb.dataset.name);
+                        });
                     }
                     closeModal();
                     try {
@@ -1377,6 +1448,7 @@ async function renderBackups(container, site, siteId) {
                                 restore_files: restoreFiles,
                                 restore_databases: restoreDBs,
                                 restore_cron: restoreCron,
+                                restore_db_names: restoreDBNames,
                             }),
                         });
                         const restored = (result.restored || []).join(', ');

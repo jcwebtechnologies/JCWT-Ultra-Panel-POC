@@ -37,11 +37,11 @@ export async function render(container) {
                 <div class="empty-state" style="padding:var(--space-8) 0;">
                     <div class="empty-state-icon"><span class="nav-icon" style="width:32px;height:32px;color:var(--text-tertiary)">${icons.shield}</span></div>
                     <div class="empty-state-title">No Custom Rules</div>
-                    <div class="empty-state-text">SSH (22), HTTP (80), HTTPS (443) and Panel port are allowed by default.</div>
+                    <div class="empty-state-text">SSH (22) and HTTPS (443) are allowed by default. Add custom rules below.</div>
                 </div>
             ` : `
                 <div class="table-container">
-                    <table class="data-table">
+                    <table class="data-table responsive-cards">
                         <thead>
                             <tr>
                                 <th>Direction</th>
@@ -56,20 +56,22 @@ export async function render(container) {
                         </thead>
                         <tbody>
                             ${rules.map(r => `
-                                <tr>
-                                    <td><span class="badge">${escapeHtml(r.direction)}</span></td>
-                                    <td><span class="status-badge ${r.action === 'allow' ? 'status-running' : 'status-stopped'}">${escapeHtml(r.action)}</span></td>
-                                    <td>${escapeHtml(r.protocol)}</td>
-                                    <td>${escapeHtml(r.port)}</td>
-                                    <td>${r.source ? escapeHtml(r.source) : '<span style="color:var(--text-tertiary)">any</span>'}</td>
-                                    <td style="color:var(--text-secondary);font-size:var(--font-size-sm);">${escapeHtml(r.comment || '')}</td>
-                                    <td>
+                                <tr${r.is_default ? ' style="opacity:0.75;"' : ''}>
+                                    <td data-label="Direction"><span class="badge">${escapeHtml(r.direction)}</span></td>
+                                    <td data-label="Action"><span class="status-badge ${r.action === 'allow' ? 'status-running' : 'status-stopped'}">${escapeHtml(r.action)}</span></td>
+                                    <td data-label="Protocol">${escapeHtml(r.protocol)}</td>
+                                    <td data-label="Port">${escapeHtml(r.port)}</td>
+                                    <td data-label="Source">${r.source ? escapeHtml(r.source) : '<span style="color:var(--text-tertiary)">any</span>'}</td>
+                                    <td data-label="Comment" style="color:var(--text-secondary);font-size:var(--font-size-sm);">${escapeHtml(r.comment || '')}${r.is_default ? ' <span class="badge badge-info" style="font-size:10px;">System</span>' : ''}</td>
+                                    <td data-label="Status">
+                                        ${r.is_default ? '<span class="badge badge-success">Always On</span>' : `
                                         <label class="toggle" style="margin:0;">
                                             <input type="checkbox" ${r.enabled ? 'checked' : ''} data-toggle-rule="${r.id}">
                                             <span class="toggle-slider"></span>
-                                        </label>
+                                        </label>`}
                                     </td>
                                     <td>
+                                        ${r.is_default ? '' : `
                                         <div class="table-actions">
                                             <button class="btn btn-sm btn-secondary" data-edit-rule="${r.id}" title="Edit">
                                                 <span class="nav-icon" style="width:14px;height:14px;">${icons.edit}</span>
@@ -77,7 +79,7 @@ export async function render(container) {
                                             <button class="btn btn-sm btn-danger" data-delete-rule="${r.id}" title="Delete">
                                                 <span class="nav-icon" style="width:14px;height:14px;">${icons.trash}</span>
                                             </button>
-                                        </div>
+                                        </div>`}
                                     </td>
                                 </tr>
                             `).join('')}
