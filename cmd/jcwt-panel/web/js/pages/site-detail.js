@@ -106,6 +106,7 @@ function renderOverview(el, site, versions, siteId) {
             <div class="info-grid" style="margin-bottom: var(--space-4);">
                 <div class="info-item"><span class="info-label">System User</span><span class="info-value mono">${escapeHtml(site.system_user)}</span></div>
                 <div class="info-item"><span class="info-label">SSL</span><span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type}</span></span></div>
+                <div class="info-item"><span class="info-label">Disk Usage</span><span class="info-value" id="site-disk-usage"><span style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Loading...</span></span></div>
                 <div class="info-item"><span class="info-label">Created</span><span class="info-value">${new Date(site.created_at).toLocaleDateString()}</span></div>
             </div>
             <button type="submit" class="btn btn-primary" style="width: auto;">Save Changes</button>
@@ -117,6 +118,15 @@ function renderOverview(el, site, versions, siteId) {
         document.getElementById('edit-php-group').style.display = type === 'php' ? 'block' : 'none';
         document.getElementById('edit-proxy-group').style.display = type === 'proxy' ? 'block' : 'none';
         document.getElementById('edit-webroot-group').style.display = type !== 'proxy' ? 'block' : 'none';
+    });
+
+    // Deferred disk usage load
+    sites.diskUsage(siteId).then(data => {
+        const el2 = document.getElementById('site-disk-usage');
+        if (el2) el2.innerHTML = `<span class="badge badge-info">${escapeHtml(data.size)}</span>`;
+    }).catch(() => {
+        const el2 = document.getElementById('site-disk-usage');
+        if (el2) el2.textContent = 'N/A';
     });
 
     document.getElementById('update-site-form').addEventListener('submit', async (e) => {

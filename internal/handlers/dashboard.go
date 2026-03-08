@@ -56,6 +56,20 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hostname, _ := os.Hostname()
 	stats["hostname"] = hostname
 
+	// CPU info
+	stats["cpu_cores"] = runtime.NumCPU()
+	if cpuinfo, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		for _, line := range strings.Split(string(cpuinfo), "\n") {
+			if strings.HasPrefix(line, "model name") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					stats["cpu_model"] = strings.TrimSpace(parts[1])
+					break
+				}
+			}
+		}
+	}
+
 	// Uptime
 	if uptime, err := exec.Command("uptime", "-p").Output(); err == nil {
 		stats["uptime"] = strings.TrimSpace(string(uptime))

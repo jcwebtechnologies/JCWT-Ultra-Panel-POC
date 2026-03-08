@@ -421,6 +421,7 @@ function renderLayout(pageName) {
             <div class="main-body" id="page-content">
                 <div class="loading-screen"><div class="loading-spinner"></div></div>
             </div>
+            ${(panelSettings?.footer_text) ? `<footer class="panel-footer">${escapeHtml(panelSettings.footer_text).replace(/\{year\}/g, new Date().getFullYear())}</footer>` : ''}
         </main>
     </div>`;
 }

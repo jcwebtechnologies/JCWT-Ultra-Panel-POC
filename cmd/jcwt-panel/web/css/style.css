@@ -408,6 +408,15 @@ a:hover {
     width: 100%;
 }
 
+/* ---- Panel Footer ---- */
+.panel-footer {
+    padding: var(--space-4) var(--space-6);
+    text-align: center;
+    font-size: var(--font-size-xs);
+    color: var(--text-tertiary);
+    border-top: 1px solid var(--border-primary);
+}
+
 /* Mobile overlay */
 .sidebar-overlay {
     display: none;

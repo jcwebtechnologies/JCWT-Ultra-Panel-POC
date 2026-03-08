@@ -75,8 +75,8 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
     <title>%s — Site Ready</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f8fafc 0%%, #e2e8f0 100%%); color: #334155; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .card { max-width: 640px; width: 90%%; background: #ffffff; border-radius: 16px; padding: 48px; border: 1px solid #e2e5ef; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f8fafc 0%%, #e2e8f0 100%%); color: #334155; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .card { max-width: 640px; width: 100%%; background: #ffffff; border-radius: 16px; padding: 48px; border: 1px solid #e2e5ef; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
         h1 { font-size: 2rem; background: linear-gradient(135deg, #2563eb, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
         .subtitle { color: #64748b; margin-bottom: 32px; }
         .badge { display: inline-block; background: #eff6ff; color: #2563eb; padding: 6px 14px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; margin-bottom: 24px; }
@@ -85,9 +85,12 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         .step { display: flex; gap: 12px; margin-bottom: 12px; font-size: 0.9rem; color: #64748b; }
         .step-num { background: #eff6ff; color: #2563eb; width: 24px; height: 24px; border-radius: 50%%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; flex-shrink: 0; }
         code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #334155; font-family: inherit; font-weight: 600; }
-        .info { display: flex; gap: 20px; margin-top: 24px; flex-wrap: wrap; }
-        .info-item { font-size: 0.85rem; color: #94a3b8; }
-        .info-item strong { color: #64748b; }
+        @media (max-width: 600px) {
+            .card { padding: 24px; }
+            h1 { font-size: 1.5rem; }
+            .subtitle { margin-bottom: 20px; }
+            .steps { padding: 16px; }
+        }
     </style>
 </head>
 <body>
@@ -95,10 +98,6 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         <h1>%s</h1>
         <p class="subtitle">Your PHP site is live and ready for deployment.</p>
         <div class="badge"><?php echo "PHP " . phpversion(); ?></div>
-        <div class="info">
-            <div class="info-item"><strong>Web Root:</strong> %s</div>
-            <div class="info-item"><strong>User:</strong> %s</div>
-        </div>
         <div class="steps">
             <h3>Next Steps</h3>
             <div class="step"><div class="step-num">1</div> Upload your application files to <code>%s</code></div>
@@ -108,7 +107,7 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         </div>
     </div>
 </body>
-</html>`, domain, domain, webRoot, username, webRoot)
+</html>`, domain, domain, webRoot)
 	case "html":
 		fileName = "index.html"
 		indexContent = fmt.Sprintf(`<!DOCTYPE html>
@@ -119,8 +118,8 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
     <title>%s — Site Ready</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f8fafc 0%%, #e2e8f0 100%%); color: #334155; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-        .card { max-width: 640px; width: 90%%; background: #ffffff; border-radius: 16px; padding: 48px; border: 1px solid #e2e5ef; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f8fafc 0%%, #e2e8f0 100%%); color: #334155; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .card { max-width: 640px; width: 100%%; background: #ffffff; border-radius: 16px; padding: 48px; border: 1px solid #e2e5ef; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
         h1 { font-size: 2rem; background: linear-gradient(135deg, #2563eb, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
         .subtitle { color: #64748b; margin-bottom: 32px; }
         .badge { display: inline-block; background: #eff6ff; color: #2563eb; padding: 6px 14px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; margin-bottom: 24px; }
@@ -129,9 +128,12 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         .step { display: flex; gap: 12px; margin-bottom: 12px; font-size: 0.9rem; color: #64748b; }
         .step-num { background: #eff6ff; color: #2563eb; width: 24px; height: 24px; border-radius: 50%%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; flex-shrink: 0; }
         code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #334155; font-family: inherit; font-weight: 600; }
-        .info { display: flex; gap: 20px; margin-top: 24px; flex-wrap: wrap; }
-        .info-item { font-size: 0.85rem; color: #94a3b8; }
-        .info-item strong { color: #64748b; }
+        @media (max-width: 600px) {
+            .card { padding: 24px; }
+            h1 { font-size: 1.5rem; }
+            .subtitle { margin-bottom: 20px; }
+            .steps { padding: 16px; }
+        }
     </style>
 </head>
 <body>
@@ -139,10 +141,6 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         <h1>%s</h1>
         <p class="subtitle">Your static site is live and ready for your content.</p>
         <div class="badge">Static HTML Site</div>
-        <div class="info">
-            <div class="info-item"><strong>Web Root:</strong> %s</div>
-            <div class="info-item"><strong>User:</strong> %s</div>
-        </div>
         <div class="steps">
             <h3>Getting Started</h3>
             <div class="step"><div class="step-num">1</div> Delete this default <code>index.html</code> file</div>
@@ -153,7 +151,7 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         </div>
     </div>
 </body>
-</html>`, domain, domain, webRoot, username, webRoot)
+</html>`, domain, domain, webRoot)
 	default:
 		// Proxies don't need a welcome page
 		return nil

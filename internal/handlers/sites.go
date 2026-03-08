@@ -31,7 +31,11 @@ func (h *SitesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		h.list(w, r)
+		if r.URL.Query().Get("action") == "disk-usage" {
+			h.diskUsage(w, r)
+		} else {
+			h.list(w, r)
+		}
 	case "POST":
 		h.create(w, r)
 	case "PUT":
@@ -76,6 +80,40 @@ func (h *SitesHandler) list(w http.ResponseWriter, r *http.Request) {
 		sites = []map[string]interface{}{}
 	}
 	jsonSuccess(w, sites)
+}
+
+func (h *SitesHandler) diskUsage(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		jsonError(w, "id required", http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	site, err := h.DB.GetSite(id)
+	if err != nil {
+		jsonError(w, "site not found", http.StatusNotFound)
+		return
+	}
+	webRoot, _ := site["web_root"].(string)
+	if webRoot == "" {
+		jsonSuccess(w, map[string]interface{}{"size": "N/A"})
+		return
+	}
+	out, err := exec.Command("sudo", "du", "-sh", webRoot).Output()
+	if err != nil {
+		jsonSuccess(w, map[string]interface{}{"size": "N/A"})
+		return
+	}
+	fields := strings.Fields(string(out))
+	size := "N/A"
+	if len(fields) >= 1 {
+		size = fields[0]
+	}
+	jsonSuccess(w, map[string]interface{}{"size": size})
 }
 
 func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +228,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		php.RestartFPM(req.PHPVersion)
 	}
 
-	// Generate Nginx vhost
+	// Generate Nginx vhost (initially without SSL)
 	vhostData := nginx.VHostData{
 		Domain: req.Domain, Aliases: req.Aliases, User: req.SystemUser,
 		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL, 
@@ -203,6 +241,20 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	if err := nginx.TestAndReload(); err != nil {
 		jsonError(w, fmt.Sprintf("nginx config error: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Auto-generate self-signed SSL certificate
+	certPath, keyPath, sslErr := system.GenerateSelfSignedCert(h.Cfg.SSLBaseDir, req.Domain)
+	if sslErr == nil {
+		h.DB.UpdateSite(id, req.Domain, req.Aliases, req.SiteType, req.PHPVersion, req.ProxyURL, "self-signed", certPath, keyPath)
+		vhostData.SSLType = "self-signed"
+		vhostData.SSLCertPath = certPath
+		vhostData.SSLKeyPath = keyPath
+		if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, vhostData); err == nil {
+			nginx.TestAndReload()
+		}
+	} else {
+		log.Printf("Auto SSL for %s failed (site still created): %v", req.Domain, sslErr)
 	}
 
 	jsonSuccess(w, map[string]interface{}{"id": id, "domain": req.Domain, "web_root": webRoot})

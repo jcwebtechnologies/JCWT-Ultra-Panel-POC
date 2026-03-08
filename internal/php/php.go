@@ -121,6 +121,17 @@ func RemovePool(phpBaseDir, phpVersion, user string) error {
 	return nil
 }
 
+// ReloadFPM gracefully reloads the PHP-FPM service for a specific version
+func ReloadFPM(version string) error {
+	service := fmt.Sprintf("php%s-fpm", version)
+	cmd := exec.Command("sudo", "systemctl", "reload", service)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("reload %s failed: %s", service, string(output))
+	}
+	return nil
+}
+
 // RestartFPM restarts the PHP-FPM service for a specific version
 func RestartFPM(version string) error {
 	service := fmt.Sprintf("php%s-fpm", version)

@@ -36,7 +36,7 @@ function renderDashboard(container, stats) {
             <div class="stat-info">
                 <div class="stat-label">Active Sites</div>
                 <div class="stat-value">${stats.total_sites}</div>
-                <div class="stat-sub">PHP-powered sites</div>
+                <div class="stat-sub">Managed websites</div>
             </div>
         </div>
         <div class="stat-card">
@@ -73,10 +73,11 @@ function renderDashboard(container, stats) {
                     <label style="font-size: var(--font-size-xs); color: var(--text-tertiary); margin-right: var(--space-2);">Auto-refresh:</label>
                     <select class="form-select" id="refresh-selector" style="width: auto; min-width: 80px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
                         <option value="0" ${savedInterval === '0' ? 'selected' : ''}>Off</option>
-                        <option value="5000" ${savedInterval === '5000' ? 'selected' : ''}>5s</option>
                         <option value="10000" ${savedInterval === '10000' ? 'selected' : ''}>10s</option>
                         <option value="15000" ${savedInterval === '15000' ? 'selected' : ''}>15s</option>
                         <option value="30000" ${savedInterval === '30000' ? 'selected' : ''}>30s</option>
+                        <option value="45000" ${savedInterval === '45000' ? 'selected' : ''}>45s</option>
+                        <option value="60000" ${savedInterval === '60000' ? 'selected' : ''}>60s</option>
                     </select>
                 </div>
             </div>
@@ -111,6 +112,15 @@ function renderServerInfo(stats) {
                 <div class="info-item">
                     <span class="info-label">Architecture</span>
                     <span class="info-value"><span class="badge badge-primary">${stats.arch || 'arm64'}</span></span>
+                </div>
+                ${stats.cpu_model ? `
+                <div class="info-item">
+                    <span class="info-label">CPU</span>
+                    <span class="info-value">${stats.cpu_model}</span>
+                </div>` : ''}
+                <div class="info-item">
+                    <span class="info-label">CPU Cores</span>
+                    <span class="info-value"><span class="badge badge-info">${stats.cpu_cores || 'N/A'}</span></span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">PHP Versions</span>

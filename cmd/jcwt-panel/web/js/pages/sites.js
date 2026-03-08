@@ -14,7 +14,7 @@ export async function render(container) {
         <div class="page-header">
             <div class="page-header-left">
                 <h2>Managed Sites</h2>
-                <p>Create and manage your PHP websites</p>
+                <p>Create and manage your websites</p>
             </div>
             <button class="btn btn-primary" id="add-site-btn">
                 <span class="nav-icon" style="width:16px;height:16px;">${icons.plus}</span>
@@ -24,9 +24,9 @@ export async function render(container) {
 
         ${siteList.length === 0 ? `
             <div class="empty-state">
-                <div class="empty-state-icon">🌍</div>
+                <div class="empty-state-icon"><span class="nav-icon" style="width:48px;height:48px;color:var(--primary)">${icons.sites}</span></div>
                 <div class="empty-state-title">No sites yet</div>
-                <div class="empty-state-text">Create your first PHP website to get started.</div>
+                <div class="empty-state-text">Create your first website to get started.</div>
             </div>
         ` : `
             <div class="table-container">
@@ -35,7 +35,7 @@ export async function render(container) {
                         <tr>
                             <th>Domain</th>
                             <th>System User</th>
-                            <th>PHP</th>
+                            <th>Type</th>
                             <th>SSL</th>
                             <th>Created</th>
                             <th>Actions</th>
@@ -182,7 +182,7 @@ export async function render(container) {
 
     } catch (err) {
         container.innerHTML = `<div class="empty-state">
-            <div class="empty-state-icon">⚠️</div>
+            <div class="empty-state-icon"><span class="nav-icon" style="width:48px;height:48px;color:var(--status-warning)">${icons.alertTriangle}</span></div>
             <div class="empty-state-title">Error</div>
             <div class="empty-state-text">${err.message}</div>
         </div>`;

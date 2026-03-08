@@ -230,9 +230,9 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		return 0, fmt.Errorf("start process: %w", err)
 	}
 
-	// Wait for it to bind (up to 3 seconds)
+	// Wait for it to bind (up to 6 seconds)
 	bound := false
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 12; i++ {
 		time.Sleep(500 * time.Millisecond)
 
 		// Check if process has already crashed
@@ -328,8 +328,8 @@ func (p *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var resp *http.Response
 	var lastErr error
 
-	// Retry up to 3 times (file browser may still be starting)
-	for attempt := 0; attempt < 3; attempt++ {
+	// Retry up to 5 times (file browser may still be starting)
+	for attempt := 0; attempt < 5; attempt++ {
 		proxyReq, err := http.NewRequest(r.Method, targetURL, r.Body)
 		if err != nil {
 			http.Error(w, "proxy error", http.StatusBadGateway)
@@ -348,7 +348,7 @@ func (p *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		// Wait before retry
-		time.Sleep(700 * time.Millisecond)
+		time.Sleep(1500 * time.Millisecond)
 	}
 
 	if lastErr != nil {
