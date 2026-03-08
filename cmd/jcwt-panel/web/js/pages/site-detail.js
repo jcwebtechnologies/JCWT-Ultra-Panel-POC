@@ -258,9 +258,12 @@ async function renderPHP(el, siteId) {
     }
     try {
         const settings = await phpSettings.get(siteId);
+        const site = await request(`/api/sites?id=${siteId}`);
+        const poolPath = site.php_version && site.system_user ? `/etc/php/${site.php_version}/fpm/pool.d/${site.system_user}.conf` : '';
         el.innerHTML = `
         <div class="card">
             <h3 class="card-title" style="margin-bottom: var(--space-4);">PHP Pool Settings</h3>
+            ${poolPath ? `<div class="info-item" style="margin-bottom:var(--space-4);"><span class="info-label">Pool Config</span><span class="info-value mono" style="font-size:var(--font-size-xs);">${escapeHtml(poolPath)}</span></div>` : ''}
             <form id="php-settings-form">
                 <div class="form-row">
                     <div class="form-group">
@@ -314,7 +317,7 @@ async function renderPHP(el, siteId) {
                     upload_max_filesize: document.getElementById('php-upload-max').value,
                     custom_directives: document.getElementById('php-custom').value,
                 });
-                showToast('PHP settings saved & FPM restarted!', 'success');
+                showToast('PHP settings saved & FPM reloaded!', 'success');
             } catch (err) { showToast(err.message, 'error'); }
         });
     } catch (err) { el.innerHTML = `<p>Error: ${err.message}</p>`; }
@@ -1092,11 +1095,12 @@ async function renderBackups(container, site, siteId) {
                             ${backups.map(b => `
                             <tr>
                                 <td>${new Date(b.created_at).toLocaleString()}</td>
-                                <td>${escapeHtml(b.size || 'N/A')}</td>
+                                <td>${b.size ? formatBytes(parseInt(b.size)) : 'N/A'}</td>
                                 <td><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${b.type}</span></td>
                                 <td>${escapeHtml(b.method || 'local')}</td>
                                 <td>
                                     <div class="table-actions">
+                                        <a href="/api/backups?action=download&id=${b.id}" class="btn btn-sm btn-secondary" title="Download">${icons.download}</a>
                                         <button class="btn btn-sm btn-secondary restore-backup" data-id="${b.id}">Restore</button>
                                         <button class="btn btn-sm btn-danger delete-backup" data-id="${b.id}">Delete</button>
                                     </div>

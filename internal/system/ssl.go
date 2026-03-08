@@ -4,22 +4,24 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // GenerateSelfSignedCert generates a self-signed SSL certificate for a domain
 func GenerateSelfSignedCert(sslBaseDir, domain string) (certPath, keyPath string, err error) {
 	certDir := filepath.Join(sslBaseDir, domain)
-	if err := os.MkdirAll(certDir, 0700); err != nil {
-		return "", "", fmt.Errorf("create ssl dir: %w", err)
+
+	cmd := exec.Command("sudo", "mkdir", "-p", certDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("create ssl dir: %s: %s", err, string(output))
 	}
 
 	certPath = filepath.Join(certDir, "cert.pem")
 	keyPath = filepath.Join(certDir, "key.pem")
 
-	cmd := exec.Command("sudo", "openssl", "req",
+	cmd = exec.Command("sudo", "openssl", "req",
 		"-x509",
 		"-nodes",
 		"-days", "365",
@@ -33,8 +35,8 @@ func GenerateSelfSignedCert(sslBaseDir, domain string) (certPath, keyPath string
 		return "", "", fmt.Errorf("generate cert: %s: %s", err, string(output))
 	}
 
-	os.Chmod(keyPath, 0600)
-	os.Chmod(certPath, 0644)
+	exec.Command("sudo", "chmod", "0600", keyPath).Run()
+	exec.Command("sudo", "chmod", "0644", certPath).Run()
 
 	return certPath, keyPath, nil
 }
@@ -42,19 +44,35 @@ func GenerateSelfSignedCert(sslBaseDir, domain string) (certPath, keyPath string
 // SaveCustomCert saves uploaded certificate and key files
 func SaveCustomCert(sslBaseDir, domain string, certData, keyData []byte) (certPath, keyPath string, err error) {
 	certDir := filepath.Join(sslBaseDir, domain)
-	if err := os.MkdirAll(certDir, 0700); err != nil {
-		return "", "", fmt.Errorf("create ssl dir: %w", err)
+
+	// Use sudo to create directory since panel user may not have permission
+	cmd := exec.Command("sudo", "mkdir", "-p", certDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("create ssl dir: %s: %s", err, string(output))
 	}
 
 	certPath = filepath.Join(certDir, "cert.pem")
 	keyPath = filepath.Join(certDir, "key.pem")
 
-	if err := os.WriteFile(certPath, certData, 0644); err != nil {
-		return "", "", fmt.Errorf("write cert: %w", err)
+	// Write cert via sudo tee
+	cmd = exec.Command("sudo", "tee", certPath)
+	cmd.Stdin = strings.NewReader(string(certData))
+	cmd.Stdout = nil
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("write cert: %s: %s", err, string(output))
 	}
-	if err := os.WriteFile(keyPath, keyData, 0600); err != nil {
-		return "", "", fmt.Errorf("write key: %w", err)
+
+	// Write key via sudo tee
+	cmd = exec.Command("sudo", "tee", keyPath)
+	cmd.Stdin = strings.NewReader(string(keyData))
+	cmd.Stdout = nil
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("write key: %s: %s", err, string(output))
 	}
+
+	// Set permissions
+	exec.Command("sudo", "chmod", "0644", certPath).Run()
+	exec.Command("sudo", "chmod", "0600", keyPath).Run()
 
 	return certPath, keyPath, nil
 }
@@ -62,7 +80,11 @@ func SaveCustomCert(sslBaseDir, domain string, certData, keyData []byte) (certPa
 // RemoveCert removes SSL certificate files for a domain
 func RemoveCert(sslBaseDir, domain string) error {
 	certDir := filepath.Join(sslBaseDir, domain)
-	return os.RemoveAll(certDir)
+	cmd := exec.Command("sudo", "rm", "-rf", certDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("remove certs: %s: %s", err, string(output))
+	}
+	return nil
 }
 
 // GenerateRandomPassword generates a random password

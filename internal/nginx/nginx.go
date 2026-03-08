@@ -61,9 +61,6 @@ server {
         deny all;
     }
 {{- end}}
-
-    # phpMyAdmin (if installed)
-    include /etc/nginx/snippets/phpmyadmin.conf;
 }
 {{- else}}
 server {
@@ -128,9 +125,6 @@ server {
         deny all;
     }
 {{- end}}
-
-    # phpMyAdmin (if installed)
-    include /etc/nginx/snippets/phpmyadmin.conf;
 }
 {{- end}}
 `

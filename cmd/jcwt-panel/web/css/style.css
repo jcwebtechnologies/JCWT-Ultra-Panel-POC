@@ -605,6 +605,17 @@ a:hover {
     color: white;
 }
 
+.btn-success {
+    background: var(--status-ok-soft);
+    color: var(--status-ok);
+    border-color: transparent;
+}
+
+.btn-success:hover {
+    background: var(--status-ok);
+    color: white;
+}
+
 .btn-ghost {
     background: transparent;
     color: var(--text-secondary);

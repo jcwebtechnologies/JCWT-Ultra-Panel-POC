@@ -45,6 +45,12 @@ func (h *BackupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BackupHandler) list(w http.ResponseWriter, r *http.Request) {
+	// Handle download action
+	if r.URL.Query().Get("action") == "download" {
+		h.download(w, r)
+		return
+	}
+
 	siteIDStr := r.URL.Query().Get("site_id")
 	if siteIDStr == "" {
 		// List backup methods (panel-wide)
@@ -223,6 +229,32 @@ func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "backup deleted"})
+}
+
+func (h *BackupHandler) download(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	backup, err := h.DB.GetBackup(id)
+	if err != nil {
+		jsonError(w, "backup not found", http.StatusNotFound)
+		return
+	}
+
+	filePath := backup["file_path"].(string)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		jsonError(w, "backup file not found on disk", http.StatusNotFound)
+		return
+	}
+
+	filename := filepath.Base(filePath)
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	http.ServeFile(w, r, filePath)
 }
 
 func (h *BackupHandler) updateSchedule(w http.ResponseWriter, r *http.Request) {

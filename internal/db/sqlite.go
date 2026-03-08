@@ -64,7 +64,7 @@ func Open(dataDir string) (*DB, error) {
 		}
 		rows.Close()
 		for _, id := range ids {
-			b := make([]byte, 8)
+			b := make([]byte, 16)
 			cryptoRand.Read(b)
 			token := hex.EncodeToString(b)
 			conn.Exec("UPDATE sites SET token = ? WHERE id = ?", token, id)
@@ -214,7 +214,7 @@ func (d *DB) GetSiteByToken(token string) (map[string]interface{}, error) {
 
 func (d *DB) CreateSite(domain, aliases, sysUser, siteType, phpVersion, proxyUrl, webRoot string) (int64, error) {
 	// Generate random token
-	b := make([]byte, 8)
+	b := make([]byte, 16)
 	cryptoRand.Read(b)
 	token := hex.EncodeToString(b)
 

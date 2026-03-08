@@ -17,8 +17,8 @@ export async function render(container) {
                 <h2>Firewall Rules</h2>
                 <p>Manage UFW firewall rules for your server</p>
             </div>
-            <div class="page-header-actions">
-                <button class="btn ${status === 'active' ? 'btn-danger' : 'btn-primary'}" id="toggle-fw-btn">
+            <div class="page-header-actions" style="gap:var(--space-3);">
+                <button class="btn ${status === 'active' ? 'btn-danger' : 'btn-success'}" id="toggle-fw-btn">
                     ${status === 'active' ? 'Disable Firewall' : 'Enable Firewall'}
                 </button>
                 <button class="btn btn-primary" id="add-rule-btn">
@@ -64,7 +64,7 @@ export async function render(container) {
                                     <td>${r.source ? escapeHtml(r.source) : '<span style="color:var(--text-tertiary)">any</span>'}</td>
                                     <td style="color:var(--text-secondary);font-size:var(--font-size-sm);">${escapeHtml(r.comment || '')}</td>
                                     <td>
-                                        <label class="toggle-switch" style="margin:0;">
+                                        <label class="toggle" style="margin:0;">
                                             <input type="checkbox" ${r.enabled ? 'checked' : ''} data-toggle-rule="${r.id}">
                                             <span class="toggle-slider"></span>
                                         </label>
@@ -85,8 +85,12 @@ export async function render(container) {
         // Toggle firewall
         document.getElementById('toggle-fw-btn')?.addEventListener('click', async () => {
             const enable = status !== 'active';
-            const msg = enable ? 'Enable the firewall? Make sure SSH is allowed.' : 'Disable the firewall?';
-            const confirmed = await showConfirm(msg);
+            const confirmed = await showConfirm(
+                enable ? 'Enable Firewall' : 'Disable Firewall',
+                enable ? 'Enable the firewall? Make sure SSH (port 22) is allowed before proceeding.' : 'Disable the firewall? All traffic will be allowed.',
+                enable ? 'Enable' : 'Disable',
+                enable ? 'btn-success' : 'btn-danger'
+            );
             if (!confirmed) return;
             try {
                 await firewall.toggle(enable);
@@ -124,7 +128,7 @@ export async function render(container) {
         // Delete rules
         container.querySelectorAll('[data-delete-rule]').forEach(btn => {
             btn.addEventListener('click', async () => {
-                const confirmed = await showConfirm('Delete this firewall rule?');
+                const confirmed = await showConfirm('Delete Firewall Rule', 'Are you sure you want to delete this rule? This action cannot be undone.', 'Delete', 'btn-danger');
                 if (!confirmed) return;
                 try {
                     await firewall.delete(parseInt(btn.dataset.deleteRule));
