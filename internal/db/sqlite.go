@@ -53,6 +53,11 @@ func Open(dataDir string) (*DB, error) {
 
 	// Add token column to sites
 	conn.Exec("ALTER TABLE sites ADD COLUMN token TEXT DEFAULT ''")
+
+	// Add download_token column to backups
+	conn.Exec("ALTER TABLE backups ADD COLUMN download_token TEXT DEFAULT ''")
+	conn.Exec("ALTER TABLE backups ADD COLUMN download_token_expires DATETIME DEFAULT NULL")
+
 	// Generate tokens for any existing sites that don't have one
 	rows, _ := conn.Query("SELECT id FROM sites WHERE token = '' OR token IS NULL")
 	if rows != nil {
@@ -576,6 +581,39 @@ func (d *DB) CleanOldBackups(siteID int64, keep int) error {
 		SELECT id FROM backups WHERE site_id = ? ORDER BY id DESC LIMIT ?
 	)`, siteID, siteID, keep)
 	return err
+}
+
+// GenerateBackupDownloadToken creates a one-time download token for a backup (valid 5 minutes)
+func (d *DB) GenerateBackupDownloadToken(backupID int64) (string, error) {
+	b := make([]byte, 32)
+	cryptoRand.Read(b)
+	token := hex.EncodeToString(b)
+	_, err := d.Conn.Exec(
+		"UPDATE backups SET download_token = ?, download_token_expires = datetime('now', '+5 minutes') WHERE id = ?",
+		token, backupID,
+	)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// ValidateBackupDownloadToken validates and consumes a one-time download token
+func (d *DB) ValidateBackupDownloadToken(token string) (map[string]interface{}, error) {
+	var id, siteID int64
+	var filePath string
+	err := d.Conn.QueryRow(
+		"SELECT id, site_id, file_path FROM backups WHERE download_token = ? AND download_token_expires > datetime('now')",
+		token,
+	).Scan(&id, &siteID, &filePath)
+	if err != nil {
+		return nil, err
+	}
+	// Invalidate the token after use (single-use)
+	d.Conn.Exec("UPDATE backups SET download_token = '', download_token_expires = NULL WHERE id = ?", id)
+	return map[string]interface{}{
+		"id": id, "site_id": siteID, "file_path": filePath,
+	}, nil
 }
 
 // --- Backup Schedule queries ---

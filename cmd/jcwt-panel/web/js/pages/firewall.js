@@ -70,9 +70,14 @@ export async function render(container) {
                                         </label>
                                     </td>
                                     <td>
-                                        <button class="btn btn-sm btn-danger" data-delete-rule="${r.id}" title="Delete">
-                                            <span class="nav-icon" style="width:14px;height:14px;">${icons.trash}</span>
-                                        </button>
+                                        <div class="table-actions">
+                                            <button class="btn btn-sm btn-secondary" data-edit-rule="${r.id}" title="Edit">
+                                                <span class="nav-icon" style="width:14px;height:14px;">${icons.edit}</span>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" data-delete-rule="${r.id}" title="Delete">
+                                                <span class="nav-icon" style="width:14px;height:14px;">${icons.trash}</span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -122,6 +127,15 @@ export async function render(container) {
                     showToast(err.message, 'error');
                     cb.checked = !cb.checked;
                 }
+            });
+        });
+
+        // Edit rules
+        container.querySelectorAll('[data-edit-rule]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = parseInt(btn.dataset.editRule);
+                const rule = rules.find(r => r.id === id);
+                if (rule) showEditRuleForm(container, rule);
             });
         });
 
@@ -234,6 +248,102 @@ function showAddRuleForm(container) {
                 comment: document.getElementById('rule-comment').value.trim(),
             });
             showToast('Firewall rule added', 'success');
+            render(container);
+        } catch (err) { showToast(err.message, 'error'); }
+    });
+}
+
+function showEditRuleForm(container, rule) {
+    // Remove any existing edit/add card
+    document.getElementById('add-rule-card')?.remove();
+    document.getElementById('edit-rule-card')?.remove();
+
+    function selOpts(options, current) {
+        return options.map(o => `<option value="${o.value}" ${o.value === current ? 'selected' : ''}>${o.label}</option>`).join('');
+    }
+
+    const card = document.createElement('div');
+    card.id = 'edit-rule-card';
+    card.className = 'card';
+    card.style.marginBottom = 'var(--space-4)';
+    card.innerHTML = `
+        <h3 style="margin-bottom:var(--space-4);">Edit Firewall Rule</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-3);margin-bottom:var(--space-4);">
+            <div>
+                <label class="form-label">Direction</label>
+                <select class="form-select" id="edit-rule-direction">
+                    ${selOpts([{value:'in',label:'Incoming'},{value:'out',label:'Outgoing'}], rule.direction)}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Action</label>
+                <select class="form-select" id="edit-rule-action">
+                    ${selOpts([{value:'allow',label:'Allow'},{value:'deny',label:'Deny'},{value:'reject',label:'Reject'}], rule.action)}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Protocol</label>
+                <select class="form-select" id="edit-rule-protocol">
+                    ${selOpts([{value:'tcp',label:'TCP'},{value:'udp',label:'UDP'},{value:'any',label:'Any'}], rule.protocol)}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Port</label>
+                <input type="text" class="form-input" id="edit-rule-port" value="${escapeHtml(rule.port)}" inputmode="numeric" pattern="[0-9:\\-]+">
+            </div>
+            <div>
+                <label class="form-label">Source (optional)</label>
+                <input type="text" class="form-input" id="edit-rule-source" value="${escapeHtml(rule.source || '')}">
+            </div>
+            <div>
+                <label class="form-label">Comment</label>
+                <input type="text" class="form-input" id="edit-rule-comment" value="${escapeHtml(rule.comment || '')}">
+            </div>
+        </div>
+        <div style="display:flex;gap:var(--space-2);justify-content:flex-end;">
+            <button class="btn btn-secondary" id="cancel-edit-rule-btn">Cancel</button>
+            <button class="btn btn-primary" id="save-edit-rule-btn">Save Changes</button>
+        </div>
+    `;
+
+    const statusBar = container.querySelector('.fw-status');
+    if (statusBar) {
+        statusBar.after(card);
+    } else {
+        container.querySelector('.card')?.before(card);
+    }
+
+    document.getElementById('cancel-edit-rule-btn')?.addEventListener('click', () => card.remove());
+    document.getElementById('save-edit-rule-btn')?.addEventListener('click', async () => {
+        const port = document.getElementById('edit-rule-port').value.trim();
+        if (!port) {
+            showToast('Port is required', 'error');
+            return;
+        }
+        if (!/^\d+([:\-]\d+)?$/.test(port)) {
+            showToast('Port must be a number (e.g. 8080) or range (e.g. 3000:3100)', 'error');
+            return;
+        }
+        const parts = port.split(/[:\-]/);
+        for (const p of parts) {
+            const n = parseInt(p, 10);
+            if (n < 1 || n > 65535) {
+                showToast('Port must be between 1 and 65535', 'error');
+                return;
+            }
+        }
+        try {
+            await firewall.update({
+                id: rule.id,
+                direction: document.getElementById('edit-rule-direction').value,
+                action: document.getElementById('edit-rule-action').value,
+                protocol: document.getElementById('edit-rule-protocol').value,
+                port,
+                source: document.getElementById('edit-rule-source').value.trim(),
+                comment: document.getElementById('edit-rule-comment').value.trim(),
+                enabled: rule.enabled,
+            });
+            showToast('Firewall rule updated', 'success');
             render(container);
         } catch (err) { showToast(err.message, 'error'); }
     });

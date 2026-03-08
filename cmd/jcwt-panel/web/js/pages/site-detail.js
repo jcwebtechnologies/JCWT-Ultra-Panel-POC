@@ -1100,7 +1100,7 @@ async function renderBackups(container, site, siteId) {
                                 <td>${escapeHtml(b.method || 'local')}</td>
                                 <td>
                                     <div class="table-actions">
-                                        <a href="/api/backups?action=download&id=${b.id}" class="btn btn-sm btn-secondary" title="Download">${icons.download}</a>
+                                        <button class="btn btn-sm btn-secondary download-backup" data-id="${b.id}" title="Download"><span class="nav-icon" style="width:14px;height:14px;">${icons.download}</span></button>
                                         <button class="btn btn-sm btn-secondary restore-backup" data-id="${b.id}">Restore</button>
                                         <button class="btn btn-sm btn-danger delete-backup" data-id="${b.id}">Delete</button>
                                     </div>
@@ -1140,6 +1140,24 @@ async function renderBackups(container, site, siteId) {
             } catch (err) { showToast(err.message, 'error'); }
         });
 
+        container.querySelectorAll('.download-backup').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    const data = await request('/api/backups?action=download-token', {
+                        method: 'POST',
+                        body: JSON.stringify({ backup_id: parseInt(btn.dataset.id) }),
+                    });
+                    // Open download in new tab/trigger using the one-time token
+                    const a = document.createElement('a');
+                    a.href = `/api/backups?action=download&token=${encodeURIComponent(data.token)}`;
+                    a.download = '';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
         container.querySelectorAll('.restore-backup').forEach(btn => {
             btn.addEventListener('click', async () => {
                 if (!await showConfirm('Restore Backup', 'Restore this backup? Current site files will be replaced. This cannot be undone.', 'Restore', 'btn-danger')) return;
@@ -1171,7 +1189,7 @@ async function renderBackups(container, site, siteId) {
 // ---- Logs Viewer ----
 async function renderLogs(container, site, siteId) {
     let activeLog = 'access';
-    let logLines = 100;
+    let logLines = 25;
 
     async function loadLog() {
         container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
@@ -1188,7 +1206,7 @@ async function renderLogs(container, site, siteId) {
                             ${site.site_type === 'php' ? `<option value="php-fpm" ${activeLog === 'php-fpm' ? 'selected' : ''}>PHP-FPM Error</option>` : ''}
                         </select>
                         <select class="form-select" id="log-lines" style="width: auto; min-width: 80px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
-                            ${[50,100,200,500].map(n => `<option value="${n}" ${logLines === n ? 'selected' : ''}>${n} lines</option>`).join('')}
+                            ${[25,50,100,200,500].map(n => `<option value="${n}" ${logLines === n ? 'selected' : ''}>${n} lines</option>`).join('')}
                         </select>
                         <button class="btn btn-sm btn-ghost" id="refresh-logs">${icons.refresh} Refresh</button>
                     </div>

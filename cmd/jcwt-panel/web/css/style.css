@@ -398,12 +398,20 @@ a:hover {
 
 .mobile-menu-btn {
     display: none;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: var(--text-primary);
     cursor: pointer;
     padding: var(--space-2);
     border-radius: var(--radius-sm);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-menu-btn .nav-icon {
+    width: 24px;
+    height: 24px;
 }
 
 .mobile-menu-btn:hover {
@@ -606,13 +614,13 @@ a:hover {
 }
 
 .btn-success {
-    background: var(--status-ok-soft);
-    color: var(--status-ok);
+    background: var(--status-success-soft);
+    color: var(--status-success);
     border-color: transparent;
 }
 
 .btn-success:hover {
-    background: var(--status-ok);
+    background: var(--status-success);
     color: white;
 }
 

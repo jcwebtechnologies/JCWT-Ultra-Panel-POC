@@ -98,8 +98,8 @@ export const dbUsers = {
 
 // SSL
 export const ssl = {
-    selfSigned: (siteId) => request(`/api/ssl?action=self-signed&site_id=${siteId}`, { method: 'POST' }),
-    custom: (siteId, formData) => request(`/api/ssl?action=custom&site_id=${siteId}`, { method: 'POST', body: formData }),
+    selfSigned: (siteId) => request(`/api/ssl-certs?type=self-signed&site_id=${siteId}`, { method: 'POST' }),
+    custom: (siteId, formData) => request(`/api/ssl-certs?type=custom&site_id=${siteId}`, { method: 'POST', body: formData }),
     disable: (siteId) => request(`/api/ssl?action=disable&site_id=${siteId}`, { method: 'POST' }),
 };
 

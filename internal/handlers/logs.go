@@ -61,7 +61,15 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command("sudo", "tail", "-n", strconv.Itoa(lines), logPath)
+	var cmd *exec.Cmd
+	if logType == "php-fpm" {
+		// For PHP-FPM logs, filter out NOTICE lines to show only errors/warnings
+		// Read more lines then filter and limit to requested count
+		shellCmd := fmt.Sprintf("sudo tail -n %d %s | grep -v '] NOTICE:' | tail -n %d; exit 0", lines*10, logPath, lines)
+		cmd = exec.Command("bash", "-c", shellCmd)
+	} else {
+		cmd = exec.Command("sudo", "tail", "-n", strconv.Itoa(lines), logPath)
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Log file may not exist yet

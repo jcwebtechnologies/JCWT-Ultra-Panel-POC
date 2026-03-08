@@ -34,6 +34,8 @@ func (h *BackupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.create(w, r)
 		case "schedule":
 			h.updateSchedule(w, r)
+		case "download-token":
+			h.generateDownloadToken(w, r)
 		default:
 			h.create(w, r)
 		}
@@ -232,16 +234,15 @@ func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BackupHandler) download(w http.ResponseWriter, r *http.Request) {
-	idStr := r.URL.Query().Get("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		jsonError(w, "invalid id", http.StatusBadRequest)
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		jsonError(w, "download token required", http.StatusBadRequest)
 		return
 	}
 
-	backup, err := h.DB.GetBackup(id)
+	backup, err := h.DB.ValidateBackupDownloadToken(token)
 	if err != nil {
-		jsonError(w, "backup not found", http.StatusNotFound)
+		jsonError(w, "invalid or expired download token", http.StatusForbidden)
 		return
 	}
 
@@ -254,7 +255,33 @@ func (h *BackupHandler) download(w http.ResponseWriter, r *http.Request) {
 	filename := filepath.Base(filePath)
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Cache-Control", "no-store")
 	http.ServeFile(w, r, filePath)
+}
+
+// generateDownloadToken creates a one-time download token for a backup
+func (h *BackupHandler) generateDownloadToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		BackupID int64 `json:"backup_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Verify backup exists
+	if _, err := h.DB.GetBackup(req.BackupID); err != nil {
+		jsonError(w, "backup not found", http.StatusNotFound)
+		return
+	}
+
+	token, err := h.DB.GenerateBackupDownloadToken(req.BackupID)
+	if err != nil {
+		jsonError(w, "failed to generate download token", http.StatusInternalServerError)
+		return
+	}
+
+	jsonSuccess(w, map[string]interface{}{"token": token})
 }
 
 func (h *BackupHandler) updateSchedule(w http.ResponseWriter, r *http.Request) {
