@@ -131,16 +131,25 @@ function renderServerInfo(stats) {
                 </div>`;
 }
 
+function formatMemory(mb) {
+    if (mb >= 1024) return (mb / 1024).toFixed(1) + ' GB';
+    return mb + ' MB';
+}
+
 function renderResources(stats) {
+    const memUsed = stats.memory_used_mb || 0;
+    const memTotal = stats.memory_total_mb || 0;
+    const memPct = Math.round(stats.memory_used_pct || 0);
+
     return `
     <div style="display: flex; flex-direction: column; gap: var(--space-4);">
         <div>
             <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-2);">
-                <span style="font-size: var(--font-size-sm); color: var(--text-secondary);">Memory</span>
-                <span style="font-size: var(--font-size-sm); font-weight: 600;">${stats.memory_used_mb || 0} / ${stats.memory_total_mb || 0} MB</span>
+                <span style="font-size: var(--font-size-sm); color: var(--text-secondary);">Memory Utilised</span>
+                <span style="font-size: var(--font-size-sm); font-weight: 600;">${formatMemory(memUsed)} / ${formatMemory(memTotal)} (${memPct}%)</span>
             </div>
             <div class="progress-bar">
-                <div class="progress-fill" style="width: ${Math.round(stats.memory_used_pct || 0)}%"></div>
+                <div class="progress-fill" style="width: ${memPct}%"></div>
             </div>
         </div>
         <div>

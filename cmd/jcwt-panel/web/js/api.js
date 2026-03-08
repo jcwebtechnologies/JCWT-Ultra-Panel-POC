@@ -93,6 +93,7 @@ export const dbUsers = {
     list: () => request('/api/db-users'),
     create: (data) => request('/api/db-users', { method: 'POST', body: JSON.stringify(data) }),
     changePassword: (data) => request('/api/db-users', { method: 'PUT', body: JSON.stringify(data) }),
+    updatePrivilege: (data) => request('/api/db-users?action=privilege', { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => request(`/api/db-users?id=${id}`, { method: 'DELETE' }),
 };
 
@@ -100,7 +101,6 @@ export const dbUsers = {
 export const ssl = {
     selfSigned: (siteId) => request(`/api/ssl-certs?type=self-signed&site_id=${siteId}`, { method: 'POST' }),
     custom: (siteId, formData) => request(`/api/ssl-certs?type=custom&site_id=${siteId}`, { method: 'POST', body: formData }),
-    disable: (siteId) => request(`/api/ssl?action=disable&site_id=${siteId}`, { method: 'POST' }),
 };
 
 // Cron

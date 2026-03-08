@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS db_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     database_id INTEGER REFERENCES databases(id) ON DELETE CASCADE,
+    privilege_level TEXT DEFAULT 'administrator',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

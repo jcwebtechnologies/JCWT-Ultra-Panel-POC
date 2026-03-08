@@ -41,10 +41,32 @@ func MariaDBDropUser(username string) error {
 	return nil
 }
 
-// MariaDBGrantAccess grants a user full access to a database on all hosts
-func MariaDBGrantAccess(username, dbName string) error {
+// MariaDBGrantAccess grants a user access to a database on all hosts with the specified privilege level.
+// Supported levels: readonly, readwrite, full, administrator
+func MariaDBGrantAccess(username, dbName string, privileges ...string) error {
+	level := "administrator"
+	if len(privileges) > 0 && privileges[0] != "" {
+		level = privileges[0]
+	}
+
+	var grantSQL string
+	switch level {
+	case "readonly":
+		grantSQL = "SELECT"
+	case "readwrite":
+		grantSQL = "SELECT, INSERT, UPDATE, DELETE"
+	case "full":
+		grantSQL = "SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, TRIGGER, REFERENCES"
+	default: // administrator
+		grantSQL = "ALL PRIVILEGES"
+	}
+
 	for _, host := range allHosts {
-		sql := fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'%s';", dbName, username, host)
+		// Revoke first to reset any existing privileges
+		revokeSQL := fmt.Sprintf("REVOKE ALL PRIVILEGES ON `%s`.* FROM '%s'@'%s';", dbName, username, host)
+		execMariaDB(revokeSQL) // ignore errors — may not have grants yet
+
+		sql := fmt.Sprintf("GRANT %s ON `%s`.* TO '%s'@'%s';", grantSQL, dbName, username, host)
 		if err := execMariaDB(sql); err != nil {
 			return err
 		}

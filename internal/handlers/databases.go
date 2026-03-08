@@ -121,7 +121,13 @@ func (h *DBUsersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "POST":
 		h.create(w, r)
 	case "PUT":
-		h.changePassword(w, r)
+		action := r.URL.Query().Get("action")
+		switch action {
+		case "privilege":
+			h.updatePrivilege(w, r)
+		default:
+			h.changePassword(w, r)
+		}
 	case "DELETE":
 		h.delete(w, r)
 	default:
@@ -143,9 +149,10 @@ func (h *DBUsersHandler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *DBUsersHandler) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Username   string `json:"username"`
-		Password   string `json:"password"`
-		DatabaseID int64  `json:"database_id"`
+		Username       string `json:"username"`
+		Password       string `json:"password"`
+		DatabaseID     int64  `json:"database_id"`
+		PrivilegeLevel string `json:"privilege_level"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -162,6 +169,16 @@ func (h *DBUsersHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Password) < 8 {
 		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
+
+	// Validate privilege level
+	validLevels := map[string]bool{"readonly": true, "readwrite": true, "full": true, "administrator": true}
+	if req.PrivilegeLevel == "" {
+		req.PrivilegeLevel = "administrator"
+	}
+	if !validLevels[req.PrivilegeLevel] {
+		jsonError(w, "invalid privilege_level: use readonly, readwrite, full, or administrator", http.StatusBadRequest)
 		return
 	}
 
@@ -187,20 +204,20 @@ func (h *DBUsersHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Grant access
-	if err := system.MariaDBGrantAccess(req.Username, dbName); err != nil {
+	// Grant access with privilege level
+	if err := system.MariaDBGrantAccess(req.Username, dbName, req.PrivilegeLevel); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Store in panel DB
-	id, err := h.DB.CreateDBUser(req.Username, req.DatabaseID)
+	id, err := h.DB.CreateDBUser(req.Username, req.DatabaseID, req.PrivilegeLevel)
 	if err != nil {
 		jsonError(w, "failed to save user record", http.StatusInternalServerError)
 		return
 	}
 
-	jsonSuccess(w, map[string]interface{}{"id": id, "username": req.Username})
+	jsonSuccess(w, map[string]interface{}{"id": id, "username": req.Username, "privilege_level": req.PrivilegeLevel})
 }
 
 func (h *DBUsersHandler) changePassword(w http.ResponseWriter, r *http.Request) {
@@ -228,6 +245,53 @@ func (h *DBUsersHandler) changePassword(w http.ResponseWriter, r *http.Request) 
 	}
 
 	jsonSuccess(w, map[string]interface{}{"updated": true})
+}
+
+func (h *DBUsersHandler) updatePrivilege(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID             int64  `json:"id"`
+		PrivilegeLevel string `json:"privilege_level"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	validLevels := map[string]bool{"readonly": true, "readwrite": true, "full": true, "administrator": true}
+	if !validLevels[req.PrivilegeLevel] {
+		jsonError(w, "invalid privilege_level: use readonly, readwrite, full, or administrator", http.StatusBadRequest)
+		return
+	}
+
+	// Look up the user and their database
+	var username string
+	var dbID int64
+	err := h.DB.Conn.QueryRow("SELECT username, database_id FROM db_users WHERE id = ?", req.ID).Scan(&username, &dbID)
+	if err != nil {
+		jsonError(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	var dbName string
+	h.DB.Conn.QueryRow("SELECT db_name FROM databases WHERE id = ?", dbID).Scan(&dbName)
+	if dbName == "" {
+		jsonError(w, "database not found", http.StatusNotFound)
+		return
+	}
+
+	// Update MariaDB grants
+	if err := system.MariaDBGrantAccess(username, dbName, req.PrivilegeLevel); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Update panel DB
+	if err := h.DB.UpdateDBUserPrivilege(req.ID, req.PrivilegeLevel); err != nil {
+		jsonError(w, "failed to update privilege level", http.StatusInternalServerError)
+		return
+	}
+
+	jsonSuccess(w, map[string]interface{}{"updated": true, "privilege_level": req.PrivilegeLevel})
 }
 
 func (h *DBUsersHandler) delete(w http.ResponseWriter, r *http.Request) {

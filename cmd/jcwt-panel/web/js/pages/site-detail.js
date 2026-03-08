@@ -1,5 +1,5 @@
 // JCWT Ultra Panel — Site Detail Page (SSL, PHP Settings, Cron, Files)
-import { sites, phpVersions, ssl, phpSettings, cron, files, databases } from '../api.js';
+import { sites, phpVersions, ssl, phpSettings, cron, files, databases, dbUsers } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes, showConfirm } from '../app.js';
 import { request } from '../api.js';
 
@@ -20,15 +20,20 @@ export async function render(container, siteToken, section) {
 
         function renderPage() {
             container.innerHTML = `
-            <div class="page-header">
+            <div class="page-header" style="margin-bottom: var(--space-5);">
                 <div class="page-header-left">
-                    <h2><a href="http://${escapeHtml(site.domain)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;" title="Open site in new tab">${escapeHtml(site.domain)} <span style="font-size: var(--font-size-xs); opacity: 0.5;">↗</span></a></h2>
-                    <p>User: <span class="mono">${escapeHtml(site.system_user)}</span> · Web root: <span class="mono">${escapeHtml(site.web_root)}</span></p>
+                    <h2 style="display: flex; align-items: center; gap: var(--space-2);">
+                        <a href="http://${escapeHtml(site.domain)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;" title="Open site in new tab">${escapeHtml(site.domain)} <span style="font-size: var(--font-size-xs); opacity: 0.4;">↗</span></a>
+                    </h2>
+                    <div style="display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-1); color: var(--text-secondary); font-size: var(--font-size-sm);">
+                        <span style="display: flex; align-items: center; gap: var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;">${icons.key}</span> ${escapeHtml(site.system_user)}</span>
+                        <span style="display: flex; align-items: center; gap: var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;">${icons.folder}</span> ${escapeHtml(site.web_root)}</span>
+                    </div>
                 </div>
-                <a href="#/sites" class="btn btn-secondary">← Back to Sites</a>
+                <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:16px;height:16px;">${icons.sites}</span> All Sites</a>
             </div>
 
-            ${activeSection ? `<div style="margin-bottom: var(--space-4);"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-ghost">← Back to overview</a></div>` : `
+            ${activeSection ? `<div style="margin-bottom: var(--space-4);"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-ghost" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:14px;height:14px;">${icons.dashboard}</span> Site Overview</a></div>` : `
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Configuration</div>
                 <div class="site-cards-grid">
@@ -58,6 +63,10 @@ export async function render(container, siteToken, section) {
                     <div class="site-card" data-section="databases">
                         <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.database}</span></div>
                         <div class="site-card-title">Databases</div>
+                    </div>
+                    <div class="site-card" data-section="dbusers">
+                        <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.users}</span></div>
+                        <div class="site-card-title">Database Users</div>
                     </div>
                     <div class="site-card" data-section="cron">
                         <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.clock}</span></div>
@@ -111,6 +120,7 @@ export async function render(container, siteToken, section) {
                     case 'overview': renderOverview(sectionContent, site, versions, siteId); break;
                     case 'php': renderPHP(sectionContent, siteId); break;
                     case 'databases': renderDatabases(sectionContent, siteId, site, renderPage); break;
+                    case 'dbusers': renderDBUsers(sectionContent, siteId, site, renderPage); break;
                     case 'ssl': renderSSL(sectionContent, site, siteId); break;
                     case 'cron': renderCron(sectionContent, siteId); break;
                     case 'security': renderSecurity(sectionContent, site, siteId, renderPage); break;
@@ -346,7 +356,6 @@ function renderSSL(el, site, siteId) {
                 <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4);">
                     ${!hasSelfSigned ? `<button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>` : ''}
                     <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Certificate</button>
-                    ${site.ssl_type !== 'none' ? `<button class="btn btn-danger" id="ssl-disable">Disable SSL</button>` : ''}
                 </div>
             </div>
         </div>
@@ -428,17 +437,6 @@ function renderSSL(el, site, siteId) {
             });
         });
 
-        // Disable SSL
-        document.getElementById('ssl-disable')?.addEventListener('click', async () => {
-            if (!await showConfirm('Disable SSL', 'Disable SSL for this site? The site will no longer be served over HTTPS.', 'Disable SSL', 'btn-danger')) return;
-            try {
-                await ssl.disable(siteId);
-                showToast('SSL disabled', 'success');
-                const mod = await import('./site-detail.js');
-                mod.render(document.getElementById('page-content'), site.token, 'ssl');
-            } catch (err) { showToast(err.message, 'error'); }
-        });
-
         // Activate cert
         el.querySelectorAll('.activate-cert').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -479,7 +477,6 @@ function renderSSL(el, site, siteId) {
             <div style="display: flex; gap: var(--space-3); flex-wrap: wrap;">
                 <button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>
                 <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Custom Certificate</button>
-                ${site.ssl_type !== 'none' ? `<button class="btn btn-danger" id="ssl-disable">Disable SSL</button>` : ''}
             </div>
         </div>`;
 
@@ -526,15 +523,6 @@ function renderSSL(el, site, siteId) {
             });
         });
 
-        document.getElementById('ssl-disable')?.addEventListener('click', async () => {
-            if (!await showConfirm('Disable SSL', 'Disable SSL for this site?', 'Disable SSL', 'btn-danger')) return;
-            try {
-                await ssl.disable(siteId);
-                showToast('SSL disabled', 'success');
-                const mod = await import('./site-detail.js');
-                mod.render(document.getElementById('page-content'), site.token, 'ssl');
-            } catch (err) { showToast(err.message, 'error'); }
-        });
     });
 }
 
@@ -821,6 +809,196 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
                     btn.disabled = false;
                     btn.textContent = '⛁ phpMyAdmin';
                 }
+            });
+        });
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+    }
+}
+
+// ---- Database Users Tab ----
+async function renderDBUsers(container, siteId, site, refreshTabs) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+
+    const privilegeLabels = {
+        'readonly': 'Read Only',
+        'readwrite': 'Read / Write',
+        'full': 'Full',
+        'administrator': 'Administrator'
+    };
+    const privilegeBadge = {
+        'readonly': 'badge-warning',
+        'readwrite': 'badge-info',
+        'full': 'badge-success',
+        'administrator': 'badge-primary'
+    };
+
+    try {
+        const allDbs = await databases.list();
+        const siteDbs = (allDbs || []).filter(db => String(db.site_id) === String(siteId));
+        const allUsers = await dbUsers.list();
+        const siteDbIds = new Set(siteDbs.map(db => db.id));
+        const siteUsers = (allUsers || []).filter(u => siteDbIds.has(u.database_id));
+
+        container.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Database Users for ${escapeHtml(site.domain)}</h3>
+                <button class="btn btn-primary btn-sm" id="add-db-user" ${siteDbs.length === 0 ? 'disabled title="Create a database first"' : ''}>${icons.plus} Create User</button>
+            </div>
+            ${siteUsers.length === 0 ? `
+            <div class="empty-state" style="padding: var(--space-6);">
+                <div class="empty-state-title">No database users</div>
+                <div class="empty-state-text">${siteDbs.length === 0 ? 'Create a database first, then add users.' : 'Create a user with specific privileges for a database.'}</div>
+            </div>` : `
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead><tr><th>Username</th><th>Database</th><th>Privileges</th><th>Created</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        ${siteUsers.map(u => `<tr>
+                                <td>${escapeHtml(u.username)}</td>
+                                <td><span class="badge badge-info">${escapeHtml(u.db_name)}</span></td>
+                                <td>
+                                    <select class="form-select form-select-sm change-privilege" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="width: auto; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
+                                        ${Object.entries(privilegeLabels).map(([val, label]) => `<option value="${val}" ${u.privilege_level === val ? 'selected' : ''}>${label}</option>`).join('')}
+                                    </select>
+                                </td>
+                                <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
+                                <td style="display: flex; gap: var(--space-1);">
+                                    <button class="btn btn-sm btn-secondary change-pwd" data-username="${escapeHtml(u.username)}" title="Change Password">${icons.key} Password</button>
+                                    <button class="btn btn-sm btn-secondary open-pma-user" data-id="${u.database_id}" data-name="${escapeHtml(u.db_name)}" title="Open phpMyAdmin">⛁ phpMyAdmin</button>
+                                    <button class="btn btn-sm btn-danger delete-db-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}">Delete</button>
+                                </td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`}
+        </div>`;
+
+        // Create User button
+        document.getElementById('add-db-user')?.addEventListener('click', () => {
+            const dbOpts = siteDbs.map(db => `<option value="${db.id}">${escapeHtml(db.db_name)}</option>`).join('');
+            showModal('Create Database User', `
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" class="form-input" id="new-dbuser-name" placeholder="app_user" required pattern="^[a-zA-Z][a-zA-Z0-9_]*$" maxlength="32">
+                    <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Letters, numbers, underscore only. Must start with a letter.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" id="new-dbuser-pass" placeholder="Min 8 characters" required minlength="8">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Database</label>
+                    <select class="form-select" id="new-dbuser-db">${dbOpts}</select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Privilege Level</label>
+                    <select class="form-select" id="new-dbuser-priv">
+                        <option value="administrator">Administrator — Full control</option>
+                        <option value="full">Full — All DML + DDL operations</option>
+                        <option value="readwrite">Read / Write — SELECT, INSERT, UPDATE, DELETE</option>
+                        <option value="readonly">Read Only — SELECT only</option>
+                    </select>
+                </div>
+            `, `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" id="confirm-create-dbuser">Create</button>
+            `);
+
+            document.getElementById('confirm-create-dbuser')?.addEventListener('click', async () => {
+                const username = document.getElementById('new-dbuser-name').value.trim();
+                const password = document.getElementById('new-dbuser-pass').value;
+                const databaseId = parseInt(document.getElementById('new-dbuser-db').value);
+                const privilegeLevel = document.getElementById('new-dbuser-priv').value;
+                if (!username) { showToast('Username required', 'error'); return; }
+                if (password.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
+                try {
+                    await dbUsers.create({ username, password, database_id: databaseId, privilege_level: privilegeLevel });
+                    closeModal();
+                    showToast('Database user created!', 'success');
+                    renderDBUsers(container, siteId, site, refreshTabs);
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        // Privilege change dropdowns
+        container.querySelectorAll('.change-privilege').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                const id = parseInt(sel.dataset.id);
+                const newLevel = sel.value;
+                try {
+                    await dbUsers.updatePrivilege({ id, privilege_level: newLevel });
+                    showToast(`Privileges updated for ${sel.dataset.username}`, 'success');
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    renderDBUsers(container, siteId, site, refreshTabs);
+                }
+            });
+        });
+
+        // Change Password buttons
+        container.querySelectorAll('.change-pwd').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const username = btn.dataset.username;
+                showModal('Change Password', `
+                    <p style="margin-bottom: var(--space-3); color: var(--text-secondary);">Change password for <strong>${escapeHtml(username)}</strong></p>
+                    <div class="form-group">
+                        <label class="form-label">New Password</label>
+                        <input type="password" class="form-input" id="dbuser-new-pwd" placeholder="Min 8 characters" required minlength="8">
+                    </div>
+                `, `
+                    <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="confirm-change-pwd">Change Password</button>
+                `);
+                document.getElementById('confirm-change-pwd')?.addEventListener('click', async () => {
+                    const newPwd = document.getElementById('dbuser-new-pwd').value;
+                    if (newPwd.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
+                    try {
+                        await dbUsers.changePassword({ username, new_password: newPwd });
+                        closeModal();
+                        showToast('Password changed', 'success');
+                    } catch (err) { showToast(err.message, 'error'); }
+                });
+            });
+        });
+
+        // phpMyAdmin buttons
+        container.querySelectorAll('.open-pma-user').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const dbId = btn.dataset.id;
+                const dbName = btn.dataset.name;
+                btn.disabled = true;
+                btn.textContent = '⏳ Opening...';
+                try {
+                    const data = await request('/api/pma', {
+                        method: 'POST',
+                        body: JSON.stringify({ database_id: parseInt(dbId) })
+                    });
+                    if (data.url) {
+                        window.open(data.url, '_blank');
+                        showToast(`phpMyAdmin opened for ${dbName}`, 'success');
+                    }
+                } catch (err) {
+                    showToast(`phpMyAdmin error: ${err.message}`, 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = '⛁ phpMyAdmin';
+                }
+            });
+        });
+
+        // Delete buttons
+        container.querySelectorAll('.delete-db-user').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                const username = btn.dataset.username;
+                if (!await showConfirm('Delete User', `Delete database user "${username}"? This will also drop the MariaDB user.`, 'Delete', 'btn-danger')) return;
+                try {
+                    await dbUsers.delete(id);
+                    showToast(`User ${username} deleted`, 'success');
+                    renderDBUsers(container, siteId, site, refreshTabs);
+                } catch (err) { showToast(err.message, 'error'); }
             });
         });
     } catch (err) {
@@ -1160,14 +1338,51 @@ async function renderBackups(container, site, siteId) {
 
         container.querySelectorAll('.restore-backup').forEach(btn => {
             btn.addEventListener('click', async () => {
-                if (!await showConfirm('Restore Backup', 'Restore this backup? Current site files will be replaced. This cannot be undone.', 'Restore', 'btn-danger')) return;
-                try {
-                    await request('/api/backups?action=restore', {
-                        method: 'POST',
-                        body: JSON.stringify({ backup_id: parseInt(btn.dataset.id) }),
-                    });
-                    showToast('Backup restored successfully!', 'success');
-                } catch (err) { showToast(err.message, 'error'); }
+                const backupId = parseInt(btn.dataset.id);
+                showModal('Restore Backup', `
+                    <p style="margin-bottom: var(--space-3); color: var(--text-secondary);">Select which components to restore. Current data will be replaced.</p>
+                    <div class="settings-row" style="margin-bottom: var(--space-3);">
+                        <div class="settings-row-label">Web Files<small>Restore website files to web root</small></div>
+                        <div><label class="toggle"><input type="checkbox" id="restore-files" checked><span class="toggle-slider"></span></label></div>
+                    </div>
+                    <div class="settings-row" style="margin-bottom: var(--space-3);">
+                        <div class="settings-row-label">Databases<small>Restore database SQL dumps</small></div>
+                        <div><label class="toggle"><input type="checkbox" id="restore-dbs" checked><span class="toggle-slider"></span></label></div>
+                    </div>
+                    <div class="settings-row" style="margin-bottom: var(--space-3);">
+                        <div class="settings-row-label">Cron Jobs<small>Restore scheduled tasks</small></div>
+                        <div><label class="toggle"><input type="checkbox" id="restore-cron" checked><span class="toggle-slider"></span></label></div>
+                    </div>
+                    <p style="color: var(--text-tertiary); font-size: var(--font-size-xs); margin-top: var(--space-2);">Components not included in the backup will be skipped automatically.</p>
+                `, `
+                    <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-danger" id="confirm-restore">Restore</button>
+                `);
+
+                document.getElementById('confirm-restore')?.addEventListener('click', async () => {
+                    const restoreFiles = document.getElementById('restore-files').checked;
+                    const restoreDBs = document.getElementById('restore-dbs').checked;
+                    const restoreCron = document.getElementById('restore-cron').checked;
+                    if (!restoreFiles && !restoreDBs && !restoreCron) {
+                        showToast('Select at least one component to restore', 'error');
+                        return;
+                    }
+                    closeModal();
+                    try {
+                        showToast('Restoring backup...', 'info');
+                        const result = await request('/api/backups?action=restore', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                backup_id: backupId,
+                                restore_files: restoreFiles,
+                                restore_databases: restoreDBs,
+                                restore_cron: restoreCron,
+                            }),
+                        });
+                        const restored = (result.restored || []).join(', ');
+                        showToast(`Backup restored: ${restored}`, 'success');
+                    } catch (err) { showToast(err.message, 'error'); }
+                });
             });
         });
 

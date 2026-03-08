@@ -60,7 +60,7 @@ export async function render(container) {
                                     <td><span class="badge">${escapeHtml(r.direction)}</span></td>
                                     <td><span class="status-badge ${r.action === 'allow' ? 'status-running' : 'status-stopped'}">${escapeHtml(r.action)}</span></td>
                                     <td>${escapeHtml(r.protocol)}</td>
-                                    <td><code>${escapeHtml(r.port)}</code></td>
+                                    <td>${escapeHtml(r.port)}</td>
                                     <td>${r.source ? escapeHtml(r.source) : '<span style="color:var(--text-tertiary)">any</span>'}</td>
                                     <td style="color:var(--text-secondary);font-size:var(--font-size-sm);">${escapeHtml(r.comment || '')}</td>
                                     <td>

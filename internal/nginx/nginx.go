@@ -8,6 +8,24 @@ import (
 	"text/template"
 )
 
+// VerifyCertFiles checks if SSL certificate and key files exist on disk
+func VerifyCertFiles(certPath, keyPath string) bool {
+	if certPath == "" || keyPath == "" {
+		return false
+	}
+	out, err := exec.Command("sudo", "test", "-f", certPath).CombinedOutput()
+	if err != nil {
+		_ = out
+		return false
+	}
+	out, err = exec.Command("sudo", "test", "-f", keyPath).CombinedOutput()
+	if err != nil {
+		_ = out
+		return false
+	}
+	return true
+}
+
 const vhostTemplate = `# JCWT Ultra Panel - Managed vhost for {{.Domain}}
 # DO NOT EDIT MANUALLY - managed by JCWT Panel
 
@@ -161,6 +179,16 @@ func GenerateConfig(data VHostData) (string, error) {
 
 // WriteVHost writes the vhost config file and creates symlink
 func WriteVHost(sitesAvailable, sitesEnabled, domain string, data VHostData) error {
+	// If SSL is configured, verify cert files exist — fall back to HTTP-only if missing
+	if data.SSLType != "" && data.SSLType != "none" {
+		if !VerifyCertFiles(data.SSLCertPath, data.SSLKeyPath) {
+			// Cert files missing — write HTTP-only vhost to prevent nginx from failing
+			data.SSLType = "none"
+			data.SSLCertPath = ""
+			data.SSLKeyPath = ""
+		}
+	}
+
 	config, err := GenerateConfig(data)
 	if err != nil {
 		return err

@@ -81,7 +81,7 @@ async function loadServices(container) {
                     </button>
                 </div>` : `
                 <div style="margin-top: var(--space-3); font-size: var(--font-size-xs); color: var(--text-tertiary);">
-                    Use <code>systemctl restart jcwt-panel</code> to restart the panel
+                    Use systemctl restart jcwt-panel to restart the panel
                 </div>`}
             </div>`;
         }).join('')}</div>`;

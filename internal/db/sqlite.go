@@ -58,6 +58,9 @@ func Open(dataDir string) (*DB, error) {
 	conn.Exec("ALTER TABLE backups ADD COLUMN download_token TEXT DEFAULT ''")
 	conn.Exec("ALTER TABLE backups ADD COLUMN download_token_expires DATETIME DEFAULT NULL")
 
+	// Add privilege_level column to db_users
+	conn.Exec("ALTER TABLE db_users ADD COLUMN privilege_level TEXT DEFAULT 'administrator'")
+
 	// Generate tokens for any existing sites that don't have one
 	rows, _ := conn.Query("SELECT id FROM sites WHERE token = '' OR token IS NULL")
 	if rows != nil {
@@ -359,7 +362,7 @@ func (d *DB) DeleteDatabase(id int64) (string, error) {
 
 func (d *DB) ListDBUsers() ([]map[string]interface{}, error) {
 	rows, err := d.Conn.Query(`
-		SELECT u.id, u.username, u.database_id, d.db_name, u.created_at
+		SELECT u.id, u.username, u.database_id, d.db_name, COALESCE(u.privilege_level,'administrator'), u.created_at
 		FROM db_users u LEFT JOIN databases d ON u.database_id = d.id ORDER BY u.id DESC`)
 	if err != nil {
 		return nil, err
@@ -369,23 +372,32 @@ func (d *DB) ListDBUsers() ([]map[string]interface{}, error) {
 	var users []map[string]interface{}
 	for rows.Next() {
 		var id, dbID int64
-		var username, dbName, createdAt string
-		if err := rows.Scan(&id, &username, &dbID, &dbName, &createdAt); err != nil {
+		var username, dbName, privilegeLevel, createdAt string
+		if err := rows.Scan(&id, &username, &dbID, &dbName, &privilegeLevel, &createdAt); err != nil {
 			return nil, err
 		}
 		users = append(users, map[string]interface{}{
-			"id": id, "username": username, "database_id": dbID, "db_name": dbName, "created_at": createdAt,
+			"id": id, "username": username, "database_id": dbID, "db_name": dbName,
+			"privilege_level": privilegeLevel, "created_at": createdAt,
 		})
 	}
 	return users, nil
 }
 
-func (d *DB) CreateDBUser(username string, databaseID int64) (int64, error) {
-	res, err := d.Conn.Exec("INSERT INTO db_users (username, database_id) VALUES (?, ?)", username, databaseID)
+func (d *DB) CreateDBUser(username string, databaseID int64, privilegeLevel string) (int64, error) {
+	if privilegeLevel == "" {
+		privilegeLevel = "administrator"
+	}
+	res, err := d.Conn.Exec("INSERT INTO db_users (username, database_id, privilege_level) VALUES (?, ?, ?)", username, databaseID, privilegeLevel)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func (d *DB) UpdateDBUserPrivilege(id int64, privilegeLevel string) error {
+	_, err := d.Conn.Exec("UPDATE db_users SET privilege_level = ? WHERE id = ?", privilegeLevel, id)
+	return err
 }
 
 func (d *DB) DeleteDBUser(id int64) (string, error) {

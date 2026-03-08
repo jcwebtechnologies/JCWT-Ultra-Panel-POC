@@ -121,28 +121,61 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	backupName := fmt.Sprintf("%s-%s-%s.tar.gz", domain, req.Type, timestamp)
 	backupPath := filepath.Join(backupDir, backupName)
 
-	var tarArgs []string
+	// Create a staging directory for the backup contents
+	stagingDir := filepath.Join(backupDir, fmt.Sprintf("staging-%s", timestamp))
+	os.MkdirAll(stagingDir, 0750)
+	defer os.RemoveAll(stagingDir)
+
 	switch req.Type {
-	case "files", "full":
-		tarArgs = []string{"sudo", "tar", "-czf", backupPath, "-C", filepath.Dir(webRoot), filepath.Base(webRoot)}
+	case "files":
+		// Files only — tar the web root directly
+		cmd := exec.Command("sudo", "tar", "-czf", backupPath, "-C", filepath.Dir(webRoot), filepath.Base(webRoot))
+		if output, err := cmd.CombinedOutput(); err != nil {
+			jsonError(w, fmt.Sprintf("backup failed: %s", string(output)), http.StatusInternalServerError)
+			return
+		}
+
+	case "full":
+		// Step 1: Copy web files into staging
+		htdocsStaging := filepath.Join(stagingDir, "htdocs")
+		cmd := exec.Command("sudo", "cp", "-a", webRoot, htdocsStaging)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			jsonError(w, fmt.Sprintf("backup failed copying files: %s", string(output)), http.StatusInternalServerError)
+			return
+		}
+
+		// Step 2: Dump each site database individually
+		siteDbs, _ := h.DB.ListDatabasesBySite(req.SiteID)
+		if len(siteDbs) > 0 {
+			dbStaging := filepath.Join(stagingDir, "databases")
+			os.MkdirAll(dbStaging, 0750)
+			for _, db := range siteDbs {
+				dbName := db["db_name"].(string)
+				dumpFile := filepath.Join(dbStaging, dbName+".sql.gz")
+				dumpCmd := fmt.Sprintf("sudo mysqldump --single-transaction %s 2>/dev/null | gzip > %s",
+					dbName, dumpFile)
+				exec.Command("bash", "-c", dumpCmd).Run()
+			}
+		}
+
+		// Step 3: Export cron jobs
+		cronJobs, _ := h.DB.ListCronJobs(req.SiteID)
+		if len(cronJobs) > 0 {
+			cronData, _ := json.MarshalIndent(cronJobs, "", "  ")
+			cronFile := filepath.Join(stagingDir, "cron_jobs.json")
+			os.WriteFile(cronFile, cronData, 0640)
+		}
+
+		// Step 4: Tar the entire staging directory
+		cmd = exec.Command("sudo", "tar", "-czf", backupPath, "-C", stagingDir, ".")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			jsonError(w, fmt.Sprintf("backup failed: %s", string(output)), http.StatusInternalServerError)
+			return
+		}
+
 	default:
-		jsonError(w, "invalid backup type: use full, files, or database", http.StatusBadRequest)
+		jsonError(w, "invalid backup type: use full or files", http.StatusBadRequest)
 		return
-	}
-
-	cmd := exec.Command(tarArgs[0], tarArgs[1:]...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		jsonError(w, fmt.Sprintf("backup failed: %s", string(output)), http.StatusInternalServerError)
-		return
-	}
-
-	// If full backup, also dump databases for this site's user
-	if req.Type == "full" {
-		sysUser := site["system_user"].(string)
-		dumpPath := filepath.Join(backupDir, fmt.Sprintf("%s-db-%s.sql.gz", domain, timestamp))
-		dumpCmd := fmt.Sprintf("sudo mysqldump --all-databases --single-transaction -u root 2>/dev/null | gzip > %s", dumpPath)
-		exec.Command("sudo", "bash", "-c", dumpCmd).Run()
-		_ = sysUser
 	}
 
 	// Get backup file size
@@ -168,11 +201,21 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		BackupID int64 `json:"backup_id"`
+		BackupID     int64 `json:"backup_id"`
+		RestoreFiles bool  `json:"restore_files"`
+		RestoreDBs   bool  `json:"restore_databases"`
+		RestoreCron  bool  `json:"restore_cron"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	// Default: if no components specified, restore everything
+	if !req.RestoreFiles && !req.RestoreDBs && !req.RestoreCron {
+		req.RestoreFiles = true
+		req.RestoreDBs = true
+		req.RestoreCron = true
 	}
 
 	backup, err := h.DB.GetBackup(req.BackupID)
@@ -189,6 +232,7 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	webRoot := site["web_root"].(string)
+	sysUser := site["system_user"].(string)
 	filePath := backup["file_path"].(string)
 
 	// Verify backup file exists
@@ -197,18 +241,90 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract backup to web root
-	cmd := exec.Command("sudo", "tar", "-xzf", filePath, "-C", filepath.Dir(webRoot))
+	// Extract to a temp directory first to inspect contents
+	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("jcwt-restore-%d", time.Now().UnixNano()))
+	os.MkdirAll(tmpDir, 0750)
+	defer os.RemoveAll(tmpDir)
+
+	cmd := exec.Command("sudo", "tar", "-xzf", filePath, "-C", tmpDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		jsonError(w, fmt.Sprintf("restore failed: %s", string(output)), http.StatusInternalServerError)
+		jsonError(w, fmt.Sprintf("restore failed to extract: %s", string(output)), http.StatusInternalServerError)
 		return
 	}
 
-	// Fix ownership
-	sysUser := site["system_user"].(string)
-	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
+	var restored []string
 
-	jsonSuccess(w, map[string]interface{}{"message": "backup restored successfully"})
+	// Check if this is a new-style backup (with htdocs/, databases/, cron_jobs.json)
+	// or an old-style backup (just the web root directory)
+	htdocsPath := filepath.Join(tmpDir, "htdocs")
+	isNewStyle := false
+	if info, err := os.Stat(htdocsPath); err == nil && info.IsDir() {
+		isNewStyle = true
+	}
+
+	// Restore files
+	if req.RestoreFiles {
+		if isNewStyle {
+			// New-style: copy htdocs contents to web root
+			cmd = exec.Command("sudo", "rsync", "-a", "--delete", htdocsPath+"/", webRoot+"/")
+			if output, err := cmd.CombinedOutput(); err != nil {
+				jsonError(w, fmt.Sprintf("restore files failed: %s", string(output)), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			// Old-style: extract directly over web root parent
+			cmd = exec.Command("sudo", "tar", "-xzf", filePath, "-C", filepath.Dir(webRoot))
+			if output, err := cmd.CombinedOutput(); err != nil {
+				jsonError(w, fmt.Sprintf("restore failed: %s", string(output)), http.StatusInternalServerError)
+				return
+			}
+		}
+		exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
+		restored = append(restored, "files")
+	}
+
+	// Restore databases
+	if req.RestoreDBs && isNewStyle {
+		dbDir := filepath.Join(tmpDir, "databases")
+		if entries, err := os.ReadDir(dbDir); err == nil {
+			for _, entry := range entries {
+				if strings.HasSuffix(entry.Name(), ".sql.gz") {
+					dbName := strings.TrimSuffix(entry.Name(), ".sql.gz")
+					dumpFile := filepath.Join(dbDir, entry.Name())
+					importCmd := fmt.Sprintf("gunzip -c %s | sudo mysql %s", dumpFile, dbName)
+					exec.Command("bash", "-c", importCmd).Run()
+					restored = append(restored, "database:"+dbName)
+				}
+			}
+		}
+	}
+
+	// Restore cron jobs
+	if req.RestoreCron && isNewStyle {
+		cronFile := filepath.Join(tmpDir, "cron_jobs.json")
+		if cronData, err := os.ReadFile(cronFile); err == nil {
+			var cronJobs []map[string]interface{}
+			if json.Unmarshal(cronData, &cronJobs) == nil {
+				for _, job := range cronJobs {
+					schedule, _ := job["schedule"].(string)
+					command, _ := job["command"].(string)
+					enabled, _ := job["enabled"].(bool)
+					if schedule != "" && command != "" {
+						id, err := h.DB.CreateCronJob(siteID, schedule, command)
+						if err == nil && !enabled {
+							h.DB.UpdateCronJob(id, schedule, command, false)
+						}
+					}
+				}
+				restored = append(restored, "cron")
+			}
+		}
+	}
+
+	jsonSuccess(w, map[string]interface{}{
+		"message":  "backup restored successfully",
+		"restored": restored,
+	})
 }
 
 func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {

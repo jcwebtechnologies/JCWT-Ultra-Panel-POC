@@ -112,18 +112,7 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 		jsonSuccess(w, map[string]interface{}{"ssl_type": "custom", "cert_path": certPath})
 
 	case "disable":
-		system.RemoveCert(h.Cfg.SSLBaseDir, domain)
-		h.DB.UpdateSite(siteID, domain, site["aliases"].(string), siteType, phpVersion, proxyURL, "none", "", "")
-
-		vhostData := nginx.VHostData{
-			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
-			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL,
-			WebRoot: webRoot, SSLType: "none",
-		}
-		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
-		nginx.TestAndReload()
-
-		jsonSuccess(w, map[string]interface{}{"ssl_type": "none"})
+		jsonError(w, "SSL cannot be disabled — at least one certificate must always be active", http.StatusBadRequest)
 
 	default:
 		jsonError(w, "invalid action: use self-signed, custom, or disable", http.StatusBadRequest)

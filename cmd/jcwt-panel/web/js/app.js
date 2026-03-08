@@ -354,9 +354,10 @@ function renderLayout(pageName) {
                     <a href="#/sites" class="nav-item ${pageName === 'sites' || pageName === 'site-detail' ? 'active' : ''}">
                         <span class="nav-icon">${icons.sites}</span> Sites
                     </a>
-                    <a href="#/databases" class="nav-item ${pageName === 'databases' ? 'active' : ''}">
-                        <span class="nav-icon">${icons.database}</span> Databases
-                    </a>
+                    ${currentRole === 'admin' ? `
+                    <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.key}</span> Users
+                    </a>` : ''}
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-title">System</div>
@@ -368,9 +369,6 @@ function renderLayout(pageName) {
                         <span class="nav-icon">${icons.settings}</span> Settings
                     </a>` : ''}
                     ${currentRole === 'admin' ? `
-                    <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
-                        <span class="nav-icon">${icons.key}</span> Users
-                    </a>
                     <a href="#/firewall" class="nav-item ${pageName === 'firewall' ? 'active' : ''}">
                         <span class="nav-icon">${icons.shield}</span> Firewall
                     </a>` : ''}
