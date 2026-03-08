@@ -113,14 +113,9 @@ function renderServerInfo(stats) {
                     <span class="info-label">Architecture</span>
                     <span class="info-value"><span class="badge badge-primary">${stats.arch || 'arm64'}</span></span>
                 </div>
-                ${stats.cpu_model ? `
                 <div class="info-item">
                     <span class="info-label">CPU</span>
-                    <span class="info-value">${stats.cpu_model}</span>
-                </div>` : ''}
-                <div class="info-item">
-                    <span class="info-label">CPU Cores</span>
-                    <span class="info-value"><span class="badge badge-info">${stats.cpu_cores || 'N/A'}</span></span>
+                    <span class="info-value">${stats.cpu_cores || 'N/A'} cores${stats.cpu_model ? ', ' + stats.cpu_model : ''}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">PHP Versions</span>
@@ -151,7 +146,7 @@ function renderResources(stats) {
         <div>
             <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-2);">
                 <span style="font-size: var(--font-size-sm); color: var(--text-secondary);">Disk Usage</span>
-                <span style="font-size: var(--font-size-sm); font-weight: 600;">${stats.disk_used_gb || 0} GB / ${stats.disk_total_gb || 0} GB (${stats.disk_used_pct || 0}%)</span>
+                <span style="font-size: var(--font-size-sm); font-weight: 600;">${stats.disk_used_gb || 0} GiB / ${stats.disk_total_gb || 0} GiB (${stats.disk_used_pct || 0}%)</span>
             </div>
             <div class="progress-bar">
                 <div class="progress-fill" style="width: ${stats.disk_used_pct || 0}%"></div>

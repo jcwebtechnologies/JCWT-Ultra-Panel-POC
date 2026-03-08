@@ -103,10 +103,15 @@ func (h *SitesHandler) diskUsage(w http.ResponseWriter, r *http.Request) {
 		jsonSuccess(w, map[string]interface{}{"size": "N/A"})
 		return
 	}
-	out, err := exec.Command("sudo", "du", "-sh", webRoot).Output()
+	out, err := exec.Command("sudo", "du", "-sh", webRoot).CombinedOutput()
 	if err != nil {
-		jsonSuccess(w, map[string]interface{}{"size": "N/A"})
-		return
+		// Try parent directory as fallback
+		parent := filepath.Dir(webRoot)
+		out, err = exec.Command("sudo", "du", "-sh", parent).CombinedOutput()
+		if err != nil {
+			jsonSuccess(w, map[string]interface{}{"size": "N/A"})
+			return
+		}
 	}
 	fields := strings.Fields(string(out))
 	size := "N/A"

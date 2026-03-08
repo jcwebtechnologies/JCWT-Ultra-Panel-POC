@@ -100,14 +100,14 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         <div class="badge"><?php echo "PHP " . phpversion(); ?></div>
         <div class="steps">
             <h3>Next Steps</h3>
-            <div class="step"><div class="step-num">1</div> Upload your application files to <code>%s</code></div>
+            <div class="step"><div class="step-num">1</div> Upload your application files using the <code>File Manager</code> in the panel</div>
             <div class="step"><div class="step-num">2</div> Point your domain's DNS A/AAAA record to this server</div>
             <div class="step"><div class="step-num">3</div> Configure SSL via the panel for HTTPS</div>
             <div class="step"><div class="step-num">4</div> Delete this file (<code>index.php</code>) after uploading your app</div>
         </div>
     </div>
 </body>
-</html>`, domain, domain, webRoot)
+</html>`, domain, domain)
 	case "html":
 		fileName = "index.html"
 		indexContent = fmt.Sprintf(`<!DOCTYPE html>
@@ -144,14 +144,14 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
         <div class="steps">
             <h3>Getting Started</h3>
             <div class="step"><div class="step-num">1</div> Delete this default <code>index.html</code> file</div>
-            <div class="step"><div class="step-num">2</div> Upload your website files to <code>%s</code></div>
+            <div class="step"><div class="step-num">2</div> Upload your website files using the <code>File Manager</code> in the panel</div>
             <div class="step"><div class="step-num">3</div> Make sure you have an <code>index.html</code> in the root</div>
             <div class="step"><div class="step-num">4</div> Point your domain's DNS A/AAAA record to this server</div>
             <div class="step"><div class="step-num">5</div> Configure SSL via the panel for HTTPS</div>
         </div>
     </div>
 </body>
-</html>`, domain, domain, webRoot)
+</html>`, domain, domain)
 	default:
 		// Proxies don't need a welcome page
 		return nil

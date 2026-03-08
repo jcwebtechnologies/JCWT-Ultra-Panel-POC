@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — Settings Page (Panel Branding & Configuration)
-import { settings } from '../api.js';
-import { icons, showToast, escapeHtml } from '../app.js';
+import { settings, backupMethods } from '../api.js';
+import { icons, showToast, escapeHtml, showConfirm } from '../app.js';
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'Panel Settings';
@@ -106,6 +106,14 @@ export async function render(container) {
                 </div>
             </div>
 
+            <!-- Backup Configuration Section -->
+            <div class="card" style="margin-bottom: var(--space-6);">
+                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.database}</span> Backup Configuration</h3>
+                <p style="color: var(--text-tertiary); font-size: var(--font-size-sm); margin-bottom: var(--space-4);">Configure backup storage methods available for site backups.</p>
+                <div id="backup-methods-list" style="margin-bottom: var(--space-4);"></div>
+                <button type="button" class="btn btn-sm btn-secondary" id="add-backup-method-btn">+ Add Backup Method</button>
+            </div>
+
             <!-- reCAPTCHA Section -->
             <div class="card" style="margin-bottom: var(--space-6);">
                 <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.bot}</span> reCAPTCHA (Login Protection)</h3>
@@ -176,6 +184,72 @@ export async function render(container) {
                 const result = await settings.uploadFavicon(fd);
                 document.getElementById('s-favicon').value = result.url;
                 showToast('Favicon uploaded!', 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        // Backup Methods management
+        async function loadBackupMethods() {
+            const listEl = document.getElementById('backup-methods-list');
+            if (!listEl) return;
+            try {
+                const data = await backupMethods.list();
+                const methods = Array.isArray(data) ? data : (data?.methods || []);
+                if (methods.length === 0) {
+                    listEl.innerHTML = '<div style="color:var(--text-tertiary);font-size:var(--font-size-sm);">No backup methods configured. A default "Local" method will be used for site backups.</div>';
+                    return;
+                }
+                listEl.innerHTML = methods.map(m => `
+                    <div class="settings-row" style="padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);margin-bottom:var(--space-2);">
+                        <div class="settings-row-label" style="min-width:auto;">
+                            <strong>${escapeHtml(m.name)}</strong>
+                            <small>Type: ${escapeHtml(m.type)} ${m.enabled ? '(Active)' : '(Disabled)'}</small>
+                        </div>
+                        <div style="display:flex;gap:var(--space-2);">
+                            <button type="button" class="btn btn-sm ${m.enabled ? 'btn-secondary' : 'btn-primary'}" data-toggle-method="${m.id}">${m.enabled ? 'Disable' : 'Enable'}</button>
+                            <button type="button" class="btn btn-sm btn-danger" data-delete-method="${m.id}">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+
+                listEl.querySelectorAll('[data-toggle-method]').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const mid = parseInt(btn.dataset.toggleMethod);
+                        const method = methods.find(m => m.id === mid);
+                        if (!method) return;
+                        try {
+                            await backupMethods.update({ id: mid, name: method.name, type: method.type, config: method.config || '{}', enabled: !method.enabled });
+                            showToast('Backup method updated', 'success');
+                            loadBackupMethods();
+                        } catch (err) { showToast(err.message, 'error'); }
+                    });
+                });
+
+                listEl.querySelectorAll('[data-delete-method]').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const confirmed = await showConfirm('Delete this backup method?');
+                        if (!confirmed) return;
+                        try {
+                            await backupMethods.delete(parseInt(btn.dataset.deleteMethod));
+                            showToast('Backup method deleted', 'success');
+                            loadBackupMethods();
+                        } catch (err) { showToast(err.message, 'error'); }
+                    });
+                });
+            } catch (err) {
+                listEl.innerHTML = '<div style="color:var(--status-error);font-size:var(--font-size-sm);">Failed to load backup methods</div>';
+            }
+        }
+        loadBackupMethods();
+
+        document.getElementById('add-backup-method-btn')?.addEventListener('click', async () => {
+            const name = prompt('Backup method name (e.g. "Local Backups"):');
+            if (!name) return;
+            const type = prompt('Type (local, s3, sftp, gdrive, dropbox):', 'local');
+            if (!type) return;
+            try {
+                await backupMethods.create({ name, type, config: '{}' });
+                showToast('Backup method added', 'success');
+                loadBackupMethods();
             } catch (err) { showToast(err.message, 'error'); }
         });
 

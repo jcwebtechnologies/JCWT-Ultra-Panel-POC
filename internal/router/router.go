@@ -137,6 +137,28 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	// Services
 	mux.Handle("/api/services", middleware.RequireAuth(middleware.RequireCSRF(&handlers.ServicesHandler{DB: database})))
 
+	// Vhost Editor
+	mux.Handle("/api/vhost", middleware.RequireAuth(middleware.RequireCSRF(&handlers.VhostHandler{DB: database, Cfg: cfg})))
+
+	// Site Backups
+	mux.Handle("/api/backups", middleware.RequireAuth(middleware.RequireCSRF(&handlers.BackupHandler{DB: database, Cfg: cfg})))
+
+	// Backup Methods (panel-wide, admin only)
+	mux.Handle("/api/backup-methods", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.BackupMethodsHandler{DB: database}),
+	)))
+
+	// Site Logs
+	mux.Handle("/api/logs", middleware.RequireAuth(&handlers.LogsHandler{DB: database}))
+
+	// SSL Certificates (multi-cert)
+	mux.Handle("/api/ssl-certs", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SSLCertsHandler{DB: database, Cfg: cfg})))
+
+	// Firewall (admin only)
+	mux.Handle("/api/firewall", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.FirewallHandler{DB: database}),
+	)))
+
 	// Serve uploaded files
 	uploadsDir := filepath.Join(cfg.DataDir, "uploads")
 	os.MkdirAll(uploadsDir, 0755)

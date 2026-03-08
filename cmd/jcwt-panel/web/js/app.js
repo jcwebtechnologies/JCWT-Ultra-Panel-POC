@@ -370,6 +370,9 @@ function renderLayout(pageName) {
                     ${currentRole === 'admin' ? `
                     <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
                         <span class="nav-icon">${icons.key}</span> Users
+                    </a>
+                    <a href="#/firewall" class="nav-item ${pageName === 'firewall' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.shield}</span> Firewall
                     </a>` : ''}
                 </div>
             </nav>
@@ -421,7 +424,7 @@ function renderLayout(pageName) {
             <div class="main-body" id="page-content">
                 <div class="loading-screen"><div class="loading-spinner"></div></div>
             </div>
-            ${(panelSettings?.footer_text) ? `<footer class="panel-footer">${escapeHtml(panelSettings.footer_text).replace(/\{year\}/g, new Date().getFullYear())}</footer>` : ''}
+            ${`<footer class="panel-footer">${escapeHtml(panelSettings?.footer_text || '\u00A9 {year} JCWT Ultra Panel').replace(/\{year\}/g, new Date().getFullYear())}</footer>`}
         </main>
     </div>`;
 }

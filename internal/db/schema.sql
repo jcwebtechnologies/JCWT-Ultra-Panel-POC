@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS panel_settings (
     favicon_url TEXT DEFAULT '',
     primary_color TEXT DEFAULT '#6366f1',
     accent_color TEXT DEFAULT '#818cf8',
-    footer_text TEXT DEFAULT '© 2026 JCWT Ultra Panel',
+    footer_text TEXT DEFAULT '© {year} JCWT Ultra Panel',
     session_timeout INTEGER DEFAULT 30,
     allow_signup INTEGER DEFAULT 0,
     recaptcha_site_key TEXT DEFAULT '',
@@ -79,3 +79,62 @@ CREATE TABLE IF NOT EXISTS panel_settings (
 
 -- Ensure there is always one row in panel_settings
 INSERT OR IGNORE INTO panel_settings (id) VALUES (1);
+
+-- Backup methods (panel-wide configuration)
+CREATE TABLE IF NOT EXISTS backup_methods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'local',
+    config TEXT DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Site backups
+CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    type TEXT NOT NULL DEFAULT 'manual',
+    method TEXT NOT NULL DEFAULT 'local',
+    method_id INTEGER DEFAULT NULL,
+    file_path TEXT DEFAULT '',
+    size TEXT DEFAULT '',
+    status TEXT DEFAULT 'completed',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Site backup schedules
+CREATE TABLE IF NOT EXISTS backup_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL UNIQUE REFERENCES sites(id) ON DELETE CASCADE,
+    frequency TEXT DEFAULT 'disabled',
+    retention INTEGER DEFAULT 7,
+    method TEXT DEFAULT 'local',
+    method_id INTEGER DEFAULT NULL,
+    last_run DATETIME DEFAULT NULL
+);
+
+-- SSL certificates (multiple per site)
+CREATE TABLE IF NOT EXISTS ssl_certificates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    type TEXT NOT NULL DEFAULT 'custom',
+    label TEXT DEFAULT '',
+    cert_path TEXT NOT NULL,
+    key_path TEXT NOT NULL,
+    active INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Firewall rules
+CREATE TABLE IF NOT EXISTS firewall_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    direction TEXT NOT NULL DEFAULT 'in',
+    action TEXT NOT NULL DEFAULT 'allow',
+    protocol TEXT NOT NULL DEFAULT 'tcp',
+    port TEXT NOT NULL,
+    source TEXT DEFAULT 'any',
+    comment TEXT DEFAULT '',
+    enabled INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

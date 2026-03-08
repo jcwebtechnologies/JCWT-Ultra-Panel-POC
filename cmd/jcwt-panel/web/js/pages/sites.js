@@ -24,7 +24,7 @@ export async function render(container) {
 
         ${siteList.length === 0 ? `
             <div class="empty-state">
-                <div class="empty-state-icon"><span class="nav-icon" style="width:48px;height:48px;color:var(--primary)">${icons.sites}</span></div>
+                <div class="empty-state-icon"><span class="nav-icon" style="width:32px;height:32px;color:var(--primary)">${icons.sites}</span></div>
                 <div class="empty-state-title">No sites yet</div>
                 <div class="empty-state-text">Create your first website to get started.</div>
             </div>

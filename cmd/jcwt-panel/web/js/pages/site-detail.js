@@ -15,9 +15,9 @@ export async function render(container, siteId) {
             phpVersions.list()
         ]);
 
-        let activeTab = 'overview';
+        let activeSection = null;
 
-        function renderTabs() {
+        function renderPage() {
             container.innerHTML = `
             <div class="page-header">
                 <div class="page-header-left">
@@ -27,37 +27,107 @@ export async function render(container, siteId) {
                 <a href="#/sites" class="btn btn-secondary">← Back to Sites</a>
             </div>
 
-            <div class="tabs">
-                <button class="tab ${activeTab === 'overview' ? 'active' : ''}" data-tab="overview">Overview</button>
-                ${site.site_type === 'php' ? `<button class="tab ${activeTab === 'php' ? 'active' : ''}" data-tab="php">PHP Settings</button>` : ''}
-                <button class="tab ${activeTab === 'databases' ? 'active' : ''}" data-tab="databases">Databases</button>
-                <button class="tab ${activeTab === 'ssl' ? 'active' : ''}" data-tab="ssl">SSL</button>
-                <button class="tab ${activeTab === 'cron' ? 'active' : ''}" data-tab="cron">Cron Jobs</button>
-                <button class="tab ${activeTab === 'security' ? 'active' : ''}" data-tab="security">Security</button>
-                <button class="tab ${activeTab === 'files' ? 'active' : ''}" data-tab="files">File Manager</button>
+            ${activeSection ? `<div style="margin-bottom: var(--space-4);"><button class="btn btn-sm btn-ghost" id="back-to-cards">← Back to overview</button></div>` : `
+            <div class="site-cards-section">
+                <div class="site-cards-section-title">Configuration</div>
+                <div class="site-cards-grid">
+                    <div class="site-card" data-section="overview">
+                        <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.settings}</span></div>
+                        <div class="site-card-title">Site Settings</div>
+                    </div>
+                    ${site.site_type === 'php' ? `
+                    <div class="site-card" data-section="php">
+                        <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.code}</span></div>
+                        <div class="site-card-title">PHP Settings</div>
+                    </div>` : ''}
+                    <div class="site-card" data-section="vhost">
+                        <div class="site-card-icon"><span class="nav-icon" style="width:28px;height:28px">${icons.file}</span></div>
+                        <div class="site-card-title">Vhost Editor</div>
+                    </div>
+                </div>
             </div>
 
-            <div id="tab-content"></div>`;
+            <div class="site-cards-section">
+                <div class="site-cards-section-title">Content</div>
+                <div class="site-cards-grid">
+                    <div class="site-card" data-section="files">
+                        <div class="site-card-icon green"><span class="nav-icon" style="width:28px;height:28px">${icons.folder}</span></div>
+                        <div class="site-card-title">File Manager</div>
+                    </div>
+                    <div class="site-card" data-section="databases">
+                        <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.database}</span></div>
+                        <div class="site-card-title">Databases</div>
+                    </div>
+                    <div class="site-card" data-section="cron">
+                        <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.clock}</span></div>
+                        <div class="site-card-title">Cron Jobs</div>
+                    </div>
+                    <div class="site-card" data-section="backups">
+                        <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.download}</span></div>
+                        <div class="site-card-title">Backups</div>
+                    </div>
+                </div>
+            </div>
 
-            container.querySelectorAll('.tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    activeTab = tab.dataset.tab;
-                    renderTabs();
+            <div class="site-cards-section">
+                <div class="site-cards-section-title">Security & SSL</div>
+                <div class="site-cards-grid">
+                    <div class="site-card" data-section="ssl">
+                        <div class="site-card-icon green"><span class="nav-icon" style="width:28px;height:28px">${icons.lock}</span></div>
+                        <div class="site-card-title">SSL Certificates</div>
+                    </div>
+                    <div class="site-card" data-section="security">
+                        <div class="site-card-icon red"><span class="nav-icon" style="width:28px;height:28px">${icons.shield}</span></div>
+                        <div class="site-card-title">Security</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="site-cards-section">
+                <div class="site-cards-section-title">Monitoring</div>
+                <div class="site-cards-grid">
+                    <div class="site-card" data-section="logs">
+                        <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.search}</span></div>
+                        <div class="site-card-title">Logs</div>
+                    </div>
+                </div>
+            </div>
+            `}
+
+            <div id="section-content"></div>`;
+
+            // Bind card clicks
+            container.querySelectorAll('.site-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    activeSection = card.dataset.section;
+                    renderPage();
                 });
             });
 
-            const tabContent = document.getElementById('tab-content');
-            switch (activeTab) {
-                case 'overview': renderOverview(tabContent, site, versions, siteId); break;
-                case 'php': renderPHP(tabContent, siteId); break;
-                case 'databases': renderDatabases(tabContent, siteId, site, renderTabs); break;
-                case 'ssl': renderSSL(tabContent, site, siteId); break;
-                case 'cron': renderCron(tabContent, siteId); break;
-                case 'security': renderSecurity(tabContent, site, siteId, renderTabs); break;
-                case 'files': renderFiles(tabContent, siteId); break;
+            // Back button
+            document.getElementById('back-to-cards')?.addEventListener('click', () => {
+                activeSection = null;
+                renderPage();
+            });
+
+            // Render active section content
+            const sectionContent = document.getElementById('section-content');
+            if (activeSection && sectionContent) {
+                switch (activeSection) {
+                    case 'overview': renderOverview(sectionContent, site, versions, siteId); break;
+                    case 'php': renderPHP(sectionContent, siteId); break;
+                    case 'databases': renderDatabases(sectionContent, siteId, site, renderPage); break;
+                    case 'ssl': renderSSL(sectionContent, site, siteId); break;
+                    case 'cron': renderCron(sectionContent, siteId); break;
+                    case 'security': renderSecurity(sectionContent, site, siteId, renderPage); break;
+                    case 'files': renderFiles(sectionContent, siteId); break;
+                    case 'vhost': renderVhost(sectionContent, site, siteId); break;
+                    case 'backups': renderBackups(sectionContent, site, siteId); break;
+                    case 'logs': renderLogs(sectionContent, site, siteId); break;
+                }
             }
         }
-        renderTabs();
+        renderPage();
 
     } catch (err) {
         container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${err.message}</div></div>`;
@@ -257,74 +327,214 @@ async function renderPHP(el, siteId) {
 }
 
 function renderSSL(el, site, siteId) {
-    el.innerHTML = `
-    <div class="card">
-        <h3 class="card-title" style="margin-bottom: var(--space-4);">SSL Certificate</h3>
-        <div class="info-item" style="margin-bottom: var(--space-4);">
-            <span class="info-label">Current Status</span>
-            <span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type}</span></span>
-        </div>
-        ${site.ssl_cert_path ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Certificate Path</span><span class="info-value mono">${escapeHtml(site.ssl_cert_path)}</span></div>` : ''}
+    el.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
 
-        <div style="display: flex; gap: var(--space-3); flex-wrap: wrap;">
-            <button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>
-            <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Custom Certificate</button>
-            ${site.ssl_type !== 'none' ? `<button class="btn btn-danger" id="ssl-disable">Disable SSL</button>` : ''}
-        </div>
-    </div>`;
+    request(`/api/ssl-certs?site_id=${siteId}`).then(data => {
+        const certs = data.certificates || [];
+        const activeCert = certs.find(c => c.active);
+        const hasSelfSigned = certs.some(c => c.type === 'self-signed');
 
-    document.getElementById('ssl-self-signed')?.addEventListener('click', async () => {
-        try {
-            await ssl.selfSigned(siteId);
-            showToast('Self-signed certificate generated!', 'success');
-            // Reload page
-            const mod = await import('./site-detail.js');
-            mod.render(document.getElementById('page-content'), siteId);
-        } catch (err) { showToast(err.message, 'error'); }
-    });
-
-    document.getElementById('ssl-custom')?.addEventListener('click', () => {
-        showModal('Upload SSL Certificate', `
-            <form id="upload-cert-form">
-                <div class="form-group">
-                    <label class="form-label">Certificate (.pem, .crt)</label>
-                    <input type="file" class="form-input" id="cert-file" accept=".pem,.crt" required>
+        el.innerHTML = `
+        <div class="card" style="margin-bottom: var(--space-4);">
+            <div class="card-header">
+                <h3 class="card-title">SSL Certificates</h3>
+            </div>
+            <div style="padding: var(--space-4);">
+                <div class="info-item" style="margin-bottom: var(--space-4);">
+                    <span class="info-label">Active Certificate</span>
+                    <span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type === 'none' ? 'None' : site.ssl_type}</span></span>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Private Key (.pem, .key)</label>
-                    <input type="file" class="form-input" id="key-file" accept=".pem,.key" required>
-                </div>
-            </form>
-        `, `
-            <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" id="submit-cert">Upload</button>
-        `);
+                ${activeCert && activeCert.cert_path ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Certificate Path</span><span class="info-value mono" style="font-size: var(--font-size-xs);">${escapeHtml(activeCert.cert_path)}</span></div>` : ''}
 
-        document.getElementById('submit-cert')?.addEventListener('click', async () => {
-            const certInput = document.getElementById('cert-file');
-            const keyInput = document.getElementById('key-file');
-            if (!certInput.files[0] || !keyInput.files[0]) { showToast('Both files required', 'error'); return; }
-            const formData = new FormData();
-            formData.append('certificate', certInput.files[0]);
-            formData.append('private_key', keyInput.files[0]);
+                <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4);">
+                    ${!hasSelfSigned ? `<button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>` : ''}
+                    <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Certificate</button>
+                    ${site.ssl_type !== 'none' ? `<button class="btn btn-danger" id="ssl-disable">Disable SSL</button>` : ''}
+                </div>
+            </div>
+        </div>
+
+        ${certs.length > 0 ? `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Uploaded Certificates</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead><tr><th>Type</th><th>Label</th><th>Uploaded</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        ${certs.map(c => `
+                        <tr>
+                            <td><span class="badge ${c.type === 'self-signed' ? 'badge-warning' : 'badge-info'}">${escapeHtml(c.type)}</span></td>
+                            <td>${escapeHtml(c.label || c.type)}</td>
+                            <td style="font-size: var(--font-size-xs);">${c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}</td>
+                            <td>${c.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge" style="background:var(--bg-tertiary);color:var(--text-tertiary)">Inactive</span>'}</td>
+                            <td>
+                                <div class="table-actions">
+                                    ${!c.active ? `<button class="btn btn-sm btn-primary activate-cert" data-id="${c.id}">Activate</button>` : ''}
+                                    ${!c.active ? `<button class="btn btn-sm btn-danger delete-cert" data-id="${c.id}">Delete</button>` : ''}
+                                </div>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>` : ''}`;
+
+        // Generate self-signed
+        document.getElementById('ssl-self-signed')?.addEventListener('click', async () => {
             try {
-                await ssl.custom(siteId, formData);
-                closeModal();
-                showToast('Certificate uploaded!', 'success');
+                await ssl.selfSigned(siteId);
+                showToast('Self-signed certificate generated!', 'success');
                 const mod = await import('./site-detail.js');
                 mod.render(document.getElementById('page-content'), siteId);
             } catch (err) { showToast(err.message, 'error'); }
         });
-    });
 
-    document.getElementById('ssl-disable')?.addEventListener('click', async () => {
-        if (!await showConfirm('Disable SSL', 'Disable SSL for this site? The site will no longer be served over HTTPS.', 'Disable SSL', 'btn-danger')) return;
-        try {
-            await ssl.disable(siteId);
-            showToast('SSL disabled', 'success');
-            const mod = await import('./site-detail.js');
-            mod.render(document.getElementById('page-content'), siteId);
-        } catch (err) { showToast(err.message, 'error'); }
+        // Upload custom cert
+        document.getElementById('ssl-custom')?.addEventListener('click', () => {
+            showModal('Upload SSL Certificate', `
+                <form id="upload-cert-form">
+                    <div class="form-group">
+                        <label class="form-label">Label (optional)</label>
+                        <input type="text" class="form-input" id="cert-label" placeholder="e.g. Let's Encrypt 2025">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Certificate (.pem, .crt)</label>
+                        <input type="file" class="form-input" id="cert-file" accept=".pem,.crt" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Private Key (.pem, .key)</label>
+                        <input type="file" class="form-input" id="key-file" accept=".pem,.key" required>
+                    </div>
+                </form>
+            `, `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" id="submit-cert">Upload</button>
+            `);
+
+            document.getElementById('submit-cert')?.addEventListener('click', async () => {
+                const certInput = document.getElementById('cert-file');
+                const keyInput = document.getElementById('key-file');
+                if (!certInput.files[0] || !keyInput.files[0]) { showToast('Both files required', 'error'); return; }
+                const formData = new FormData();
+                formData.append('certificate', certInput.files[0]);
+                formData.append('private_key', keyInput.files[0]);
+                formData.append('label', document.getElementById('cert-label')?.value || '');
+                try {
+                    await ssl.custom(siteId, formData);
+                    closeModal();
+                    showToast('Certificate uploaded & activated!', 'success');
+                    const mod = await import('./site-detail.js');
+                    mod.render(document.getElementById('page-content'), siteId);
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        // Disable SSL
+        document.getElementById('ssl-disable')?.addEventListener('click', async () => {
+            if (!await showConfirm('Disable SSL', 'Disable SSL for this site? The site will no longer be served over HTTPS.', 'Disable SSL', 'btn-danger')) return;
+            try {
+                await ssl.disable(siteId);
+                showToast('SSL disabled', 'success');
+                const mod = await import('./site-detail.js');
+                mod.render(document.getElementById('page-content'), siteId);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        // Activate cert
+        el.querySelectorAll('.activate-cert').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    await request(`/api/ssl-certs?action=activate&id=${btn.dataset.id}&site_id=${siteId}`, { method: 'POST' });
+                    showToast('Certificate activated!', 'success');
+                    const mod = await import('./site-detail.js');
+                    mod.render(document.getElementById('page-content'), siteId);
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        // Delete cert
+        el.querySelectorAll('.delete-cert').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!await showConfirm('Delete Certificate', 'Delete this certificate permanently?', 'Delete', 'btn-danger')) return;
+                try {
+                    await request(`/api/ssl-certs?id=${btn.dataset.id}&site_id=${siteId}`, { method: 'DELETE' });
+                    showToast('Certificate deleted', 'success');
+                    const mod = await import('./site-detail.js');
+                    mod.render(document.getElementById('page-content'), siteId);
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+    }).catch(err => {
+        // Fallback to old-style SSL card if ssl-certs endpoint not available
+        el.innerHTML = `
+        <div class="card">
+            <h3 class="card-title" style="margin-bottom: var(--space-4);">SSL Certificate</h3>
+            <div class="info-item" style="margin-bottom: var(--space-4);">
+                <span class="info-label">Current Status</span>
+                <span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type}</span></span>
+            </div>
+            ${site.ssl_cert_path ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Certificate Path</span><span class="info-value mono">${escapeHtml(site.ssl_cert_path)}</span></div>` : ''}
+            <div style="display: flex; gap: var(--space-3); flex-wrap: wrap;">
+                <button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>
+                <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Custom Certificate</button>
+                ${site.ssl_type !== 'none' ? `<button class="btn btn-danger" id="ssl-disable">Disable SSL</button>` : ''}
+            </div>
+        </div>`;
+
+        document.getElementById('ssl-self-signed')?.addEventListener('click', async () => {
+            try {
+                await ssl.selfSigned(siteId);
+                showToast('Self-signed certificate generated!', 'success');
+                const mod = await import('./site-detail.js');
+                mod.render(document.getElementById('page-content'), siteId);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        document.getElementById('ssl-custom')?.addEventListener('click', () => {
+            showModal('Upload SSL Certificate', `
+                <form id="upload-cert-form">
+                    <div class="form-group">
+                        <label class="form-label">Certificate (.pem, .crt)</label>
+                        <input type="file" class="form-input" id="cert-file" accept=".pem,.crt" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Private Key (.pem, .key)</label>
+                        <input type="file" class="form-input" id="key-file" accept=".pem,.key" required>
+                    </div>
+                </form>
+            `, `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" id="submit-cert">Upload</button>
+            `);
+
+            document.getElementById('submit-cert')?.addEventListener('click', async () => {
+                const certInput = document.getElementById('cert-file');
+                const keyInput = document.getElementById('key-file');
+                if (!certInput.files[0] || !keyInput.files[0]) { showToast('Both files required', 'error'); return; }
+                const formData = new FormData();
+                formData.append('certificate', certInput.files[0]);
+                formData.append('private_key', keyInput.files[0]);
+                try {
+                    await ssl.custom(siteId, formData);
+                    closeModal();
+                    showToast('Certificate uploaded!', 'success');
+                    const mod = await import('./site-detail.js');
+                    mod.render(document.getElementById('page-content'), siteId);
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        document.getElementById('ssl-disable')?.addEventListener('click', async () => {
+            if (!await showConfirm('Disable SSL', 'Disable SSL for this site?', 'Disable SSL', 'btn-danger')) return;
+            try {
+                await ssl.disable(siteId);
+                showToast('SSL disabled', 'success');
+                const mod = await import('./site-detail.js');
+                mod.render(document.getElementById('page-content'), siteId);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
     });
 }
 
@@ -765,4 +975,238 @@ async function renderSecurity(container, site, siteId, refreshTabs) {
             Object.assign(site, updatedSite);
         } catch (err) { showToast(err.message, 'error'); }
     });
+}
+
+// ---- Vhost Editor ----
+async function renderVhost(container, site, siteId) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    try {
+        const data = await request(`/api/vhost?site_id=${siteId}`);
+        container.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Nginx Vhost Configuration</h3>
+            </div>
+            <div style="padding: var(--space-4);">
+                <p style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--space-3);">
+                    Edit the Nginx virtual host configuration for this site. Changes will be validated before applying.
+                </p>
+                <div class="form-group">
+                    <textarea class="form-textarea mono" id="vhost-editor" style="min-height: 400px; font-size: var(--font-size-xs); line-height: 1.6; tab-size: 4; white-space: pre; overflow-x: auto;">${escapeHtml(data.config)}</textarea>
+                </div>
+                <div style="display: flex; gap: var(--space-3);">
+                    <button class="btn btn-primary" id="save-vhost">Save & Apply</button>
+                    <button class="btn btn-secondary" id="reset-vhost">Reset to Default</button>
+                </div>
+            </div>
+        </div>`;
+
+        document.getElementById('vhost-editor')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const ta = e.target;
+                const start = ta.selectionStart;
+                ta.value = ta.value.substring(0, start) + '    ' + ta.value.substring(ta.selectionEnd);
+                ta.selectionStart = ta.selectionEnd = start + 4;
+            }
+        });
+
+        document.getElementById('save-vhost')?.addEventListener('click', async () => {
+            const config = document.getElementById('vhost-editor').value;
+            try {
+                await request('/api/vhost', {
+                    method: 'PUT',
+                    body: JSON.stringify({ site_id: parseInt(siteId), config }),
+                });
+                showToast('Vhost configuration saved & applied!', 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        document.getElementById('reset-vhost')?.addEventListener('click', async () => {
+            if (!await showConfirm('Reset Vhost', 'Reset the vhost configuration to its default generated state? This will overwrite any manual changes.', 'Reset', 'btn-danger')) return;
+            try {
+                const data = await request(`/api/vhost?site_id=${siteId}&action=reset`, { method: 'POST' });
+                document.getElementById('vhost-editor').value = data.config;
+                showToast('Vhost reset to default!', 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+    }
+}
+
+// ---- Backups ----
+async function renderBackups(container, site, siteId) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    try {
+        const data = await request(`/api/backups?site_id=${siteId}`);
+        const backups = data.backups || [];
+        const schedule = data.schedule || {};
+
+        container.innerHTML = `
+        <div class="card" style="margin-bottom: var(--space-4);">
+            <div class="card-header">
+                <h3 class="card-title">Backup Schedule</h3>
+            </div>
+            <div style="padding: var(--space-4);">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Auto Backup</label>
+                        <select class="form-select" id="backup-frequency">
+                            <option value="disabled" ${schedule.frequency === 'disabled' || !schedule.frequency ? 'selected' : ''}>Disabled</option>
+                            <option value="daily" ${schedule.frequency === 'daily' ? 'selected' : ''}>Daily</option>
+                            <option value="weekly" ${schedule.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
+                            <option value="monthly" ${schedule.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Retention (keep last N)</label>
+                        <select class="form-select" id="backup-retention">
+                            ${[3,5,7,10,14,30].map(n => `<option value="${n}" ${(schedule.retention || 7) === n ? 'selected' : ''}>${n} backups</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Backup Method</label>
+                        <select class="form-select" id="backup-method">
+                            <option value="local" ${schedule.method === 'local' || !schedule.method ? 'selected' : ''}>Local Storage</option>
+                            ${(data.methods || []).map(m => `<option value="${escapeHtml(m.id)}" ${schedule.method === m.id ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" id="save-backup-schedule">Save Schedule</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Backups</h3>
+                <button class="btn btn-primary btn-sm" id="create-backup-btn">${icons.plus} Create Backup Now</button>
+            </div>
+            ${backups.length === 0 ? `
+                <div class="empty-state" style="padding: var(--space-6);">
+                    <div class="empty-state-title">No backups yet</div>
+                    <div class="empty-state-text">Create a manual backup or configure automated backups above.</div>
+                </div>
+            ` : `
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead><tr><th>Date</th><th>Size</th><th>Type</th><th>Method</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            ${backups.map(b => `
+                            <tr>
+                                <td>${new Date(b.created_at).toLocaleString()}</td>
+                                <td>${escapeHtml(b.size || 'N/A')}</td>
+                                <td><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${b.type}</span></td>
+                                <td>${escapeHtml(b.method || 'local')}</td>
+                                <td>
+                                    <div class="table-actions">
+                                        <button class="btn btn-sm btn-secondary restore-backup" data-id="${b.id}">Restore</button>
+                                        <button class="btn btn-sm btn-danger delete-backup" data-id="${b.id}">Delete</button>
+                                    </div>
+                                </td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `}
+        </div>`;
+
+        document.getElementById('save-backup-schedule')?.addEventListener('click', async () => {
+            try {
+                await request('/api/backups', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        site_id: parseInt(siteId),
+                        frequency: document.getElementById('backup-frequency').value,
+                        retention: parseInt(document.getElementById('backup-retention').value),
+                        method: document.getElementById('backup-method').value,
+                    }),
+                });
+                showToast('Backup schedule saved!', 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        document.getElementById('create-backup-btn')?.addEventListener('click', async () => {
+            if (!await showConfirm('Create Backup', `Create a backup of ${escapeHtml(site.domain)} now? This may take a moment for large sites.`, 'Create Backup', 'btn-primary')) return;
+            try {
+                showToast('Backup started...', 'info');
+                await request('/api/backups', {
+                    method: 'POST',
+                    body: JSON.stringify({ site_id: parseInt(siteId) }),
+                });
+                showToast('Backup created successfully!', 'success');
+                renderBackups(container, site, siteId);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        container.querySelectorAll('.restore-backup').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!await showConfirm('Restore Backup', 'Restore this backup? Current site files will be replaced. This cannot be undone.', 'Restore', 'btn-danger')) return;
+                try {
+                    await request(`/api/backups?action=restore&id=${btn.dataset.id}&site_id=${siteId}`, { method: 'POST' });
+                    showToast('Backup restored successfully!', 'success');
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        container.querySelectorAll('.delete-backup').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!await showConfirm('Delete Backup', 'Delete this backup permanently?', 'Delete', 'btn-danger')) return;
+                try {
+                    await request(`/api/backups?id=${btn.dataset.id}&site_id=${siteId}`, { method: 'DELETE' });
+                    showToast('Backup deleted', 'success');
+                    renderBackups(container, site, siteId);
+                } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+    }
+}
+
+// ---- Logs Viewer ----
+async function renderLogs(container, site, siteId) {
+    let activeLog = 'access';
+    let logLines = 100;
+
+    async function loadLog() {
+        container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+        try {
+            const data = await request(`/api/logs?site_id=${siteId}&type=${activeLog}&lines=${logLines}`);
+            container.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Site Logs</h3>
+                    <div style="display: flex; gap: var(--space-2); align-items: center;">
+                        <select class="form-select" id="log-type" style="width: auto; min-width: 140px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
+                            <option value="access" ${activeLog === 'access' ? 'selected' : ''}>Access Log</option>
+                            <option value="error" ${activeLog === 'error' ? 'selected' : ''}>Error Log</option>
+                            ${site.site_type === 'php' ? `<option value="php-fpm" ${activeLog === 'php-fpm' ? 'selected' : ''}>PHP-FPM Error</option>` : ''}
+                        </select>
+                        <select class="form-select" id="log-lines" style="width: auto; min-width: 80px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
+                            ${[50,100,200,500].map(n => `<option value="${n}" ${logLines === n ? 'selected' : ''}>${n} lines</option>`).join('')}
+                        </select>
+                        <button class="btn btn-sm btn-ghost" id="refresh-logs">${icons.refresh} Refresh</button>
+                    </div>
+                </div>
+                <div style="padding: var(--space-3);">
+                    <pre class="mono" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); padding: var(--space-3); overflow-x: auto; max-height: 500px; overflow-y: auto; font-size: var(--font-size-xs); line-height: 1.5; white-space: pre-wrap; word-break: break-all;">${escapeHtml(data.content || 'No log data available.')}</pre>
+                </div>
+            </div>`;
+
+            document.getElementById('log-type')?.addEventListener('change', (e) => {
+                activeLog = e.target.value;
+                loadLog();
+            });
+            document.getElementById('log-lines')?.addEventListener('change', (e) => {
+                logLines = parseInt(e.target.value);
+                loadLog();
+            });
+            document.getElementById('refresh-logs')?.addEventListener('click', () => loadLog());
+        } catch (err) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+        }
+    }
+
+    await loadLog();
 }

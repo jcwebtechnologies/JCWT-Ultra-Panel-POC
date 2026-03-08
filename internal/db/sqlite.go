@@ -432,3 +432,261 @@ func (d *DB) UpdatePanelSettings(name, tagline, logoURL, faviconURL, primaryColo
 	)
 	return err
 }
+
+// --- Backup Methods queries ---
+
+func (d *DB) ListBackupMethods() ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query("SELECT id, name, type, config, enabled, created_at FROM backup_methods ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var methods []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var enabled int
+		var name, mtype, config, created string
+		if err := rows.Scan(&id, &name, &mtype, &config, &enabled, &created); err != nil {
+			return nil, err
+		}
+		methods = append(methods, map[string]interface{}{
+			"id": id, "name": name, "type": mtype, "config": config, "enabled": enabled == 1, "created_at": created,
+		})
+	}
+	return methods, nil
+}
+
+func (d *DB) CreateBackupMethod(name, mtype, config string) (int64, error) {
+	res, err := d.Conn.Exec("INSERT INTO backup_methods (name, type, config) VALUES (?, ?, ?)", name, mtype, config)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) UpdateBackupMethod(id int64, name, mtype, config string, enabled bool) error {
+	en := 0
+	if enabled {
+		en = 1
+	}
+	_, err := d.Conn.Exec("UPDATE backup_methods SET name=?, type=?, config=?, enabled=? WHERE id=?", name, mtype, config, en, id)
+	return err
+}
+
+func (d *DB) DeleteBackupMethod(id int64) error {
+	_, err := d.Conn.Exec("DELETE FROM backup_methods WHERE id = ?", id)
+	return err
+}
+
+// --- Backup queries ---
+
+func (d *DB) ListBackups(siteID int64) ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query("SELECT id, type, method, file_path, size, status, created_at FROM backups WHERE site_id = ? ORDER BY id DESC", siteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var backups []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var btype, method, filePath, size, status, created string
+		if err := rows.Scan(&id, &btype, &method, &filePath, &size, &status, &created); err != nil {
+			return nil, err
+		}
+		backups = append(backups, map[string]interface{}{
+			"id": id, "site_id": siteID, "type": btype, "method": method,
+			"file_path": filePath, "size": size, "status": status, "created_at": created,
+		})
+	}
+	return backups, nil
+}
+
+func (d *DB) CreateBackup(siteID int64, btype, method, filePath, size string) (int64, error) {
+	res, err := d.Conn.Exec("INSERT INTO backups (site_id, type, method, file_path, size) VALUES (?, ?, ?, ?, ?)",
+		siteID, btype, method, filePath, size)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) GetBackup(id int64) (map[string]interface{}, error) {
+	var siteID int64
+	var btype, method, filePath, size, status, created string
+	err := d.Conn.QueryRow("SELECT site_id, type, method, file_path, size, status, created_at FROM backups WHERE id = ?", id).
+		Scan(&siteID, &btype, &method, &filePath, &size, &status, &created)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"id": id, "site_id": siteID, "type": btype, "method": method,
+		"file_path": filePath, "size": size, "status": status, "created_at": created,
+	}, nil
+}
+
+func (d *DB) DeleteBackup(id int64) (string, error) {
+	var filePath string
+	err := d.Conn.QueryRow("SELECT file_path FROM backups WHERE id = ?", id).Scan(&filePath)
+	if err != nil {
+		return "", err
+	}
+	_, err = d.Conn.Exec("DELETE FROM backups WHERE id = ?", id)
+	return filePath, err
+}
+
+func (d *DB) CleanOldBackups(siteID int64, keep int) error {
+	_, err := d.Conn.Exec(`DELETE FROM backups WHERE site_id = ? AND id NOT IN (
+		SELECT id FROM backups WHERE site_id = ? ORDER BY id DESC LIMIT ?
+	)`, siteID, siteID, keep)
+	return err
+}
+
+// --- Backup Schedule queries ---
+
+func (d *DB) GetBackupSchedule(siteID int64) (map[string]interface{}, error) {
+	var id int64
+	var frequency, method string
+	var retention int
+	err := d.Conn.QueryRow("SELECT id, frequency, retention, method FROM backup_schedules WHERE site_id = ?", siteID).
+		Scan(&id, &frequency, &retention, &method)
+	if err != nil {
+		return map[string]interface{}{"frequency": "disabled", "retention": 7, "method": "local"}, nil
+	}
+	return map[string]interface{}{
+		"id": id, "site_id": siteID, "frequency": frequency, "retention": retention, "method": method,
+	}, nil
+}
+
+func (d *DB) UpsertBackupSchedule(siteID int64, frequency string, retention int, method string) error {
+	res, err := d.Conn.Exec("UPDATE backup_schedules SET frequency=?, retention=?, method=? WHERE site_id=?",
+		frequency, retention, method, siteID)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows > 0 {
+		return nil
+	}
+	_, err = d.Conn.Exec("INSERT INTO backup_schedules (site_id, frequency, retention, method) VALUES (?, ?, ?, ?)",
+		siteID, frequency, retention, method)
+	return err
+}
+
+// --- SSL Certificates queries ---
+
+func (d *DB) ListSSLCertificates(siteID int64) ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query("SELECT id, type, label, cert_path, key_path, active, created_at FROM ssl_certificates WHERE site_id = ? ORDER BY id DESC", siteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var certs []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var active int
+		var ctype, label, certPath, keyPath, created string
+		if err := rows.Scan(&id, &ctype, &label, &certPath, &keyPath, &active, &created); err != nil {
+			return nil, err
+		}
+		certs = append(certs, map[string]interface{}{
+			"id": id, "site_id": siteID, "type": ctype, "label": label,
+			"cert_path": certPath, "key_path": keyPath, "active": active == 1, "created_at": created,
+		})
+	}
+	return certs, nil
+}
+
+func (d *DB) CreateSSLCertificate(siteID int64, ctype, label, certPath, keyPath string, active bool) (int64, error) {
+	act := 0
+	if active {
+		act = 1
+	}
+	res, err := d.Conn.Exec("INSERT INTO ssl_certificates (site_id, type, label, cert_path, key_path, active) VALUES (?, ?, ?, ?, ?, ?)",
+		siteID, ctype, label, certPath, keyPath, act)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) ActivateSSLCertificate(siteID, certID int64) error {
+	// Deactivate all certs for this site
+	d.Conn.Exec("UPDATE ssl_certificates SET active = 0 WHERE site_id = ?", siteID)
+	// Activate the specified cert
+	_, err := d.Conn.Exec("UPDATE ssl_certificates SET active = 1 WHERE id = ? AND site_id = ?", certID, siteID)
+	return err
+}
+
+func (d *DB) GetSSLCertificate(id int64) (map[string]interface{}, error) {
+	var siteID int64
+	var active int
+	var ctype, label, certPath, keyPath, created string
+	err := d.Conn.QueryRow("SELECT site_id, type, label, cert_path, key_path, active, created_at FROM ssl_certificates WHERE id = ?", id).
+		Scan(&siteID, &ctype, &label, &certPath, &keyPath, &active, &created)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"id": id, "site_id": siteID, "type": ctype, "label": label,
+		"cert_path": certPath, "key_path": keyPath, "active": active == 1, "created_at": created,
+	}, nil
+}
+
+func (d *DB) DeleteSSLCertificate(id int64) error {
+	_, err := d.Conn.Exec("DELETE FROM ssl_certificates WHERE id = ?", id)
+	return err
+}
+
+func (d *DB) CountSSLByType(siteID int64, ctype string) (int, error) {
+	var count int
+	err := d.Conn.QueryRow("SELECT COUNT(*) FROM ssl_certificates WHERE site_id = ? AND type = ?", siteID, ctype).Scan(&count)
+	return count, err
+}
+
+// --- Firewall Rules queries ---
+
+func (d *DB) ListFirewallRules() ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query("SELECT id, direction, action, protocol, port, source, comment, enabled, created_at FROM firewall_rules ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var rules []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var enabled int
+		var direction, action, protocol, port, source, comment, created string
+		if err := rows.Scan(&id, &direction, &action, &protocol, &port, &source, &comment, &enabled, &created); err != nil {
+			return nil, err
+		}
+		rules = append(rules, map[string]interface{}{
+			"id": id, "direction": direction, "action": action, "protocol": protocol,
+			"port": port, "source": source, "comment": comment, "enabled": enabled == 1, "created_at": created,
+		})
+	}
+	return rules, nil
+}
+
+func (d *DB) CreateFirewallRule(direction, action, protocol, port, source, comment string) (int64, error) {
+	res, err := d.Conn.Exec("INSERT INTO firewall_rules (direction, action, protocol, port, source, comment) VALUES (?, ?, ?, ?, ?, ?)",
+		direction, action, protocol, port, source, comment)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) UpdateFirewallRule(id int64, direction, action, protocol, port, source, comment string, enabled bool) error {
+	en := 0
+	if enabled {
+		en = 1
+	}
+	_, err := d.Conn.Exec("UPDATE firewall_rules SET direction=?, action=?, protocol=?, port=?, source=?, comment=?, enabled=? WHERE id=?",
+		direction, action, protocol, port, source, comment, en, id)
+	return err
+}
+
+func (d *DB) DeleteFirewallRule(id int64) error {
+	_, err := d.Conn.Exec("DELETE FROM firewall_rules WHERE id = ?", id)
+	return err
+}

@@ -136,8 +136,11 @@ func (h *PHPHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := php.ReloadFPM(phpVersion); err != nil {
-		jsonError(w, "pool config saved but FPM reload failed", http.StatusInternalServerError)
-		return
+		// Fallback to restart if reload fails
+		if err2 := php.RestartFPM(phpVersion); err2 != nil {
+			jsonError(w, "pool config saved but FPM reload/restart failed", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	jsonSuccess(w, map[string]interface{}{"updated": true})
