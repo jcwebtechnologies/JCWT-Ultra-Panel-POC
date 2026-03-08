@@ -188,6 +188,20 @@ function renderOverview(el, site, versions, siteId) {
             </div>
             <button type="submit" class="btn btn-primary" style="width: auto;">Save Changes</button>
         </form>
+    </div>
+    <div class="card" style="margin-top: var(--space-4);">
+        <h3 class="card-title" style="margin-bottom: var(--space-4);">Logging</h3>
+        <div class="settings-row" style="margin-bottom: var(--space-3);">
+            <div class="settings-row-label">Access Log<small>Log all incoming requests</small></div>
+            <div><label class="toggle"><input type="checkbox" id="toggle-access-log" ${site.access_log !== 0 && site.access_log !== false ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-row-label">Error Log<small>Log server errors and warnings</small></div>
+            <div><label class="toggle"><input type="checkbox" id="toggle-error-log" ${site.error_log !== 0 && site.error_log !== false ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+        </div>
+        <div style="margin-top: var(--space-3);">
+            <button class="btn btn-primary" id="save-log-settings" style="width: auto;">Save Log Settings</button>
+        </div>
     </div>`;
 
     document.getElementById('edit-type')?.addEventListener('change', (e) => {
@@ -252,13 +266,22 @@ function renderOverview(el, site, versions, siteId) {
 
         } catch (err) { showToast(err.message, 'error'); }
     });
+
+    document.getElementById('save-log-settings')?.addEventListener('click', async () => {
+        const accessLog = document.getElementById('toggle-access-log').checked;
+        const errorLog = document.getElementById('toggle-error-log').checked;
+        try {
+            await request(`/api/sites?action=update-logs`, { method: 'PUT', body: JSON.stringify({ site_id: parseInt(siteId), access_log: accessLog, error_log: errorLog }) });
+            showToast('Log settings updated!', 'success');
+        } catch (err) { showToast(err.message, 'error'); }
+    });
 }
 
 async function renderPHP(el, siteId) {
     const phpOpts = {
         memory_limit: ['128M', '256M', '512M', '768M', '1024M', '2048M'],
         max_execution_time: ['30', '60', '120', '300', '600', '900'],
-        max_input_time: ['60', '120', '300', '600', '900'],
+        max_input_time: ['30', '60', '120', '300', '600', '900'],
         max_input_vars: ['1000', '2000', '3000', '5000', '10000'],
         post_max_size: ['2M', '4M', '8M', '16M', '32M', '64M', '128M', '256M', '512M', '1024M'],
         upload_max_filesize: ['2M', '4M', '8M', '16M', '32M', '64M', '128M', '256M', '512M', '1024M'],
@@ -277,32 +300,32 @@ async function renderPHP(el, siteId) {
             <form id="php-settings-form">
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">memory_limit</label>
-                        <select class="form-select" id="php-memory">${opts('memory_limit', settings.memory_limit || '256M')}</select>
+                        <label class="form-label">Memory Limit</label>
+                        <select class="form-select" id="php-memory">${opts('memory_limit', settings.memory_limit || '128M')}</select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">max_execution_time <span style="font-weight:400;color:var(--text-tertiary)">(seconds)</span></label>
+                        <label class="form-label">Max Execution Time <span style="font-weight:400;color:var(--text-tertiary)">(seconds)</span></label>
                         <select class="form-select" id="php-exec-time">${opts('max_execution_time', settings.max_execution_time || 30)}</select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">max_input_time <span style="font-weight:400;color:var(--text-tertiary)">(seconds)</span></label>
-                        <select class="form-select" id="php-input-time">${opts('max_input_time', settings.max_input_time || 60)}</select>
+                        <label class="form-label">Max Input Time <span style="font-weight:400;color:var(--text-tertiary)">(seconds)</span></label>
+                        <select class="form-select" id="php-input-time">${opts('max_input_time', settings.max_input_time || 30)}</select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">max_input_vars</label>
+                        <label class="form-label">Max Input Vars</label>
                         <select class="form-select" id="php-input-vars">${opts('max_input_vars', settings.max_input_vars || 1000)}</select>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">post_max_size</label>
-                        <select class="form-select" id="php-post-max">${opts('post_max_size', settings.post_max_size || '64M')}</select>
+                        <label class="form-label">Post Max Size</label>
+                        <select class="form-select" id="php-post-max">${opts('post_max_size', settings.post_max_size || '16M')}</select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">upload_max_filesize</label>
-                        <select class="form-select" id="php-upload-max">${opts('upload_max_filesize', settings.upload_max_filesize || '64M')}</select>
+                        <label class="form-label">Upload Max Filesize</label>
+                        <select class="form-select" id="php-upload-max">${opts('upload_max_filesize', settings.upload_max_filesize || '16M')}</select>
                     </div>
                 </div>
                 <div class="form-group">
@@ -529,6 +552,10 @@ function renderSSL(el, site, siteId) {
 async function renderCron(el, siteId) {
     try {
         const jobs = await cron.list(siteId);
+        // Build a lookup map so we can retrieve full command/schedule without HTML attribute escaping issues
+        const cronMap = {};
+        jobs.forEach(j => { cronMap[j.id] = j; });
+
         el.innerHTML = `
         <div class="card">
             <div class="card-header">
@@ -552,8 +579,8 @@ async function renderCron(el, siteId) {
                                 <td data-label="Status"><span class="badge ${j.enabled ? 'badge-success' : 'badge-warning'}">${j.enabled ? 'Active' : 'Paused'}</span></td>
                                 <td>
                                     <div class="table-actions">
-                                        <button class="btn btn-sm btn-secondary edit-cron" data-id="${j.id}" data-enabled="${j.enabled}" data-schedule="${escapeHtml(j.schedule)}" data-command="${escapeHtml(j.command)}">Edit</button>
-                                        <button class="btn btn-sm btn-ghost toggle-cron" data-id="${j.id}" data-enabled="${j.enabled}" data-schedule="${escapeHtml(j.schedule)}" data-command="${escapeHtml(j.command)}">${j.enabled ? 'Pause' : 'Enable'}</button>
+                                        <button class="btn btn-sm btn-secondary edit-cron" data-id="${j.id}">Edit</button>
+                                        <button class="btn btn-sm btn-ghost toggle-cron" data-id="${j.id}">${j.enabled ? 'Pause' : 'Enable'}</button>
                                         <button class="btn btn-sm btn-danger delete-cron" data-id="${j.id}">Delete</button>
                                     </div>
                                 </td>
@@ -596,13 +623,15 @@ async function renderCron(el, siteId) {
 
         el.querySelectorAll('.toggle-cron').forEach(btn => {
             btn.addEventListener('click', async () => {
+                const job = cronMap[btn.dataset.id];
+                if (!job) return;
                 try {
                     await cron.update({
                         id: parseInt(btn.dataset.id),
                         site_id: parseInt(siteId),
-                        schedule: btn.dataset.schedule,
-                        command: btn.dataset.command,
-                        enabled: btn.dataset.enabled !== 'true',
+                        schedule: job.schedule,
+                        command: job.command,
+                        enabled: !job.enabled,
                     });
                     showToast('Cron job updated', 'success');
                     renderCron(el, siteId);
@@ -612,10 +641,12 @@ async function renderCron(el, siteId) {
 
         el.querySelectorAll('.edit-cron').forEach(btn => {
             btn.addEventListener('click', () => {
+                const job = cronMap[btn.dataset.id];
+                if (!job) return;
                 const cronId = btn.dataset.id;
-                const currentSchedule = btn.dataset.schedule;
-                const currentCommand = btn.dataset.command;
-                const isEnabled = btn.dataset.enabled === 'true';
+                const currentSchedule = job.schedule;
+                const currentCommand = job.command;
+                const isEnabled = !!job.enabled;
                 showModal('Edit Cron Job', `
                     <div class="form-group">
                         <label class="form-label">Schedule</label>
@@ -653,6 +684,9 @@ async function renderCron(el, siteId) {
 
         el.querySelectorAll('.delete-cron').forEach(btn => {
             btn.addEventListener('click', async () => {
+                const job = cronMap[btn.dataset.id];
+                const desc = job ? job.command : 'this cron job';
+                if (!await showConfirm('Delete Cron Job', `Delete this cron job?\n\n${desc}`, 'Delete', 'btn-danger')) return;
                 try {
                     await cron.delete(btn.dataset.id, siteId);
                     showToast('Cron job deleted', 'success');
@@ -1208,9 +1242,10 @@ async function renderVhost(container, site, siteId) {
                 <h3 class="card-title">Nginx Vhost Configuration</h3>
             </div>
             <div style="padding: var(--space-4);">
-                <p style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--space-3);">
-                    Edit the Nginx virtual host configuration for this site. Changes will be validated before applying.
-                </p>
+                <div style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); margin-bottom: var(--space-3); background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3); border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);">
+                    <span style="flex-shrink:0;width:18px;height:18px;margin-top:1px;color:rgb(234,179,8);">${icons.alertTriangle}</span>
+                    <span>This configuration is auto-managed by JCWT Panel. Manual changes may be overwritten when settings are updated through the panel. Only modify this directly if you understand nginx configuration.</span>
+                </div>
                 <div class="form-group">
                     <textarea class="form-textarea mono" id="vhost-editor" style="min-height: 400px; font-size: var(--font-size-xs); line-height: 1.6; tab-size: 4; white-space: pre; overflow-x: auto;">${escapeHtml(data.config)}</textarea>
                 </div>
@@ -1218,6 +1253,18 @@ async function renderVhost(container, site, siteId) {
                     <button class="btn btn-primary" id="save-vhost">Save & Apply</button>
                     <button class="btn btn-secondary" id="reset-vhost">Reset to Default</button>
                 </div>
+                <details style="margin-top: var(--space-3);">
+                    <summary style="cursor: pointer; font-size: var(--font-size-sm); color: var(--text-tertiary);">Available Template Variables</summary>
+                    <div style="margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); font-family: var(--font-mono);">
+                        <div style="display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3);">
+                            <span>{domain}</span><span style="color:var(--text-tertiary);">Site domain name</span>
+                            <span>{user}</span><span style="color:var(--text-tertiary);">System user</span>
+                            <span>{site_root}</span><span style="color:var(--text-tertiary);">Web root path</span>
+                            <span>{php_version}</span><span style="color:var(--text-tertiary);">PHP version (e.g. 8.2)</span>
+                            <span>{logs_dir}</span><span style="color:var(--text-tertiary);">Log directory path</span>
+                        </div>
+                    </div>
+                </details>
             </div>
         </div>`;
 
@@ -1390,23 +1437,23 @@ async function renderBackups(container, site, siteId) {
 
                 const dbToggles = siteDbs.length > 0
                     ? siteDbs.map(db => `
-                        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-1) 0; padding-left: var(--space-4);">
-                            <span class="mono" style="font-size: var(--font-size-sm);">${escapeHtml(db.db_name)}</span>
-                            <label class="toggle" style="margin:0;"><input type="checkbox" class="restore-db-toggle" data-name="${escapeHtml(db.db_name)}" checked><span class="toggle-slider"></span></label>
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-1) var(--space-2);">
+                            <span class="mono" style="font-size: var(--font-size-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">${escapeHtml(db.db_name)}</span>
+                            <label class="toggle" style="margin:0; flex-shrink:0;"><input type="checkbox" class="restore-db-toggle" data-name="${escapeHtml(db.db_name)}" checked><span class="toggle-slider"></span></label>
                         </div>`).join('')
                     : '';
 
                 showModal('Restore Backup', `
                     <p style="margin-bottom: var(--space-3); color: var(--text-secondary);">Select which components to restore. Current data will be replaced.</p>
                     <div class="settings-row" style="margin-bottom: var(--space-3);">
-                        <div class="settings-row-label">Web Files<small>Restore website files to web root</small></div>
+                        <div class="settings-row-label">Web Files<small>Restore files to web root</small></div>
                         <div><label class="toggle"><input type="checkbox" id="restore-files" checked><span class="toggle-slider"></span></label></div>
                     </div>
                     <div class="settings-row" style="margin-bottom: var(--space-2);">
                         <div class="settings-row-label">Databases<small>Restore database SQL dumps</small></div>
                         <div><label class="toggle"><input type="checkbox" id="restore-dbs" checked><span class="toggle-slider"></span></label></div>
                     </div>
-                    <div id="restore-db-list" style="margin-bottom: var(--space-3);">${dbToggles}</div>
+                    ${dbToggles ? `<div id="restore-db-list" style="margin-bottom: var(--space-3); border: 1px solid var(--border-primary); border-radius: var(--radius-md); background: var(--bg-secondary); padding: var(--space-2); max-width: 100%;">${dbToggles}</div>` : '<div id="restore-db-list"></div>'}
                     <div class="settings-row" style="margin-bottom: var(--space-3);">
                         <div class="settings-row-label">Cron Jobs<small>Restore scheduled tasks</small></div>
                         <div><label class="toggle"><input type="checkbox" id="restore-cron" checked><span class="toggle-slider"></span></label></div>

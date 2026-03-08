@@ -41,6 +41,8 @@ func (h *SitesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "PUT":
 		if r.URL.Query().Get("action") == "update-security" {
 			h.updateSecurity(w, r)
+		} else if r.URL.Query().Get("action") == "update-logs" {
+			h.updateLogs(w, r)
 		} else {
 			h.update(w, r)
 		}
@@ -252,6 +254,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		Domain: req.Domain, Aliases: req.Aliases, User: req.SystemUser,
 		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL, 
 		WebRoot: webRoot, SSLType: "none",
+		AccessLog: true, ErrorLog: true,
 	}
 	if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, vhostData); err != nil {
 		jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)
@@ -389,12 +392,14 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Regenerate Nginx config
+	accessLog, errorLog := siteLogFlags(site)
 	vhostData := nginx.VHostData{
 		Domain: req.Domain, Aliases: req.Aliases, User: sysUser,
 		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL, 
 		WebRoot: webRoot,
 		SSLType: req.SSLType, SSLCertPath: site["ssl_cert_path"].(string),
 		SSLKeyPath: site["ssl_key_path"].(string),
+		AccessLog: accessLog, ErrorLog: errorLog,
 	}
 
 	// Remove old config if domain changed
@@ -480,6 +485,34 @@ func jsonError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": msg})
+}
+
+// siteLogFlags extracts access_log and error_log booleans from a site map.
+// Defaults to true (enabled) if not present.
+func siteLogFlags(site map[string]interface{}) (accessLog, errorLog bool) {
+	accessLog = true
+	errorLog = true
+	if v, ok := site["access_log"]; ok {
+		switch val := v.(type) {
+		case int64:
+			accessLog = val != 0
+		case int:
+			accessLog = val != 0
+		case bool:
+			accessLog = val
+		}
+	}
+	if v, ok := site["error_log"]; ok {
+		switch val := v.(type) {
+		case int64:
+			errorLog = val != 0
+		case int:
+			errorLog = val != 0
+		case bool:
+			errorLog = val
+		}
+	}
+	return
 }
 
 func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
@@ -581,6 +614,7 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 			exec.Command("sudo", "rm", "-f", htpasswdPath).Run()
 		}
 
+		secAccessLog, secErrorLog := siteLogFlags(site)
 		err = nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, nginx.VHostData{
 			Domain:           domain,
 			Aliases:          aliases,
@@ -593,6 +627,8 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 			SSLCertPath:      sslCert,
 			SSLKeyPath:       sslKey,
 			BasicAuthEnabled: req.BasicAuthEnabled,
+			AccessLog:        secAccessLog,
+			ErrorLog:         secErrorLog,
 		})
 		if err != nil {
 			log.Printf("Failed to write vhost for %s: %v", domain, err)
@@ -605,6 +641,71 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	jsonSuccess(w, map[string]interface{}{"updated": true})
+}
+
+func (h *SitesHandler) updateLogs(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SiteID    int64 `json:"site_id"`
+		AccessLog bool  `json:"access_log"`
+		ErrorLog  bool  `json:"error_log"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.SiteID <= 0 {
+		jsonError(w, "site_id is required", http.StatusBadRequest)
+		return
+	}
+
+	site, err := h.DB.GetSite(req.SiteID)
+	if err != nil {
+		jsonError(w, "site not found", http.StatusNotFound)
+		return
+	}
+
+	al := 0
+	if req.AccessLog {
+		al = 1
+	}
+	el := 0
+	if req.ErrorLog {
+		el = 1
+	}
+	_, err = h.DB.Conn.Exec("UPDATE sites SET access_log=?, error_log=? WHERE id=?", al, el, req.SiteID)
+	if err != nil {
+		jsonError(w, "failed to update log settings", http.StatusInternalServerError)
+		return
+	}
+
+	// Regenerate vhost with new log settings
+	site["access_log"] = al
+	site["error_log"] = el
+	domain := site["domain"].(string)
+	sysUser := site["system_user"].(string)
+
+	vhostData := nginx.VHostData{
+		Domain:      domain,
+		Aliases:     site["aliases"].(string),
+		User:        sysUser,
+		SiteType:    site["site_type"].(string),
+		PHPVersion:  site["php_version"].(string),
+		ProxyURL:    site["proxy_url"].(string),
+		WebRoot:     site["web_root"].(string),
+		SSLType:     site["ssl_type"].(string),
+		SSLCertPath: site["ssl_cert_path"].(string),
+		SSLKeyPath:  site["ssl_key_path"].(string),
+		AccessLog:   req.AccessLog,
+		ErrorLog:    req.ErrorLog,
+	}
+
+	if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {
+		jsonError(w, fmt.Sprintf("failed to update nginx config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	nginx.TestAndReload()
 
 	jsonSuccess(w, map[string]interface{}{"updated": true})
 }

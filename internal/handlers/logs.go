@@ -34,6 +34,7 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domain := site["domain"].(string)
+	sysUser := site["system_user"].(string)
 	logType := r.URL.Query().Get("type")
 	if logType == "" {
 		logType = "access"
@@ -50,9 +51,9 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var logPath string
 	switch logType {
 	case "access":
-		logPath = fmt.Sprintf("/var/log/nginx/%s-access.log", domain)
+		logPath = fmt.Sprintf("/home/%s/logs/%s-access.log", sysUser, domain)
 	case "error":
-		logPath = fmt.Sprintf("/var/log/nginx/%s-error.log", domain)
+		logPath = fmt.Sprintf("/home/%s/logs/%s-error.log", sysUser, domain)
 	case "php-fpm":
 		phpVersion := site["php_version"].(string)
 		logPath = fmt.Sprintf("/var/log/php%s-fpm.log", phpVersion)

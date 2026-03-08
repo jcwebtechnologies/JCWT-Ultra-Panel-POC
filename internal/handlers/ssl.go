@@ -63,6 +63,8 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
 			SSLType: "self-signed", SSLCertPath: certPath, SSLKeyPath: keyPath,
+			AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
+			ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
 		}
 		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 		nginx.TestAndReload()
@@ -105,6 +107,8 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
 			SSLType: "custom", SSLCertPath: certPath, SSLKeyPath: keyPath,
+			AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
+			ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
 		}
 		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 		nginx.TestAndReload()

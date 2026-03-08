@@ -50,6 +50,7 @@ async function loadServices(container) {
             const statusClass = isActive ? 'status-active' : 'status-inactive';
             const statusText = isActive ? 'Running' : 'Stopped';
             const canRestart = svc.name !== 'jcwt-panel';
+            const canReload = canRestart && (svc.name === 'nginx' || svc.name.startsWith('php'));
 
             let memoryText = '';
             if (svc.memory && svc.memory !== '[not set]') {
@@ -75,7 +76,10 @@ async function loadServices(container) {
                     ${svc.uptime ? `<span class="service-meta-item">Since: ${escapeHtml(svc.uptime.split('.')[0] || svc.uptime)}</span>` : ''}
                 </div>
                 ${canRestart ? `
-                <div class="service-actions" style="margin-top: var(--space-3);">
+                <div class="service-actions" style="margin-top: var(--space-3); display: flex; gap: var(--space-2);">
+                    ${canReload ? `<button class="btn btn-sm btn-secondary reload-service" data-service="${escapeHtml(svc.name)}">
+                        <span class="nav-icon">${icons.refresh}</span> Reload
+                    </button>` : ''}
                     <button class="btn btn-sm btn-secondary restart-service" data-service="${escapeHtml(svc.name)}">
                         <span class="nav-icon">${icons.refresh}</span> Restart
                     </button>
@@ -104,6 +108,28 @@ async function loadServices(container) {
                     showToast(err.message, 'error');
                     btn.disabled = false;
                     btn.innerHTML = `<span class="nav-icon">${icons.refresh}</span> Restart`;
+                }
+            });
+        });
+
+        // Bind reload buttons
+        listEl.querySelectorAll('.reload-service').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const name = btn.dataset.service;
+                if (!await showConfirm('Reload Service', `Reload ${name}? This gracefully reloads the configuration without dropping active connections.`, 'Reload', 'btn-primary')) return;
+                btn.disabled = true;
+                btn.innerHTML = `<span class="nav-icon">${icons.refresh}</span> Reloading...`;
+                try {
+                    await request('/api/services?action=reload', {
+                        method: 'POST',
+                        body: JSON.stringify({ service: name }),
+                    });
+                    showToast(`${name} reloaded successfully`, 'success');
+                    setTimeout(() => loadServices(container), 1000);
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = `<span class="nav-icon">${icons.refresh}</span> Reload`;
                 }
             });
         });

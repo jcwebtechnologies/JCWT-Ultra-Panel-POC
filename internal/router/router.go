@@ -18,7 +18,7 @@ import (
 )
 
 // Setup creates and configures the HTTP router
-func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS http.FileSystem) http.Handler {
+func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS http.FileSystem, version string) http.Handler {
 	mux := http.NewServeMux()
 	middleware := auth.NewMiddleware(authMgr)
 
@@ -84,7 +84,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	mux.Handle("/api/php-versions", middleware.RequireAuth(&handlers.PHPVersionsHandler{}))
 
 	// Panel Settings (admin + manager only)
-	mux.Handle("/api/settings", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SettingsHandler{DB: database, Cfg: cfg})))
+	mux.Handle("/api/settings", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SettingsHandler{DB: database, Cfg: cfg, Version: version})))
 
 	// Users Management (admin only)
 	usersHandler := &handlers.UsersHandler{DB: database, Middleware: middleware}
@@ -129,6 +129,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 			"primary_color":      settings["primary_color"],
 			"accent_color":       settings["accent_color"],
 			"recaptcha_site_key": settings["recaptcha_site_key"],
+			"version":            version,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "data": public})

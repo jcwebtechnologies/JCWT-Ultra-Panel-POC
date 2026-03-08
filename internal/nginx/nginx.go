@@ -37,8 +37,16 @@ server {
 {{- end}}
 
 {{- if eq .SiteType "proxy"}}
-    access_log /var/log/nginx/{{.Domain}}-access.log;
-    error_log /var/log/nginx/{{.Domain}}-error.log;
+{{- if .AccessLog}}
+    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+{{- else}}
+    access_log off;
+{{- end}}
+{{- if .ErrorLog}}
+    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+{{- else}}
+    error_log /dev/null;
+{{- end}}
 
     location / {
         proxy_pass {{.ProxyURL}};
@@ -52,8 +60,16 @@ server {
     root {{.WebRoot}};
     index index.php index.html index.htm;
 
-    access_log /var/log/nginx/{{.Domain}}-access.log;
-    error_log /var/log/nginx/{{.Domain}}-error.log;
+{{- if .AccessLog}}
+    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+{{- else}}
+    access_log off;
+{{- end}}
+{{- if .ErrorLog}}
+    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+{{- else}}
+    error_log /dev/null;
+{{- end}}
 
     location / {
 {{- if eq .SiteType "html"}}
@@ -101,8 +117,16 @@ server {
 {{- end}}
 
 {{- if eq .SiteType "proxy"}}
-    access_log /var/log/nginx/{{.Domain}}-access.log;
-    error_log /var/log/nginx/{{.Domain}}-error.log;
+{{- if .AccessLog}}
+    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+{{- else}}
+    access_log off;
+{{- end}}
+{{- if .ErrorLog}}
+    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+{{- else}}
+    error_log /dev/null;
+{{- end}}
 
     location / {
         proxy_pass {{.ProxyURL}};
@@ -116,8 +140,16 @@ server {
     root {{.WebRoot}};
     index index.php index.html index.htm;
 
-    access_log /var/log/nginx/{{.Domain}}-access.log;
-    error_log /var/log/nginx/{{.Domain}}-error.log;
+{{- if .AccessLog}}
+    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+{{- else}}
+    access_log off;
+{{- end}}
+{{- if .ErrorLog}}
+    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+{{- else}}
+    error_log /dev/null;
+{{- end}}
 
     location / {
 {{- if eq .SiteType "html"}}
@@ -157,6 +189,8 @@ type VHostData struct {
 	SSLCertPath      string
 	SSLKeyPath       string
 	BasicAuthEnabled bool
+	AccessLog        bool
+	ErrorLog         bool
 }
 
 // GenerateConfig generates an nginx vhost config

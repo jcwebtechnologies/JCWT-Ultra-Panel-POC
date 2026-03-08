@@ -34,6 +34,13 @@ func CreateSystemUser(username, webRootBase string) error {
 		}
 	}
 
+	// Create logs directory
+	logsDir := filepath.Join(homeDir, "logs")
+	cmd = exec.Command("sudo", "mkdir", "-p", logsDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("create logs dir: %s", string(output))
+	}
+
 	// Set ownership
 	cmd = exec.Command("sudo", "chown", "-R", fmt.Sprintf("%s:%s", username, username), homeDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -51,7 +58,13 @@ func CreateSystemUser(username, webRootBase string) error {
 		return fmt.Errorf("chmod webroot: %s", string(output))
 	}
 
-	// Add www-data to user's group (so Nginx can read)
+	// Set logs directory permissions (www-data needs write access for nginx)
+	cmd = exec.Command("sudo", "chmod", "770", logsDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("chmod logs: %s", string(output))
+	}
+
+	// Add www-data to user's group (so Nginx can read files and write logs)
 	cmd = exec.Command("sudo", "usermod", "-aG", username, "www-data")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("add www-data to group: %s", string(output))

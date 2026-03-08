@@ -365,13 +365,13 @@ function renderLayout(pageName) {
                     <a href="#/services" class="nav-item ${pageName === 'services' ? 'active' : ''}">
                         <span class="nav-icon">${icons.server}</span> Services
                     </a>
-                    ${currentRole === 'admin' || currentRole === 'manager' ? `
-                    <a href="#/settings" class="nav-item ${pageName === 'settings' ? 'active' : ''}">
-                        <span class="nav-icon">${icons.settings}</span> Settings
-                    </a>` : ''}
                     ${currentRole === 'admin' ? `
                     <a href="#/firewall" class="nav-item ${pageName === 'firewall' ? 'active' : ''}">
                         <span class="nav-icon">${icons.shield}</span> Firewall
+                    </a>` : ''}
+                    ${currentRole === 'admin' || currentRole === 'manager' ? `
+                    <a href="#/settings" class="nav-item ${pageName === 'settings' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.settings}</span> Settings
                     </a>` : ''}
                 </div>
             </nav>
@@ -423,7 +423,7 @@ function renderLayout(pageName) {
             <div class="main-body" id="page-content">
                 <div class="loading-screen"><div class="loading-spinner"></div></div>
             </div>
-            ${`<footer class="panel-footer">${escapeHtml(panelSettings?.footer_text || '\u00A9 {year} JCWT Ultra Panel').replace(/\{year\}/g, new Date().getFullYear())}</footer>`}
+            ${`<footer class="panel-footer">${escapeHtml(panelSettings?.footer_text || '\u00A9 {year} JCWT Ultra Panel').replace(/\{year\}/g, new Date().getFullYear())}${panelSettings?.version ? ` <span style="opacity:0.5;">v${escapeHtml(panelSettings.version)}</span>` : ''}</footer>`}
         </main>
     </div>`;
 }

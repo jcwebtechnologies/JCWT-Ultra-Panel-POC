@@ -15,6 +15,8 @@ import (
 	"github.com/jcwt/ultra-panel/internal/router"
 )
 
+const Version = "1.0.0"
+
 //go:embed all:web
 var webEmbed embed.FS
 
@@ -66,7 +68,7 @@ func main() {
 	}
 
 	// Setup router
-	handler := router.Setup(database, cfg, authMgr, http.FS(webFS))
+	handler := router.Setup(database, cfg, authMgr, http.FS(webFS), Version)
 
 	// Check for TLS certificates
 	certFile := cfg.TLSCert

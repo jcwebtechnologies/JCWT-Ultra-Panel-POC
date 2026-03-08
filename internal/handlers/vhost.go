@@ -79,11 +79,20 @@ func (h *VhostHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domain := site["domain"].(string)
+	sysUser := site["system_user"].(string)
 	confPath := filepath.Join(h.Cfg.NginxSitesAvailable, domain+".conf")
+
+	// Replace template variables with actual values
+	config := req.Config
+	config = strings.ReplaceAll(config, "{domain}", domain)
+	config = strings.ReplaceAll(config, "{user}", sysUser)
+	config = strings.ReplaceAll(config, "{site_root}", site["web_root"].(string))
+	config = strings.ReplaceAll(config, "{php_version}", site["php_version"].(string))
+	config = strings.ReplaceAll(config, "{logs_dir}", "/home/"+sysUser+"/logs")
 
 	// Write config via tee
 	cmd := exec.Command("sudo", "tee", confPath)
-	cmd.Stdin = strings.NewReader(req.Config)
+	cmd.Stdin = strings.NewReader(config)
 	cmd.Stdout = nil
 	if output, err := cmd.CombinedOutput(); err != nil {
 		jsonError(w, fmt.Sprintf("failed to write vhost: %s", string(output)), http.StatusInternalServerError)
@@ -118,6 +127,7 @@ func (h *VhostHandler) reset(w http.ResponseWriter, r *http.Request) {
 	domain := site["domain"].(string)
 	sysUser := site["system_user"].(string)
 
+	accessLog, errorLog := siteLogFlags(site)
 	vhostData := nginx.VHostData{
 		Domain:      domain,
 		Aliases:     site["aliases"].(string),
@@ -129,6 +139,8 @@ func (h *VhostHandler) reset(w http.ResponseWriter, r *http.Request) {
 		SSLType:     site["ssl_type"].(string),
 		SSLCertPath: site["ssl_cert_path"].(string),
 		SSLKeyPath:  site["ssl_key_path"].(string),
+		AccessLog:   accessLog,
+		ErrorLog:    errorLog,
 	}
 
 	if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {

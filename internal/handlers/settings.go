@@ -20,8 +20,9 @@ var hexColorRegex = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 var allowedImageExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".ico": true, ".svg": true, ".webp": true}
 
 type SettingsHandler struct {
-	DB  *db.DB
-	Cfg *config.Config
+	DB      *db.DB
+	Cfg     *config.Config
+	Version string
 }
 
 func (h *SettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -51,6 +52,7 @@ func (h *SettingsHandler) get(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "failed to load settings", http.StatusInternalServerError)
 		return
 	}
+	settings["version"] = h.Version
 	jsonSuccess(w, settings)
 }
 

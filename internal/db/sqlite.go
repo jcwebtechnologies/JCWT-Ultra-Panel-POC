@@ -61,6 +61,10 @@ func Open(dataDir string) (*DB, error) {
 	// Add privilege_level column to db_users
 	conn.Exec("ALTER TABLE db_users ADD COLUMN privilege_level TEXT DEFAULT 'administrator'")
 
+	// Add access_log and error_log columns to sites
+	conn.Exec("ALTER TABLE sites ADD COLUMN access_log INTEGER DEFAULT 1")
+	conn.Exec("ALTER TABLE sites ADD COLUMN error_log INTEGER DEFAULT 1")
+
 	// Generate tokens for any existing sites that don't have one
 	rows, _ := conn.Query("SELECT id FROM sites WHERE token = '' OR token IS NULL")
 	if rows != nil {

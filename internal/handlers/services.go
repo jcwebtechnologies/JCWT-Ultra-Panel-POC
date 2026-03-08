@@ -35,7 +35,12 @@ func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "GET":
 		h.list(w, r)
 	case "POST":
-		h.restart(w, r)
+		action := r.URL.Query().Get("action")
+		if action == "reload" {
+			h.reload(w, r)
+		} else {
+			h.restart(w, r)
+		}
 	default:
 		http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	}
@@ -119,6 +124,70 @@ func (h *ServicesHandler) restart(w http.ResponseWriter, r *http.Request) {
 		"service":   req.Service,
 		"status":    status["status"],
 		"active":    status["active"],
+	})
+}
+
+// Services that support reload (graceful config reload without dropping connections)
+var reloadableServices = map[string]bool{
+	"nginx": true, "php8.2": true, "php8.3": true, "php8.4": true, "php8.5": true,
+}
+
+// reload gracefully reloads a whitelisted service
+func (h *ServicesHandler) reload(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Service string `json:"service"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	unitName, ok := allowedServices[req.Service]
+	if !ok {
+		jsonError(w, "unknown service", http.StatusBadRequest)
+		return
+	}
+
+	if !reloadableServices[req.Service] {
+		jsonError(w, "this service does not support reload", http.StatusBadRequest)
+		return
+	}
+
+	// Rate limit: same as restart
+	h.restartMu.Lock()
+	if h.restartLog == nil {
+		h.restartLog = make(map[string][]time.Time)
+	}
+	now := time.Now()
+	cutoff := now.Add(-5 * time.Minute)
+	var recent []time.Time
+	for _, t := range h.restartLog[req.Service] {
+		if t.After(cutoff) {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= 3 {
+		h.restartMu.Unlock()
+		jsonError(w, "too many attempts — try again in a few minutes", http.StatusTooManyRequests)
+		return
+	}
+	h.restartLog[req.Service] = append(recent, now)
+	h.restartMu.Unlock()
+
+	output, err := exec.Command("sudo", "systemctl", "reload", unitName).CombinedOutput()
+	if err != nil {
+		jsonError(w, "reload failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
+		return
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	status := getServiceStatus(unitName)
+
+	jsonSuccess(w, map[string]interface{}{
+		"reloaded": true,
+		"service":  req.Service,
+		"status":   status["status"],
+		"active":   status["active"],
 	})
 }
 
