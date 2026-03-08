@@ -19,7 +19,7 @@ func GenerateSelfSignedCert(sslBaseDir, domain string) (certPath, keyPath string
 	certPath = filepath.Join(certDir, "cert.pem")
 	keyPath = filepath.Join(certDir, "key.pem")
 
-	cmd := exec.Command("openssl", "req",
+	cmd := exec.Command("sudo", "openssl", "req",
 		"-x509",
 		"-nodes",
 		"-days", "365",

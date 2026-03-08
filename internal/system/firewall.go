@@ -19,7 +19,7 @@ func SetupIPv6Firewall(panelPort string) error {
 	}
 
 	for _, args := range commands {
-		cmd := exec.Command(args[0], args[1:]...)
+		cmd := exec.Command("sudo", args[0], args[1:]...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("firewall command %v failed: %s: %s", args, err, string(output))
@@ -33,7 +33,7 @@ func SetupIPv6Firewall(panelPort string) error {
 func EnableIPv6InUFW() error {
 	// ufw on Ubuntu 24.04 has IPv6 enabled by default
 	// Ensure it's set in the config
-	cmd := exec.Command("sed", "-i", "s/IPV6=no/IPV6=yes/", "/etc/default/ufw")
+	cmd := exec.Command("sudo", "sed", "-i", "s/IPV6=no/IPV6=yes/", "/etc/default/ufw")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("enable IPv6 in ufw: %s", string(output))

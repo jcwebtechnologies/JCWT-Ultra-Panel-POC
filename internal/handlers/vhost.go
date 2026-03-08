@@ -82,7 +82,7 @@ func (h *VhostHandler) update(w http.ResponseWriter, r *http.Request) {
 	confPath := filepath.Join(h.Cfg.NginxSitesAvailable, domain+".conf")
 
 	// Write config via tee
-	cmd := exec.Command("tee", confPath)
+	cmd := exec.Command("sudo", "tee", confPath)
 	cmd.Stdin = strings.NewReader(req.Config)
 	cmd.Stdout = nil
 	if output, err := cmd.CombinedOutput(); err != nil {

@@ -124,7 +124,7 @@ func (h *SettingsHandler) update(w http.ResponseWriter, r *http.Request) {
 
 	// Apply timezone to system
 	if req.Timezone != "" {
-		if out, err := exec.Command("timedatectl", "set-timezone", req.Timezone).CombinedOutput(); err != nil {
+		if out, err := exec.Command("sudo", "timedatectl", "set-timezone", req.Timezone).CombinedOutput(); err != nil {
 			log.Printf("Failed to set timezone to %s: %s %v", req.Timezone, string(out), err)
 		} else {
 			log.Printf("Timezone set to %s", req.Timezone)

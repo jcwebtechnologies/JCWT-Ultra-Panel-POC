@@ -175,7 +175,7 @@ func WriteVHost(sitesAvailable, sitesEnabled, domain string, data VHostData) err
 	confPath := filepath.Join(sitesAvailable, domain+".conf")
 
 	// Write via sudo tee since panel user can't write to /etc/nginx/
-	cmd := exec.Command("tee", confPath)
+	cmd := exec.Command("sudo", "tee", confPath)
 	cmd.Stdin = strings.NewReader(config)
 	cmd.Stdout = nil
 	output, err := cmd.CombinedOutput()
@@ -185,8 +185,8 @@ func WriteVHost(sitesAvailable, sitesEnabled, domain string, data VHostData) err
 
 	// Create symlink in sites-enabled
 	linkPath := filepath.Join(sitesEnabled, domain+".conf")
-	exec.Command("rm", "-f", linkPath).Run()
-	cmd = exec.Command("ln", "-s", confPath, linkPath)
+	exec.Command("sudo", "rm", "-f", linkPath).Run()
+	cmd = exec.Command("sudo", "ln", "-s", confPath, linkPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("create symlink: %s", string(output))
 	}
@@ -196,14 +196,14 @@ func WriteVHost(sitesAvailable, sitesEnabled, domain string, data VHostData) err
 
 // RemoveVHost removes a vhost config and symlink
 func RemoveVHost(sitesAvailable, sitesEnabled, domain string) error {
-	exec.Command("rm", "-f", filepath.Join(sitesEnabled, domain+".conf")).Run()
-	exec.Command("rm", "-f", filepath.Join(sitesAvailable, domain+".conf")).Run()
+	exec.Command("sudo", "rm", "-f", filepath.Join(sitesEnabled, domain+".conf")).Run()
+	exec.Command("sudo", "rm", "-f", filepath.Join(sitesAvailable, domain+".conf")).Run()
 	return nil
 }
 
 // TestConfig runs nginx -t to validate configuration
 func TestConfig() error {
-	cmd := exec.Command("nginx", "-t")
+	cmd := exec.Command("sudo", "nginx", "-t")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("nginx config test failed: %s", string(output))
@@ -213,7 +213,7 @@ func TestConfig() error {
 
 // Reload reloads nginx configuration
 func Reload() error {
-	cmd := exec.Command("systemctl", "reload", "nginx")
+	cmd := exec.Command("sudo", "systemctl", "reload", "nginx")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("nginx reload failed: %s", string(output))

@@ -65,7 +65,7 @@ func MariaDBChangePassword(username, newPassword string) error {
 func execMariaDB(sql string) error {
 	// Use sudo to run mysql as root — required because panel runs as jcwt-panel user
 	// On Ubuntu with unix_socket auth, `sudo mysql` authenticates as the OS root user
-	cmd := exec.Command("mysql", "-e", sql)
+	cmd := exec.Command("sudo", "mysql", "-e", sql)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("mariadb error: %s: %s", err, string(output))

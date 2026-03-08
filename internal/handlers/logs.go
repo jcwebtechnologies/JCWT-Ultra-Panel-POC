@@ -61,7 +61,7 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command("tail", "-n", strconv.Itoa(lines), logPath)
+	cmd := exec.Command("sudo", "tail", "-n", strconv.Itoa(lines), logPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Log file may not exist yet

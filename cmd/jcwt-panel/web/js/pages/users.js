@@ -200,7 +200,8 @@ export async function render(container) {
         if (err.message.includes('insufficient permissions')) {
             container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-title">🔒 Access Denied</div>
+                <div class="empty-state-icon"><span class="nav-icon" style="width:32px;height:32px;color:var(--status-error)">${icons.lock}</span></div>
+                <div class="empty-state-title">Access Denied</div>
                 <div class="empty-state-text">Only administrators can manage users.</div>
             </div>`;
         } else {

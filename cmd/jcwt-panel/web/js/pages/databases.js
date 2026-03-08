@@ -45,7 +45,7 @@ export async function render(container) {
                 </div>
                 ${dbList.length === 0 ? `
                     <div class="empty-state">
-                        <div class="empty-state-icon">🗄️</div>
+                        <div class="empty-state-icon"><span class="nav-icon" style="width:32px;height:32px;color:var(--primary)">${icons.database}</span></div>
                         <div class="empty-state-title">No databases</div>
                         <div class="empty-state-text">Create your first MariaDB database.</div>
                     </div>

@@ -24,7 +24,7 @@ func SyncCrontab(username string, entries []CronEntry) error {
 
 	crontab := strings.Join(lines, "\n")
 
-	cmd := exec.Command("crontab", "-u", username, "-")
+	cmd := exec.Command("sudo", "crontab", "-u", username, "-")
 	cmd.Stdin = strings.NewReader(crontab)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

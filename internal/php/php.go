@@ -101,7 +101,7 @@ func WritePool(phpBaseDir, phpVersion, user string, data PoolData) error {
 	confPath := filepath.Join(poolDir, user+".conf")
 
 	// Write via sudo tee since panel user can't write to /etc/php/
-	cmd := exec.Command("tee", confPath)
+	cmd := exec.Command("sudo", "tee", confPath)
 	cmd.Stdin = strings.NewReader(config)
 	cmd.Stdout = nil // suppress tee's stdout echo
 	output, err := cmd.CombinedOutput()
@@ -116,7 +116,7 @@ func WritePool(phpBaseDir, phpVersion, user string, data PoolData) error {
 func RemovePool(phpBaseDir, phpVersion, user string) error {
 	poolDir := filepath.Join(phpBaseDir, phpVersion, "fpm", "pool.d")
 	confPath := filepath.Join(poolDir, user+".conf")
-	cmd := exec.Command("rm", "-f", confPath)
+	cmd := exec.Command("sudo", "rm", "-f", confPath)
 	cmd.Run()
 	return nil
 }
@@ -124,7 +124,7 @@ func RemovePool(phpBaseDir, phpVersion, user string) error {
 // ReloadFPM gracefully reloads the PHP-FPM service for a specific version
 func ReloadFPM(version string) error {
 	service := fmt.Sprintf("php%s-fpm", version)
-	cmd := exec.Command("systemctl", "reload", service)
+	cmd := exec.Command("sudo", "systemctl", "reload", service)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("reload %s failed: %s", service, string(output))
@@ -135,7 +135,7 @@ func ReloadFPM(version string) error {
 // RestartFPM restarts the PHP-FPM service for a specific version
 func RestartFPM(version string) error {
 	service := fmt.Sprintf("php%s-fpm", version)
-	cmd := exec.Command("systemctl", "restart", service)
+	cmd := exec.Command("sudo", "systemctl", "restart", service)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("restart %s failed: %s", service, string(output))

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -49,7 +50,7 @@ func (h *FirewallHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	// Get ufw status
 	status := "unknown"
-	cmd := exec.Command("ufw", "status")
+	cmd := exec.Command("sudo", "ufw", "status")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		out := string(output)
@@ -95,6 +96,12 @@ func (h *FirewallHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.Port) == "" {
 		jsonError(w, "port is required", http.StatusBadRequest)
+		return
+	}
+	// Validate port format: number or range (e.g. 8080 or 3000:3100)
+	portRe := regexp.MustCompile(`^\d+([:\-]\d+)?$`)
+	if !portRe.MatchString(strings.TrimSpace(req.Port)) {
+		jsonError(w, "port must be a number or range (e.g. 8080 or 3000:3100)", http.StatusBadRequest)
 		return
 	}
 
@@ -170,9 +177,9 @@ func (h *FirewallHandler) toggle(w http.ResponseWriter, r *http.Request) {
 
 	var cmd *exec.Cmd
 	if req.Enable {
-		cmd = exec.Command("ufw", "--force", "enable")
+		cmd = exec.Command("sudo", "ufw", "--force", "enable")
 	} else {
-		cmd = exec.Command("ufw", "disable")
+		cmd = exec.Command("sudo", "ufw", "disable")
 	}
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -196,12 +203,12 @@ func (h *FirewallHandler) syncRulesToUFW() {
 	}
 
 	// Reset ufw (keeps defaults)
-	exec.Command("ufw", "--force", "reset").Run()
-	exec.Command("ufw", "default", "deny", "incoming").Run()
-	exec.Command("ufw", "default", "allow", "outgoing").Run()
+	exec.Command("sudo", "ufw", "--force", "reset").Run()
+	exec.Command("sudo", "ufw", "default", "deny", "incoming").Run()
+	exec.Command("sudo", "ufw", "default", "allow", "outgoing").Run()
 
 	// Always allow SSH
-	exec.Command("ufw", "allow", "22/tcp").Run()
+	exec.Command("sudo", "ufw", "allow", "22/tcp").Run()
 
 	for _, rule := range rules {
 		enabled, _ := rule["enabled"].(bool)
@@ -216,12 +223,12 @@ func (h *FirewallHandler) syncRulesToUFW() {
 		applyUFWRule(action, direction, protocol, port, source)
 	}
 
-	exec.Command("ufw", "--force", "enable").Run()
+	exec.Command("sudo", "ufw", "--force", "enable").Run()
 }
 
 func applyUFWRule(action, direction, protocol, port, source string) error {
 	// Build ufw command: sudo ufw [allow|deny|reject] [in|out] [from <source>] [proto <protocol>] [to any port <port>]
-	args := []string{"ufw"}
+	args := []string{"sudo", "ufw"}
 
 	args = append(args, action)
 

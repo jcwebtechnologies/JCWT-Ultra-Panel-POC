@@ -12,7 +12,7 @@ func CreateSystemUser(username, webRootBase string) error {
 	homeDir := filepath.Join(webRootBase, username)
 
 	// Create user with restricted shell (requires sudo)
-	cmd := exec.Command("useradd",
+	cmd := exec.Command("sudo", "useradd",
 		"--system",
 		"--shell", "/usr/sbin/nologin",
 		"--home-dir", homeDir,
@@ -28,31 +28,31 @@ func CreateSystemUser(username, webRootBase string) error {
 	webRoot := filepath.Join(homeDir, "htdocs")
 	if err := os.MkdirAll(webRoot, 0750); err != nil {
 		// Try with sudo if permission denied
-		cmd = exec.Command("mkdir", "-p", webRoot)
+		cmd = exec.Command("sudo", "mkdir", "-p", webRoot)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("create web root: %s", string(output))
 		}
 	}
 
 	// Set ownership
-	cmd = exec.Command("chown", "-R", fmt.Sprintf("%s:%s", username, username), homeDir)
+	cmd = exec.Command("sudo", "chown", "-R", fmt.Sprintf("%s:%s", username, username), homeDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("chown: %s", string(output))
 	}
 
 	// Set permissions
-	cmd = exec.Command("chmod", "750", homeDir)
+	cmd = exec.Command("sudo", "chmod", "750", homeDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("chmod home: %s", string(output))
 	}
 
-	cmd = exec.Command("chmod", "750", webRoot)
+	cmd = exec.Command("sudo", "chmod", "750", webRoot)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("chmod webroot: %s", string(output))
 	}
 
 	// Add www-data to user's group (so Nginx can read)
-	cmd = exec.Command("usermod", "-aG", username, "www-data")
+	cmd = exec.Command("sudo", "usermod", "-aG", username, "www-data")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("add www-data to group: %s", string(output))
 	}
@@ -160,15 +160,15 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
 	indexPath := filepath.Join(webRoot, fileName)
 
 	// Write via sudo bash -c to handle permissions
-	cmd := exec.Command("bash", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", indexPath, indexContent))
+	cmd := exec.Command("sudo", "bash", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", indexPath, indexContent))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("write welcome page: %s", string(output))
 	}
 
-	cmd = exec.Command("chown", fmt.Sprintf("%s:%s", username, username), indexPath)
+	cmd = exec.Command("sudo", "chown", fmt.Sprintf("%s:%s", username, username), indexPath)
 	cmd.Run()
 
-	cmd = exec.Command("chmod", "644", indexPath)
+	cmd = exec.Command("sudo", "chmod", "644", indexPath)
 	cmd.Run()
 
 	return nil
@@ -177,11 +177,11 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
 // DeleteSystemUser removes a system user and their home directory
 func DeleteSystemUser(username string) error {
 	// Force delete with home directory removal
-	cmd := exec.Command("userdel", "--force", "--remove", username)
+	cmd := exec.Command("sudo", "userdel", "--force", "--remove", username)
 	cmd.Run() // Ignore error — user might already be deleted
 
 	// Also delete the group (userdel sometimes leaves it behind)
-	cmd = exec.Command("groupdel", username)
+	cmd = exec.Command("sudo", "groupdel", username)
 	cmd.Run() // Ignore error — group might not exist
 
 	return nil
@@ -189,7 +189,7 @@ func DeleteSystemUser(username string) error {
 
 // ClearCrontab clears the crontab for a user
 func ClearCrontab(username string) {
-	cmd := exec.Command("crontab", "-u", username, "-r")
+	cmd := exec.Command("sudo", "crontab", "-u", username, "-r")
 	cmd.Run()
 }
 

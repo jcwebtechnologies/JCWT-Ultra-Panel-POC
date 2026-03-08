@@ -117,11 +117,11 @@ func (h *SitesHandler) diskUsage(w http.ResponseWriter, r *http.Request) {
 		jsonSuccess(w, map[string]interface{}{"size": "N/A"})
 		return
 	}
-	out, err := exec.Command("du", "-sh", webRoot).CombinedOutput()
+	out, err := exec.Command("sudo", "du", "-sh", webRoot).CombinedOutput()
 	if err != nil {
 		// Try parent directory as fallback
 		parent := filepath.Dir(webRoot)
-		out, err = exec.Command("du", "-sh", parent).CombinedOutput()
+		out, err = exec.Command("sudo", "du", "-sh", parent).CombinedOutput()
 		if err != nil {
 			jsonSuccess(w, map[string]interface{}{"size": "N/A"})
 			return
@@ -545,7 +545,7 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 
 		// Generate htpasswd file if basic auth is enabled
 		if req.BasicAuthEnabled && len(req.BasicAuthUsers) > 0 {
-			if out, err := exec.Command("mkdir", "-p", "/etc/nginx/htpasswd").CombinedOutput(); err != nil {
+			if out, err := exec.Command("sudo", "mkdir", "-p", "/etc/nginx/htpasswd").CombinedOutput(); err != nil {
 				log.Printf("Failed to create htpasswd dir: %s %v", string(out), err)
 			}
 			htpasswdPath := fmt.Sprintf("/etc/nginx/htpasswd/%s.htpasswd", domain)
@@ -558,21 +558,21 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 				var cmd *exec.Cmd
 				if i == 0 {
 					// Create new file with first user (-c creates file, -B uses bcrypt, -b takes password from args)
-					cmd = exec.Command("htpasswd", "-c", "-B", "-b", htpasswdPath, username, password)
+					cmd = exec.Command("sudo", "htpasswd", "-c", "-B", "-b", htpasswdPath, username, password)
 				} else {
 					// Append to existing file
-					cmd = exec.Command("htpasswd", "-B", "-b", htpasswdPath, username, password)
+					cmd = exec.Command("sudo", "htpasswd", "-B", "-b", htpasswdPath, username, password)
 				}
 				if out, err := cmd.CombinedOutput(); err != nil {
 					log.Printf("htpasswd error for user %s: %s %v", username, string(out), err)
 				}
 			}
 			// Ensure nginx can read the file
-			exec.Command("chmod", "644", htpasswdPath).Run()
+			exec.Command("sudo", "chmod", "644", htpasswdPath).Run()
 		} else if !req.BasicAuthEnabled {
 			// Remove htpasswd file when disabling
 			htpasswdPath := fmt.Sprintf("/etc/nginx/htpasswd/%s.htpasswd", domain)
-			exec.Command("rm", "-f", htpasswdPath).Run()
+			exec.Command("sudo", "rm", "-f", htpasswdPath).Run()
 		}
 
 		err = nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, nginx.VHostData{

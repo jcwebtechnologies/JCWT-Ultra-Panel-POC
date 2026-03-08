@@ -175,7 +175,7 @@ function showAddRuleForm(container) {
             </div>
             <div>
                 <label class="form-label">Port</label>
-                <input type="text" class="form-input" id="rule-port" placeholder="e.g. 8080 or 3000:3100">
+                <input type="text" class="form-input" id="rule-port" placeholder="e.g. 8080 or 3000:3100" inputmode="numeric" pattern="[0-9:\\-]+">
             </div>
             <div>
                 <label class="form-label">Source (optional)</label>
@@ -206,6 +206,19 @@ function showAddRuleForm(container) {
         if (!port) {
             showToast('Port is required', 'error');
             return;
+        }
+        // Validate port: must be a number (1-65535) or a range like 3000:3100
+        if (!/^\d+([:\-]\d+)?$/.test(port)) {
+            showToast('Port must be a number (e.g. 8080) or range (e.g. 3000:3100)', 'error');
+            return;
+        }
+        const parts = port.split(/[:\-]/);
+        for (const p of parts) {
+            const n = parseInt(p, 10);
+            if (n < 1 || n > 65535) {
+                showToast('Port must be between 1 and 65535', 'error');
+                return;
+            }
         }
         try {
             await firewall.create({

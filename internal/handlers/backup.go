@@ -116,7 +116,7 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	var tarArgs []string
 	switch req.Type {
 	case "files", "full":
-		tarArgs = []string{"tar", "-czf", backupPath, "-C", filepath.Dir(webRoot), filepath.Base(webRoot)}
+		tarArgs = []string{"sudo", "tar", "-czf", backupPath, "-C", filepath.Dir(webRoot), filepath.Base(webRoot)}
 	default:
 		jsonError(w, "invalid backup type: use full, files, or database", http.StatusBadRequest)
 		return
@@ -132,8 +132,8 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	if req.Type == "full" {
 		sysUser := site["system_user"].(string)
 		dumpPath := filepath.Join(backupDir, fmt.Sprintf("%s-db-%s.sql.gz", domain, timestamp))
-		dumpCmd := fmt.Sprintf("mysqldump --all-databases --single-transaction -u root 2>/dev/null | gzip > %s", dumpPath)
-		exec.Command("bash", "-c", dumpCmd).Run()
+		dumpCmd := fmt.Sprintf("sudo mysqldump --all-databases --single-transaction -u root 2>/dev/null | gzip > %s", dumpPath)
+		exec.Command("sudo", "bash", "-c", dumpCmd).Run()
 		_ = sysUser
 	}
 
@@ -190,7 +190,7 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract backup to web root
-	cmd := exec.Command("tar", "-xzf", filePath, "-C", filepath.Dir(webRoot))
+	cmd := exec.Command("sudo", "tar", "-xzf", filePath, "-C", filepath.Dir(webRoot))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		jsonError(w, fmt.Sprintf("restore failed: %s", string(output)), http.StatusInternalServerError)
 		return
@@ -198,7 +198,7 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 
 	// Fix ownership
 	sysUser := site["system_user"].(string)
-	exec.Command("chown", "-R", sysUser+":"+sysUser, webRoot).Run()
+	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
 
 	jsonSuccess(w, map[string]interface{}{"message": "backup restored successfully"})
 }
