@@ -72,14 +72,15 @@ func (h *FilesHandler) getOrStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start a new instance
-	webRoot, _ := site["web_root"].(string)
 	sysUser, _ := site["system_user"].(string)
-	if webRoot == "" || sysUser == "" {
-		jsonError(w, "site missing web root or system user", http.StatusInternalServerError)
+	if sysUser == "" {
+		jsonError(w, "site missing system user", http.StatusInternalServerError)
 		return
 	}
 
-	newPort, startErr := h.startInstance(siteID, webRoot, sysUser)
+	// Use home directory as root so users can access logs, backups, etc.
+	homeDir := filepath.Join(h.Cfg.WebRootBase, sysUser)
+	newPort, startErr := h.startInstance(siteID, homeDir, sysUser)
 	if startErr != nil {
 		log.Printf("Failed to start File Browser for site %d: %v", siteID, startErr)
 		jsonError(w, fmt.Sprintf("failed to start file browser: %v", startErr), http.StatusInternalServerError)

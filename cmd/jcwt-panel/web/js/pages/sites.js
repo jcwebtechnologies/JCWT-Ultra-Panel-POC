@@ -168,7 +168,7 @@ export async function render(container) {
             btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
                 const domain = btn.dataset.domain;
-                if (await showConfirm('Delete Site', `Delete site "${domain}"? This will remove all configs, the system user, and web files. This action cannot be undone.`, 'Delete Site', 'btn-danger')) {
+                if (await showConfirm('Delete Site', `Delete site "${domain}"? This will remove all configs, the system user, web files, and backups. This action cannot be undone.`, 'Delete Site', 'btn-danger')) {
                     try {
                         await sites.delete(id);
                         showToast('Site deleted', 'success');

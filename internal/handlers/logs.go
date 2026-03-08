@@ -73,12 +73,20 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		// Log file may not exist yet
+		// Check if the file exists to give a meaningful message
+		existsOut, _ := exec.Command("sudo", "test", "-f", logPath).CombinedOutput()
+		_ = existsOut
+		existsErr := exec.Command("sudo", "test", "-f", logPath).Run()
+		hint := "Log file does not exist yet. Traffic may not have been logged or logging may be disabled."
+		if existsErr == nil {
+			hint = "Log file exists but could not be read."
+		}
 		jsonSuccess(w, map[string]interface{}{
 			"content":  "",
 			"log_path": logPath,
 			"lines":    0,
 			"type":     logType,
+			"hint":     hint,
 		})
 		return
 	}

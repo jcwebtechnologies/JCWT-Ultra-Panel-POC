@@ -113,9 +113,12 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	domain := site["domain"].(string)
 	webRoot := site["web_root"].(string)
+	sysUser := site["system_user"].(string)
 
-	backupDir := filepath.Join(h.Cfg.DataDir, "backups", domain)
-	os.MkdirAll(backupDir, 0750)
+	backupDir := filepath.Join(h.Cfg.WebRootBase, sysUser, "backups")
+	exec.Command("sudo", "mkdir", "-p", backupDir).Run()
+	exec.Command("sudo", "chown", sysUser+":"+sysUser, backupDir).Run()
+	exec.Command("sudo", "chmod", "0750", backupDir).Run()
 
 	timestamp := time.Now().Format("20060102-150405")
 	backupName := fmt.Sprintf("%s-%s-%s.tar.gz", domain, req.Type, timestamp)
@@ -123,8 +126,8 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	// Create a staging directory for the backup contents
 	stagingDir := filepath.Join(backupDir, fmt.Sprintf("staging-%s", timestamp))
-	os.MkdirAll(stagingDir, 0750)
-	defer os.RemoveAll(stagingDir)
+	exec.Command("sudo", "mkdir", "-p", stagingDir).Run()
+	defer exec.Command("sudo", "rm", "-rf", stagingDir).Run()
 
 	switch req.Type {
 	case "files":
@@ -138,8 +141,8 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	case "full":
 		// Step 1: Copy web files into staging using tar pipe (avoids sudo cp which may not be in sudoers)
 		htdocsStaging := filepath.Join(stagingDir, "htdocs")
-		os.MkdirAll(htdocsStaging, 0750)
-		pipeCmd := fmt.Sprintf("sudo tar cf - -C '%s' . | tar xf - -C '%s'",
+		exec.Command("sudo", "mkdir", "-p", htdocsStaging).Run()
+		pipeCmd := fmt.Sprintf("sudo tar cf - -C '%s' . | sudo tar xf - -C '%s'",
 			webRoot, htdocsStaging)
 		cmd := exec.Command("bash", "-c", pipeCmd)
 		if output, err := cmd.CombinedOutput(); err != nil {
@@ -151,7 +154,7 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 		siteDbs, _ := h.DB.ListDatabasesBySite(req.SiteID)
 		if len(siteDbs) > 0 {
 			dbStaging := filepath.Join(stagingDir, "databases")
-			os.MkdirAll(dbStaging, 0750)
+			exec.Command("sudo", "mkdir", "-p", dbStaging).Run()
 			for _, db := range siteDbs {
 				dbName := db["db_name"].(string)
 				dumpFile := filepath.Join(dbStaging, dbName+".sql.gz")
@@ -166,11 +169,14 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 		if len(cronJobs) > 0 {
 			cronData, _ := json.MarshalIndent(cronJobs, "", "  ")
 			cronFile := filepath.Join(stagingDir, "cron_jobs.json")
-			os.WriteFile(cronFile, cronData, 0640)
+			writeCmd := exec.Command("sudo", "tee", cronFile)
+			writeCmd.Stdin = strings.NewReader(string(cronData))
+			writeCmd.Stdout = nil
+			writeCmd.Run()
 		}
 
-		// Step 4: Tar the entire staging directory (no sudo needed — staging is panel-user owned)
-		cmd = exec.Command("tar", "-czf", backupPath, "-C", stagingDir, ".")
+		// Step 4: Tar the entire staging directory
+		cmd = exec.Command("sudo", "tar", "-czf", backupPath, "-C", stagingDir, ".")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			jsonError(w, fmt.Sprintf("backup failed: %s", string(output)), http.StatusInternalServerError)
 			return
@@ -180,6 +186,10 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid backup type: use full or files", http.StatusBadRequest)
 		return
 	}
+
+	// Set correct ownership on the backup file
+	exec.Command("sudo", "chown", sysUser+":"+sysUser, backupPath).Run()
+	exec.Command("sudo", "chmod", "0640", backupPath).Run()
 
 	// Get backup file size
 	var size string
@@ -356,9 +366,9 @@ func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove file from disk
+	// Remove file from disk (under user home, need sudo)
 	if filePath != "" {
-		os.Remove(filePath)
+		exec.Command("sudo", "rm", "-f", filePath).Run()
 	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "backup deleted"})

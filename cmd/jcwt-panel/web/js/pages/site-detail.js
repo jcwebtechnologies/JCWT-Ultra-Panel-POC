@@ -899,14 +899,12 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
     const privilegeLabels = {
         'readonly': 'Read Only',
         'readwrite': 'Read / Write',
-        'full': 'Full',
-        'administrator': 'Administrator'
+        'full': 'Full'
     };
     const privilegeBadge = {
         'readonly': 'badge-warning',
         'readwrite': 'badge-info',
-        'full': 'badge-success',
-        'administrator': 'badge-primary'
+        'full': 'badge-success'
     };
 
     try {
@@ -971,7 +969,6 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
                 <div class="form-group">
                     <label class="form-label">Privilege Level</label>
                     <select class="form-select" id="new-dbuser-priv">
-                        <option value="administrator">Administrator — Full control</option>
                         <option value="full">Full — All DML + DDL operations</option>
                         <option value="readwrite">Read / Write — SELECT, INSERT, UPDATE, DELETE</option>
                         <option value="readonly">Read Only — SELECT only</option>
@@ -1546,7 +1543,9 @@ async function renderLogs(container, site, siteId) {
                     </div>
                 </div>
                 <div style="padding: var(--space-3);">
+                    ${data.hint ? `<div style="background: var(--status-warning-bg, rgba(234,179,8,0.1)); border: 1px solid var(--status-warning, #eab308); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-3); font-size: var(--font-size-xs); color: var(--text-secondary);">${escapeHtml(data.hint)}</div>` : ''}
                     <pre class="mono" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); padding: var(--space-3); overflow-x: auto; max-height: 500px; overflow-y: auto; font-size: var(--font-size-xs); line-height: 1.5; white-space: pre-wrap; word-break: break-all;">${escapeHtml(data.content || 'No log data available.')}</pre>
+                    ${data.log_path ? `<div style="margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--text-tertiary);">Path: ${escapeHtml(data.log_path)}</div>` : ''}
                 </div>
             </div>`;
 
