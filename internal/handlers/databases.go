@@ -173,12 +173,12 @@ func (h *DBUsersHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate privilege level
-	validLevels := map[string]bool{"readonly": true, "readwrite": true, "full": true, "administrator": true}
+	validLevels := map[string]bool{"readonly": true, "readwrite": true, "full": true}
 	if req.PrivilegeLevel == "" {
-		req.PrivilegeLevel = "administrator"
+		req.PrivilegeLevel = "full"
 	}
 	if !validLevels[req.PrivilegeLevel] {
-		jsonError(w, "invalid privilege_level: use readonly, readwrite, full, or administrator", http.StatusBadRequest)
+		jsonError(w, "invalid privilege_level: use readonly, readwrite, or full", http.StatusBadRequest)
 		return
 	}
 

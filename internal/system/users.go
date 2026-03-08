@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // CreateSystemUser creates an isolated system user for a site
@@ -12,6 +13,7 @@ func CreateSystemUser(username, webRootBase string) error {
 	homeDir := filepath.Join(webRootBase, username)
 
 	// Create user with restricted shell (requires sudo)
+	// If user already exists, continue to ensure directories are set up
 	cmd := exec.Command("sudo", "useradd",
 		"--system",
 		"--shell", "/usr/sbin/nologin",
@@ -21,7 +23,13 @@ func CreateSystemUser(username, webRootBase string) error {
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("create user %s: %s", username, string(output))
+		out := string(output)
+		// Allow "already exists" — we'll just ensure directories below
+		if !strings.Contains(out, "already exists") {
+			return fmt.Errorf("create user %s: %s", username, out)
+		}
+		// Ensure home directory exists even if user already existed
+		exec.Command("sudo", "mkdir", "-p", homeDir).Run()
 	}
 
 	// Create web root directory

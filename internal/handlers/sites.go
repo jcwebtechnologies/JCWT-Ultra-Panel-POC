@@ -234,13 +234,13 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	// PHP specific configs
 	if req.SiteType == "php" {
 		// Create default PHP settings
-		h.DB.UpsertPHPSettings(id, "256M", 30, 60, 1000, "64M", "64M", "")
+		h.DB.UpsertPHPSettings(id, "128M", 30, 30, 1000, "16M", "16M", "")
 
 		// Generate PHP-FPM pool
 		poolData := php.PoolData{
 			User: req.SystemUser, PHPVersion: req.PHPVersion, WebRoot: webRoot,
-			MemoryLimit: "256M", MaxExecutionTime: 30, MaxInputTime: 60,
-			MaxInputVars: 1000, PostMaxSize: "64M", UploadMaxFilesize: "64M",
+			MemoryLimit: "128M", MaxExecutionTime: 30, MaxInputTime: 30,
+			MaxInputVars: 1000, PostMaxSize: "16M", UploadMaxFilesize: "16M",
 		}
 		if err := php.WritePool(h.Cfg.PHPFPMBaseDir, req.PHPVersion, req.SystemUser, poolData); err != nil {
 			jsonError(w, fmt.Sprintf("failed to write PHP pool: %v", err), http.StatusInternalServerError)

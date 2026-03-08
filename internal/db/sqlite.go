@@ -201,8 +201,9 @@ func (d *DB) GetSite(id int64) (map[string]interface{}, error) {
 	var token, domain, aliases, sysUser, siteType, phpVer, proxyUrl, webRoot, sslType, certPath, keyPath, createdAt string
 	var basicAuthEnabled, deleteProtection int
 	var basicAuthUsers string
-	err := d.Conn.QueryRow("SELECT COALESCE(token,''), domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, ssl_cert_path, ssl_key_path, created_at, COALESCE(basic_auth_enabled,0), COALESCE(basic_auth_users,''), COALESCE(delete_protection,0) FROM sites WHERE id = ?", id).
-		Scan(&token, &domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &certPath, &keyPath, &createdAt, &basicAuthEnabled, &basicAuthUsers, &deleteProtection)
+	var accessLog, errorLog int
+	err := d.Conn.QueryRow("SELECT COALESCE(token,''), domain, aliases, system_user, site_type, php_version, proxy_url, web_root, ssl_type, ssl_cert_path, ssl_key_path, created_at, COALESCE(basic_auth_enabled,0), COALESCE(basic_auth_users,''), COALESCE(delete_protection,0), COALESCE(access_log,1), COALESCE(error_log,1) FROM sites WHERE id = ?", id).
+		Scan(&token, &domain, &aliases, &sysUser, &siteType, &phpVer, &proxyUrl, &webRoot, &sslType, &certPath, &keyPath, &createdAt, &basicAuthEnabled, &basicAuthUsers, &deleteProtection, &accessLog, &errorLog)
 	if err != nil {
 		return nil, err
 	}
@@ -212,6 +213,7 @@ func (d *DB) GetSite(id int64) (map[string]interface{}, error) {
 		"ssl_type": sslType, "ssl_cert_path": certPath, "ssl_key_path": keyPath, "created_at": createdAt,
 		"basic_auth_enabled": basicAuthEnabled, "basic_auth_users": basicAuthUsers,
 		"delete_protection": deleteProtection,
+		"access_log": accessLog, "error_log": errorLog,
 	}, nil
 }
 

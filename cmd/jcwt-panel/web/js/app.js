@@ -423,7 +423,7 @@ function renderLayout(pageName) {
             <div class="main-body" id="page-content">
                 <div class="loading-screen"><div class="loading-spinner"></div></div>
             </div>
-            ${`<footer class="panel-footer">${escapeHtml(panelSettings?.footer_text || '\u00A9 {year} JCWT Ultra Panel').replace(/\{year\}/g, new Date().getFullYear())}${panelSettings?.version ? ` <span style="opacity:0.5;">v${escapeHtml(panelSettings.version)}</span>` : ''}</footer>`}
+            ${`<footer class="panel-footer">&copy; ${new Date().getFullYear()} JCWT Ultra Panel${panelSettings?.version ? ` &mdash; v${escapeHtml(panelSettings.version)}` : ''}</footer>`}
         </main>
     </div>`;
 }

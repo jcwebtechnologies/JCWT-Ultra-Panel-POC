@@ -193,11 +193,11 @@ function renderOverview(el, site, versions, siteId) {
         <h3 class="card-title" style="margin-bottom: var(--space-4);">Logging</h3>
         <div class="settings-row" style="margin-bottom: var(--space-3);">
             <div class="settings-row-label">Access Log<small>Log all incoming requests</small></div>
-            <div><label class="toggle"><input type="checkbox" id="toggle-access-log" ${site.access_log !== 0 && site.access_log !== false ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+            <div><label class="toggle"><input type="checkbox" id="toggle-access-log" ${site.access_log == 1 ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
         </div>
         <div class="settings-row">
             <div class="settings-row-label">Error Log<small>Log server errors and warnings</small></div>
-            <div><label class="toggle"><input type="checkbox" id="toggle-error-log" ${site.error_log !== 0 && site.error_log !== false ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+            <div><label class="toggle"><input type="checkbox" id="toggle-error-log" ${site.error_log == 1 ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
         </div>
         <div style="margin-top: var(--space-3);">
             <button class="btn btn-primary" id="save-log-settings" style="width: auto;">Save Log Settings</button>

@@ -42,9 +42,9 @@ func MariaDBDropUser(username string) error {
 }
 
 // MariaDBGrantAccess grants a user access to a database on all hosts with the specified privilege level.
-// Supported levels: readonly, readwrite, full, administrator
+// Supported levels: readonly, readwrite, full
 func MariaDBGrantAccess(username, dbName string, privileges ...string) error {
-	level := "administrator"
+	level := "full"
 	if len(privileges) > 0 && privileges[0] != "" {
 		level = privileges[0]
 	}
@@ -55,10 +55,8 @@ func MariaDBGrantAccess(username, dbName string, privileges ...string) error {
 		grantSQL = "SELECT"
 	case "readwrite":
 		grantSQL = "SELECT, INSERT, UPDATE, DELETE"
-	case "full":
+	default: // full
 		grantSQL = "SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, TRIGGER, REFERENCES"
-	default: // administrator
-		grantSQL = "ALL PRIVILEGES"
 	}
 
 	for _, host := range allHosts {

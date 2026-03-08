@@ -8,10 +8,12 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/jcwt/ultra-panel/internal/config"
 	"github.com/jcwt/ultra-panel/internal/db"
 )
 
@@ -20,6 +22,7 @@ import (
 // supporting file editing, uploads, downloads, zip/unzip, and more.
 type FilesHandler struct {
 	DB        *db.DB
+	Cfg       *config.Config
 	mu        sync.Mutex
 	instances map[int64]*fbInstance
 }
@@ -180,16 +183,17 @@ func (h *FilesHandler) ProxyHandler() http.HandlerFunc {
 				return
 			}
 
-			webRoot, _ := site["web_root"].(string)
 			sysUser, _ := site["system_user"].(string)
-			if webRoot == "" || sysUser == "" {
+			if sysUser == "" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"success":false,"error":"site missing web root or user"}`))
+				w.Write([]byte(`{"success":false,"error":"site missing system user"}`))
 				return
 			}
 
-			newPort, startErr := h.startInstance(siteID, webRoot, sysUser)
+			// Use home directory as root so users can access logs, backups, etc.
+			homeDir := filepath.Join(h.Cfg.WebRootBase, sysUser)
+			newPort, startErr := h.startInstance(siteID, homeDir, sysUser)
 			if startErr != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusServiceUnavailable)

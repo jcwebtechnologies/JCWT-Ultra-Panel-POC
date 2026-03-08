@@ -71,7 +71,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	mux.Handle("/api/cron", middleware.RequireAuth(middleware.RequireCSRF(&handlers.CronHandler{DB: database})))
 
 	// Files (File Browser manager)
-	filesHandler := &handlers.FilesHandler{DB: database}
+	filesHandler := &handlers.FilesHandler{DB: database, Cfg: cfg}
 	mux.Handle("/api/files", middleware.RequireAuth(middleware.RequireCSRF(filesHandler)))
 
 	// File Browser reverse proxy — requires auth but not CSRF (File Browser handles its own requests)
@@ -157,7 +157,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 
 	// Firewall (admin only)
 	mux.Handle("/api/firewall", middleware.RequireAuth(middleware.RequireCSRF(
-		middleware.RequireRole("admin")(&handlers.FirewallHandler{DB: database}),
+		middleware.RequireRole("admin")(&handlers.FirewallHandler{DB: database, Cfg: cfg}),
 	)))
 
 	// Serve uploaded files

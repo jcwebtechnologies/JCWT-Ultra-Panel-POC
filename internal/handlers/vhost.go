@@ -48,6 +48,7 @@ func (h *VhostHandler) read(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domain := site["domain"].(string)
+	sysUser := site["system_user"].(string)
 	confPath := filepath.Join(h.Cfg.NginxSitesAvailable, domain+".conf")
 
 	data, err := os.ReadFile(confPath)
@@ -56,8 +57,18 @@ func (h *VhostHandler) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Replace actual values with template variables for the editor
+	config := string(data)
+	config = strings.ReplaceAll(config, site["web_root"].(string), "{site_root}")
+	config = strings.ReplaceAll(config, "/home/"+sysUser+"/logs", "{logs_dir}")
+	config = strings.ReplaceAll(config, domain, "{domain}")
+	config = strings.ReplaceAll(config, sysUser, "{user}")
+	if phpVer := site["php_version"].(string); phpVer != "" {
+		config = strings.ReplaceAll(config, phpVer, "{php_version}")
+	}
+
 	jsonSuccess(w, map[string]interface{}{
-		"config": string(data),
+		"config": config,
 		"path":   confPath,
 	})
 }
@@ -150,11 +161,19 @@ func (h *VhostHandler) reset(w http.ResponseWriter, r *http.Request) {
 
 	nginx.TestAndReload()
 
-	// Read back the newly generated config
+	// Read back the newly generated config and replace with template variables
 	newConf, err := os.ReadFile(filepath.Join(h.Cfg.NginxSitesAvailable, domain+".conf"))
 	if err != nil {
 		jsonSuccess(w, map[string]interface{}{"message": "vhost reset to default and nginx reloaded"})
 		return
 	}
-	jsonSuccess(w, map[string]interface{}{"message": "vhost reset to default and nginx reloaded", "config": string(newConf)})
+	config := string(newConf)
+	config = strings.ReplaceAll(config, site["web_root"].(string), "{site_root}")
+	config = strings.ReplaceAll(config, "/home/"+sysUser+"/logs", "{logs_dir}")
+	config = strings.ReplaceAll(config, domain, "{domain}")
+	config = strings.ReplaceAll(config, sysUser, "{user}")
+	if phpVer := site["php_version"].(string); phpVer != "" {
+		config = strings.ReplaceAll(config, phpVer, "{php_version}")
+	}
+	jsonSuccess(w, map[string]interface{}{"message": "vhost reset to default and nginx reloaded", "config": config})
 }
