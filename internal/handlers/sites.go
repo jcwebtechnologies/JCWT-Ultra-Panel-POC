@@ -347,20 +347,20 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Download latest WordPress
 	wpArchive := filepath.Join(tmpDir, "wordpress.tar.gz")
-	cmd := exec.Command("sudo", "-u", sysUser, "wget", "-q", "https://wordpress.org/latest.tar.gz", "-O", wpArchive)
+	cmd := exec.Command("sudo", "wget", "-q", "https://wordpress.org/latest.tar.gz", "-O", wpArchive)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("download WordPress: %s", string(output))
 	}
 
 	// Extract WordPress to webroot (tar extracts to wordpress/ subfolder)
-	cmd = exec.Command("sudo", "-u", sysUser, "tar", "-xzf", wpArchive, "-C", tmpDir)
+	cmd = exec.Command("sudo", "tar", "-xzf", wpArchive, "-C", tmpDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("extract WordPress: %s", string(output))
 	}
 
 	// Move WordPress files to webroot (overwrite welcome page)
-	mvCmd := fmt.Sprintf("sudo -u %s bash -c 'rm -rf %s/* && mv %s/wordpress/* %s/ && rm -rf %s/wordpress %s'",
-		sysUser, webRoot, tmpDir, webRoot, tmpDir, wpArchive)
+	mvCmd := fmt.Sprintf("sudo bash -c 'rm -rf %s/* && mv %s/wordpress/* %s/ && rm -rf %s/wordpress %s'",
+		webRoot, tmpDir, webRoot, tmpDir, wpArchive)
 	cmd = exec.Command("bash", "-c", mvCmd)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("move WordPress files: %s", string(output))
@@ -394,7 +394,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Generate wp-config.php with secure keys/salts
 	wpConfig := generateWPConfig(dbName, dbUser, dbPass)
-	configCmd := exec.Command("sudo", "-u", sysUser, "tee", filepath.Join(webRoot, "wp-config.php"))
+	configCmd := exec.Command("sudo", "tee", filepath.Join(webRoot, "wp-config.php"))
 	configCmd.Stdin = strings.NewReader(wpConfig)
 	configCmd.Stdout = nil
 	if output, err := configCmd.CombinedOutput(); err != nil {
@@ -402,7 +402,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	}
 
 	// Remove wp-config-sample.php
-	exec.Command("sudo", "-u", sysUser, "rm", "-f", filepath.Join(webRoot, "wp-config-sample.php")).Run()
+	exec.Command("sudo", "rm", "-f", filepath.Join(webRoot, "wp-config-sample.php")).Run()
 
 	// Install WP-CLI if not present and run WordPress install
 	wpCLI := "/usr/local/bin/wp"

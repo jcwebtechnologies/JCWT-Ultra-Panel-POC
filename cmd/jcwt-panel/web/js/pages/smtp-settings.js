@@ -46,10 +46,13 @@ async function loadForm() {
                     </div>
                 </div>
                 <div class="form-group" style="margin-bottom: var(--space-3);">
-                    <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
-                        <input type="checkbox" id="smtp-auth" ${data.auth_enabled ? 'checked' : ''}>
+                    <div style="display: flex; align-items: center; gap: var(--space-3);">
+                        <label class="toggle">
+                            <input type="checkbox" id="smtp-auth" ${data.auth_enabled ? 'checked' : ''}>
+                            <span class="toggle-slider"></span>
+                        </label>
                         <span class="form-label" style="margin: 0;">Require Authentication</span>
-                    </label>
+                    </div>
                 </div>
                 <div id="smtp-auth-fields" style="${data.auth_enabled ? '' : 'display:none;'}">
                     <div class="form-group">

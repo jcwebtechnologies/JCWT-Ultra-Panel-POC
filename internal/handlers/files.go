@@ -243,7 +243,8 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	}
 
 	// Ensure tmp directory exists (may be missing for sites created before this dir was added)
-	tmpDir := filepath.Join(filepath.Dir(webRoot), "tmp")
+	// webRoot here is the user's home directory (e.g. /home/user), not htdocs
+	tmpDir := filepath.Join(webRoot, "tmp")
 	exec.Command("sudo", "mkdir", "-p", tmpDir).Run()
 	exec.Command("sudo", "chown", sysUser+":"+sysUser, tmpDir).Run()
 

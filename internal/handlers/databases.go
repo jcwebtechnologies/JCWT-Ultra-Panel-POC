@@ -98,6 +98,15 @@ func (h *DatabasesHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Delete all associated DB users first
+	dbUsers, _ := h.DB.ListDBUsersByDatabaseID(id)
+	for _, u := range dbUsers {
+		username := u["username"].(string)
+		userID := u["id"].(int64)
+		system.MariaDBDropUser(username)
+		h.DB.DeleteDBUser(userID)
+	}
+
 	dbName, err := h.DB.DeleteDatabase(id)
 	if err != nil {
 		jsonError(w, "database not found", http.StatusNotFound)
@@ -105,7 +114,12 @@ func (h *DatabasesHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	system.MariaDBDropDatabase(dbName)
-	jsonSuccess(w, map[string]interface{}{"deleted": true})
+
+	deletedUsers := make([]string, 0, len(dbUsers))
+	for _, u := range dbUsers {
+		deletedUsers = append(deletedUsers, u["username"].(string))
+	}
+	jsonSuccess(w, map[string]interface{}{"deleted": true, "deleted_users": deletedUsers})
 }
 
 // DBUsersHandler manages MariaDB users

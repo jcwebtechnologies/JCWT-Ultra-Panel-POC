@@ -152,6 +152,10 @@ install_packages() {
         log_warn "Removing leftover ondrej-php.list from previous run..."
         rm -f /etc/apt/sources.list.d/ondrej-php.list
     fi
+    # Also remove native DEB822 format (from add-apt-repository) to avoid duplicates on re-run
+    for f in /etc/apt/sources.list.d/ondrej-ubuntu-php-*.sources; do
+        [ -f "$f" ] && rm -f "$f" && log_warn "Removed $(basename $f) from previous run..."
+    done
     if [ -f /etc/apt/trusted.gpg.d/ondrej-php.gpg ]; then
         rm -f /etc/apt/trusted.gpg.d/ondrej-php.gpg
     fi
@@ -189,6 +193,9 @@ install_packages() {
     # Try add-apt-repository with a 30s timeout (hangs on IPv6-only due to keyserver)
     if timeout 30 add-apt-repository -y ppa:ondrej/php >/dev/null 2>&1; then
         log_detail "Successfully added via add-apt-repository"
+        # Remove manual fallback files to avoid duplicate sources
+        rm -f /etc/apt/sources.list.d/ondrej-php.list
+        rm -f /etc/apt/trusted.gpg.d/ondrej-php.gpg
     else
         log_warn "add-apt-repository failed or timed out (common on IPv6-only EC2). Falling back to manual method..."
         # Download GPG key directly via HTTPS (works on IPv6)
@@ -198,6 +205,10 @@ install_packages() {
         OS_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
         echo "deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu $OS_CODENAME main" > /etc/apt/sources.list.d/ondrej-php.list
         log_detail "Added repo for Ubuntu $OS_CODENAME via manual fallback"
+        # Remove native format file to avoid duplicate sources
+        for f in /etc/apt/sources.list.d/ondrej-ubuntu-php-*.sources; do
+            [ -f "$f" ] && rm -f "$f"
+        done
     fi
 
     log_info "Refreshing package lists..."
@@ -593,6 +604,12 @@ add_header X-Frame-Options "SAMEORIGIN" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-XSS-Protection "1; mode=block" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+# SSL settings (applied globally — do not repeat in server blocks)
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers HIGH:!aNULL:!MD5;
+ssl_prefer_server_ciphers on;
+ssl_session_cache shared:SSL:10m;
 EOF
     log_detail "Config written: /etc/nginx/conf.d/jcwt-optimization.conf"
     log_detail "  • client_max_body_size = 100M"
@@ -996,7 +1013,9 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/sed *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget *
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php*
 EOF
     chmod 440 /etc/sudoers.d/jcwt-panel
     log_detail "Sudoers: /etc/sudoers.d/jcwt-panel (mode 440)"

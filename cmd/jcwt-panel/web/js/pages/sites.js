@@ -74,7 +74,7 @@ export async function render(container) {
         document.getElementById('add-site-btn')?.addEventListener('click', () => {
             const versionOptions = versions.map(v => `<option value="${v}">PHP ${v}</option>`).join('');
             showModal('Add New Site', `
-                <form id="add-site-form">
+                <form id="add-site-form" autocomplete="off">
                     <div class="form-group">
                         <label class="form-label">Domain</label>
                         <input type="text" class="form-input" id="site-domain" placeholder="example.com" required>
@@ -87,7 +87,7 @@ export async function render(container) {
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">System User</label>
-                            <input type="text" class="form-input" id="site-user" placeholder="example_user" required>
+                            <input type="text" class="form-input" id="site-user" placeholder="example_user" required autocomplete="off">
                             <div class="form-help">Lowercase, 2-31 chars</div>
                         </div>
                         <div class="form-group">
@@ -120,7 +120,7 @@ export async function render(container) {
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Admin Username</label>
-                                    <input type="text" class="form-input" id="wp-admin-user" placeholder="admin" value="admin">
+                                    <input type="text" class="form-input" id="wp-admin-user" placeholder="admin" value="admin" autocomplete="off">
                                 </div>
                             </div>
                             <div class="form-row">
@@ -130,7 +130,7 @@ export async function render(container) {
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Admin Password</label>
-                                    <input type="password" class="form-input" id="wp-admin-pass" placeholder="Strong password" required>
+                                    <input type="password" class="form-input" id="wp-admin-pass" placeholder="Strong password" required autocomplete="new-password">
                                 </div>
                             </div>
                         </div>

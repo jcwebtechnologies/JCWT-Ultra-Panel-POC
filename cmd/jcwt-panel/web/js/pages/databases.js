@@ -107,10 +107,16 @@ export async function render(container) {
 
                 tabContent.querySelectorAll('.del-db').forEach(btn => {
                     btn.addEventListener('click', async () => {
-                        if (!await showConfirm('Delete Database', `Delete database "${btn.dataset.name}"? This is irreversible and will drop the database from MariaDB.`, 'Delete', 'btn-danger')) return;
+                        const dbId = btn.dataset.id;
+                        const dbName = btn.dataset.name;
+                        const linkedUsers = userList.filter(u => String(u.database_id) === String(dbId));
+                        const userNote = linkedUsers.length > 0
+                            ? `\n\nThe following database user${linkedUsers.length > 1 ? 's' : ''} will also be deleted: ${linkedUsers.map(u => u.username).join(', ')}`
+                            : '';
+                        if (!await showConfirm('Delete Database', `Delete database "${dbName}"? This is irreversible and will drop the database from MariaDB.${userNote}`, 'Delete', 'btn-danger')) return;
                         try {
-                            await databases.delete(btn.dataset.id);
-                            showToast('Database deleted', 'success');
+                            await databases.delete(dbId);
+                            showToast('Database and associated users deleted', 'success');
                             renderContent();
                         } catch (err) { showToast(err.message, 'error'); }
                     });
@@ -169,6 +175,14 @@ export async function render(container) {
                             <label class="form-label">Grant Access To</label>
                             <select class="form-select" id="dbuser-db">${dbOpts}</select>
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">Privilege Level</label>
+                            <select class="form-select" id="dbuser-privilege">
+                                <option value="readonly">Read Only</option>
+                                <option value="readwrite" selected>Read / Write</option>
+                                <option value="full">Full (All Privileges)</option>
+                            </select>
+                        </div>
                     `, `
                         <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
                         <button class="btn btn-primary" id="submit-dbuser">Create</button>
@@ -189,6 +203,7 @@ export async function render(container) {
                                 username: username,
                                 password: password,
                                 database_id: parseInt(document.getElementById('dbuser-db').value),
+                                privilege_level: document.getElementById('dbuser-privilege').value,
                             });
                             closeModal(); showToast('User created!', 'success');
                             renderContent();

@@ -451,6 +451,25 @@ func (d *DB) ListDBUsersBySite(siteID int64) ([]string, error) {
 	return names, nil
 }
 
+// ListDBUsersByDatabaseID returns user IDs and usernames for a given database.
+func (d *DB) ListDBUsersByDatabaseID(databaseID int64) ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query(`SELECT id, username FROM db_users WHERE database_id = ?`, databaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var username string
+		if err := rows.Scan(&id, &username); err != nil {
+			return nil, err
+		}
+		users = append(users, map[string]interface{}{"id": id, "username": username})
+	}
+	return users, nil
+}
+
 // --- Cron Job queries ---
 
 func (d *DB) ListCronJobs(siteID int64) ([]map[string]interface{}, error) {

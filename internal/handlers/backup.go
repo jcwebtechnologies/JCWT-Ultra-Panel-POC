@@ -308,47 +308,69 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 
 	webRoot := site["web_root"].(string)
 	sysUser := site["system_user"].(string)
-	filePath := backup["file_path"].(string)
+	backupPath := backup["file_path"].(string)
 
 	// Verify backup file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 		jsonError(w, "backup file not found on disk", http.StatusNotFound)
 		return
 	}
 
-	// Extract to a temp directory first to inspect contents
-	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("jcwt-restore-%d", time.Now().UnixNano()))
-	os.MkdirAll(tmpDir, 0750)
-	defer exec.Command("sudo", "rm", "-rf", tmpDir).Run()
-
-	cmd := exec.Command("sudo", "tar", "-xzf", filePath, "-C", tmpDir)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		jsonError(w, fmt.Sprintf("restore failed to extract: %s", string(output)), http.StatusInternalServerError)
+	// List archive contents to detect backup style (no extraction needed)
+	listCmd := exec.Command("sudo", "tar", "-tzf", backupPath)
+	listOut, err := listCmd.Output()
+	if err != nil {
+		jsonError(w, "failed to read backup archive", http.StatusInternalServerError)
 		return
+	}
+	archiveFiles := strings.Split(strings.TrimSpace(string(listOut)), "\n")
+
+	isNewStyle := false
+	var dbFiles []string
+	hasCron := false
+	for _, f := range archiveFiles {
+		if strings.HasPrefix(f, "./htdocs/") || f == "./htdocs" || strings.HasPrefix(f, "htdocs/") || f == "htdocs" {
+			isNewStyle = true
+		}
+		if (strings.HasPrefix(f, "./databases/") || strings.HasPrefix(f, "databases/")) && strings.HasSuffix(f, ".sql.gz") {
+			dbFiles = append(dbFiles, f)
+		}
+		if f == "./cron_jobs.json" || f == "cron_jobs.json" {
+			hasCron = true
+		}
 	}
 
 	var restored []string
 
-	// Check if this is a new-style backup (with htdocs/, databases/, cron_jobs.json)
-	// or an old-style backup (just the web root directory)
-	htdocsPath := filepath.Join(tmpDir, "htdocs")
-	isNewStyle := false
-	if info, err := os.Stat(htdocsPath); err == nil && info.IsDir() {
-		isNewStyle = true
-	}
-
 	// Restore files
 	if req.RestoreFiles {
 		if isNewStyle {
-			// New-style: copy htdocs contents to web root
-			cmd = exec.Command("sudo", "rsync", "-a", "--delete", htdocsPath+"/", webRoot+"/")
+			// Extract htdocs/ from archive directly into webroot using a temp dir under the user's home
+			homeDir := filepath.Dir(webRoot)
+			restoreDir := filepath.Join(homeDir, "tmp", "restore-stage")
+			exec.Command("sudo", "-u", sysUser, "mkdir", "-p", restoreDir).Run()
+			// Clean up staging dir when done (user-owned, safe to remove as user)
+			defer exec.Command("sudo", "-u", sysUser, "rm", "-rf", restoreDir).Run()
+
+			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "htdocs")
+			if output, err := cmd.CombinedOutput(); err != nil {
+				// Try with ./ prefix
+				cmd = exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "./htdocs")
+				if output2, err2 := cmd.CombinedOutput(); err2 != nil {
+					jsonError(w, fmt.Sprintf("restore files failed: %s / %s", string(output), string(output2)), http.StatusInternalServerError)
+					return
+				}
+			}
+
+			htdocsStage := filepath.Join(restoreDir, "htdocs")
+			cmd = exec.Command("sudo", "rsync", "-a", "--delete", htdocsStage+"/", webRoot+"/")
 			if output, err := cmd.CombinedOutput(); err != nil {
 				jsonError(w, fmt.Sprintf("restore files failed: %s", string(output)), http.StatusInternalServerError)
 				return
 			}
 		} else {
 			// Old-style: extract directly over web root parent
-			cmd = exec.Command("sudo", "tar", "-xzf", filePath, "-C", filepath.Dir(webRoot))
+			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", filepath.Dir(webRoot))
 			if output, err := cmd.CombinedOutput(); err != nil {
 				jsonError(w, fmt.Sprintf("restore failed: %s", string(output)), http.StatusInternalServerError)
 				return
@@ -358,57 +380,59 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 		restored = append(restored, "files")
 	}
 
-	// Restore databases
-	if req.RestoreDBs && isNewStyle {
-		dbDir := filepath.Join(tmpDir, "databases")
-		if entries, err := os.ReadDir(dbDir); err == nil {
-			// Build allowed set if specific databases requested
-			allowedDBs := make(map[string]bool)
-			if len(req.RestoreDBNames) > 0 {
-				for _, name := range req.RestoreDBNames {
-					allowedDBs[name] = true
+	// Restore databases — pipe directly from archive, no temp files
+	if req.RestoreDBs && isNewStyle && len(dbFiles) > 0 {
+		allowedDBs := make(map[string]bool)
+		if len(req.RestoreDBNames) > 0 {
+			for _, name := range req.RestoreDBNames {
+				allowedDBs[name] = true
+			}
+		}
+		for _, dbFile := range dbFiles {
+			baseName := filepath.Base(dbFile)
+			dbName := strings.TrimSuffix(baseName, ".sql.gz")
+			if len(allowedDBs) > 0 && !allowedDBs[dbName] {
+				continue
+			}
+
+			// Ensure the database exists before importing
+			createSQL := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbName)
+			exec.Command("sudo", "mysql", "-e", createSQL).Run()
+
+			// Extract .sql.gz to stdout and pipe through gunzip into mysql
+			importCmd := fmt.Sprintf("sudo tar -xzf %s --to-stdout %s | gunzip | sudo mysql %s",
+				backupPath, dbFile, dbName)
+			if output, err := exec.Command("bash", "-c", importCmd).CombinedOutput(); err != nil {
+				log.Printf("Failed to restore database %s: %s: %s", dbName, err, string(output))
+			} else {
+				restored = append(restored, "database:"+dbName)
+			}
+
+			// Re-create panel DB record if missing
+			existingDBs, _ := h.DB.ListDatabasesBySite(siteID)
+			found := false
+			for _, d := range existingDBs {
+				if d["db_name"].(string) == dbName {
+					found = true
+					break
 				}
 			}
-			for _, entry := range entries {
-				if strings.HasSuffix(entry.Name(), ".sql.gz") {
-					dbName := strings.TrimSuffix(entry.Name(), ".sql.gz")
-					// Skip if specific databases requested and this one isn't in the list
-					if len(allowedDBs) > 0 && !allowedDBs[dbName] {
-						continue
-					}
-					// Ensure the database exists before importing
-					createSQL := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbName)
-					exec.Command("sudo", "mysql", "-e", createSQL).Run()
-
-					dumpFile := filepath.Join(dbDir, entry.Name())
-					importCmd := fmt.Sprintf("gunzip -c %s | sudo mysql %s", dumpFile, dbName)
-					if output, err := exec.Command("bash", "-c", importCmd).CombinedOutput(); err != nil {
-						log.Printf("Failed to restore database %s: %s: %s", dbName, err, string(output))
-					} else {
-						restored = append(restored, "database:"+dbName)
-					}
-
-					// Re-create panel DB record if missing
-					existingDBs, _ := h.DB.ListDatabasesBySite(siteID)
-					found := false
-					for _, d := range existingDBs {
-						if d["db_name"].(string) == dbName {
-							found = true
-							break
-						}
-					}
-					if !found {
-						h.DB.CreateDatabase(dbName, siteID)
-					}
-				}
+			if !found {
+				h.DB.CreateDatabase(dbName, siteID)
 			}
 		}
 	}
 
-	// Restore cron jobs
-	if req.RestoreCron && isNewStyle {
-		cronFile := filepath.Join(tmpDir, "cron_jobs.json")
-		if cronData, err := os.ReadFile(cronFile); err == nil {
+	// Restore cron jobs — extract to stdout, no temp file
+	if req.RestoreCron && isNewStyle && hasCron {
+		cronCmd := exec.Command("sudo", "tar", "-xzf", backupPath, "--to-stdout", "cron_jobs.json")
+		cronData, err := cronCmd.Output()
+		if err != nil {
+			// Try with ./ prefix
+			cronCmd = exec.Command("sudo", "tar", "-xzf", backupPath, "--to-stdout", "./cron_jobs.json")
+			cronData, err = cronCmd.Output()
+		}
+		if err == nil {
 			var cronJobs []map[string]interface{}
 			if json.Unmarshal(cronData, &cronJobs) == nil {
 				for _, job := range cronJobs {
