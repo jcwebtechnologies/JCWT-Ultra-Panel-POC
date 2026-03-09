@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jcwt/ultra-panel/internal/config"
 	"github.com/jcwt/ultra-panel/internal/db"
@@ -52,6 +57,22 @@ func (h *SSLCertsHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	if certs == nil {
 		certs = []map[string]interface{}{}
+	}
+
+	// Enrich each cert with parsed details (CN, SAN, validity)
+	for _, c := range certs {
+		certPath, _ := c["cert_path"].(string)
+		if certPath == "" {
+			continue
+		}
+		info := parseCertFile(certPath)
+		if info != nil {
+			c["common_name"] = info.CommonName
+			c["san"] = info.SAN
+			c["not_before"] = info.NotBefore.Format(time.RFC3339)
+			c["not_after"] = info.NotAfter.Format(time.RFC3339)
+			c["issuer"] = info.Issuer
+		}
 	}
 
 	jsonSuccess(w, map[string]interface{}{"certificates": certs})
@@ -240,4 +261,43 @@ func (h *SSLCertsHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "certificate deleted"})
+}
+
+type certInfo struct {
+	CommonName string
+	SAN        []string
+	NotBefore  time.Time
+	NotAfter   time.Time
+	Issuer     string
+}
+
+func parseCertFile(path string) *certInfo {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil
+	}
+	var sans []string
+	sans = append(sans, cert.DNSNames...)
+	for _, ip := range cert.IPAddresses {
+		sans = append(sans, ip.String())
+	}
+	issuer := cert.Issuer.CommonName
+	if issuer == "" {
+		issuer = strings.Join(cert.Issuer.Organization, ", ")
+	}
+	return &certInfo{
+		CommonName: cert.Subject.CommonName,
+		SAN:        sans,
+		NotBefore:  cert.NotBefore,
+		NotAfter:   cert.NotAfter,
+		Issuer:     issuer,
+	}
 }

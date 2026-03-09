@@ -17,8 +17,15 @@ export async function render(container, siteToken, section) {
 
         const siteId = site.id;
         let activeSection = section || null;
+        let _prevSection = null;
 
         function renderPage() {
+            // Stop file browser instance when navigating away from files section
+            if (_prevSection === 'files' && activeSection !== 'files') {
+                files.stop(siteId).catch(() => {});
+            }
+            _prevSection = activeSection;
+
             container.innerHTML = `
             <div class="page-header" style="margin-bottom: var(--space-5);">
                 <div class="page-header-left">
@@ -33,7 +40,7 @@ export async function render(container, siteToken, section) {
                 <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:16px;height:16px;">${icons.sites}</span> All Sites</a>
             </div>
 
-            ${activeSection ? `<div style="margin-bottom: var(--space-4);"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-ghost" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:14px;height:14px;">${icons.dashboard}</span> Site Overview</a></div>` : `
+            ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-ghost back-nav-btn"><span class="nav-icon" style="width:16px;height:16px;">${icons.chevronLeft}</span> Site Overview</a></div>` : `
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Configuration</div>
                 <div class="site-cards-grid">
@@ -75,6 +82,10 @@ export async function render(container, siteToken, section) {
                     <div class="site-card" data-section="backups">
                         <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.download}</span></div>
                         <div class="site-card-title">Backups</div>
+                    </div>
+                    <div class="site-card" data-section="phpmyadmin">
+                        <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.database}</span></div>
+                        <div class="site-card-title">phpMyAdmin</div>
                     </div>
                 </div>
             </div>
@@ -127,6 +138,7 @@ export async function render(container, siteToken, section) {
                     case 'files': renderFiles(sectionContent, siteId); break;
                     case 'vhost': renderVhost(sectionContent, site, siteId); break;
                     case 'backups': renderBackups(sectionContent, site, siteId); break;
+                    case 'phpmyadmin': renderPhpMyAdmin(sectionContent, siteId); break;
                     case 'logs': renderLogs(sectionContent, site, siteId); break;
                 }
             }
@@ -375,6 +387,9 @@ function renderSSL(el, site, siteId) {
                     <span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type === 'none' ? 'None' : site.ssl_type}</span></span>
                 </div>
                 ${activeCert && activeCert.cert_path ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Certificate Path</span><span class="info-value mono" style="font-size: var(--font-size-xs);">${escapeHtml(activeCert.cert_path)}</span></div>` : ''}
+                ${activeCert && activeCert.common_name ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Common Name</span><span class="info-value mono" style="font-size: var(--font-size-xs);">${escapeHtml(activeCert.common_name)}</span></div>` : ''}
+                ${activeCert && activeCert.san && activeCert.san.length ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Subject Alt Names</span><span class="info-value mono" style="font-size: var(--font-size-xs);">${escapeHtml(activeCert.san.join(', '))}</span></div>` : ''}
+                ${activeCert && activeCert.not_after ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Expires</span><span class="info-value">${new Date(activeCert.not_after).toLocaleDateString()}${(() => { const d = Math.ceil((new Date(activeCert.not_after) - Date.now()) / 86400000); return d < 0 ? ' <span class="badge badge-danger">Expired</span>' : d < 30 ? ` <span class="badge badge-warning">${d}d left</span>` : ` <span class="badge badge-success">${d}d left</span>`; })()}</span></div>` : ''}
 
                 <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4);">
                     ${!hasSelfSigned ? `<button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>` : ''}
@@ -390,13 +405,24 @@ function renderSSL(el, site, siteId) {
             </div>
             <div class="table-responsive">
                 <table class="data-table responsive-cards">
-                    <thead><tr><th>Type</th><th>Label</th><th>Uploaded</th><th>Status</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Type</th><th>Label / CN</th><th>SAN</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>
-                        ${certs.map(c => `
+                        ${certs.map(c => {
+                            const san = (c.san || []).join(', ') || '—';
+                            const expiry = c.not_after ? new Date(c.not_after) : null;
+                            const daysLeft = expiry ? Math.ceil((expiry - Date.now()) / 86400000) : null;
+                            const expiryBadge = daysLeft !== null
+                                ? (daysLeft < 0 ? '<span class="badge badge-danger">Expired</span>'
+                                    : daysLeft < 30 ? `<span class="badge badge-warning">${daysLeft}d left</span>`
+                                    : `<span class="badge badge-success">${daysLeft}d left</span>`)
+                                : 'N/A';
+                            const expiryDate = expiry ? expiry.toLocaleDateString() : '';
+                            return `
                         <tr>
                             <td data-label="Type"><span class="badge ${c.type === 'self-signed' ? 'badge-warning' : 'badge-info'}">${escapeHtml(c.type)}</span></td>
-                            <td data-label="Label">${escapeHtml(c.label || c.type)}</td>
-                            <td data-label="Uploaded" style="font-size: var(--font-size-xs);">${c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}</td>
+                            <td data-label="Label / CN">${escapeHtml(c.label || c.type)}${c.common_name ? `<br><small class="mono" style="color:var(--text-tertiary)">${escapeHtml(c.common_name)}</small>` : ''}</td>
+                            <td data-label="SAN"><small class="mono" style="word-break:break-all;color:var(--text-secondary)">${escapeHtml(san)}</small></td>
+                            <td data-label="Expires">${expiryBadge}${expiryDate ? `<br><small style="color:var(--text-tertiary)">${expiryDate}</small>` : ''}</td>
                             <td data-label="Status">${c.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge" style="background:var(--bg-tertiary);color:var(--text-tertiary)">Inactive</span>'}</td>
                             <td>
                                 <div class="table-actions">
@@ -404,7 +430,8 @@ function renderSSL(el, site, siteId) {
                                     ${!c.active ? `<button class="btn btn-sm btn-danger delete-cert" data-id="${c.id}">Delete</button>` : ''}
                                 </div>
                             </td>
-                        </tr>`).join('')}
+                        </tr>`;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
@@ -940,7 +967,7 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
                                 <td data-label="Created">${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
                                 <td style="display: flex; gap: var(--space-1);">
                                     <button class="btn btn-sm btn-secondary change-pwd" data-username="${escapeHtml(u.username)}" title="Change Password">${icons.key} Password</button>
-                                    <button class="btn btn-sm btn-secondary open-pma-user" data-id="${u.database_id}" data-name="${escapeHtml(u.db_name)}" title="Open phpMyAdmin">⛁ phpMyAdmin</button>
+                                    <button class="btn btn-sm btn-secondary open-pma-user" data-id="${u.database_id}" data-user-id="${u.id}" data-name="${escapeHtml(u.db_name)}" title="Open phpMyAdmin">⛁ phpMyAdmin</button>
                                     <button class="btn btn-sm btn-danger delete-db-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}">Delete</button>
                                 </td>
                             </tr>`).join('')}
@@ -1040,13 +1067,14 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
         container.querySelectorAll('.open-pma-user').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const dbId = btn.dataset.id;
+                const dbUserId = btn.dataset.userId;
                 const dbName = btn.dataset.name;
                 btn.disabled = true;
                 btn.textContent = '⏳ Opening...';
                 try {
                     const data = await request('/api/pma', {
                         method: 'POST',
-                        body: JSON.stringify({ database_id: parseInt(dbId) })
+                        body: JSON.stringify({ database_id: parseInt(dbId), db_user_id: parseInt(dbUserId) })
                     });
                     if (data.url) {
                         window.open(data.url, '_blank');
@@ -1344,7 +1372,10 @@ async function renderBackups(container, site, siteId) {
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Backups</h3>
-                <button class="btn btn-primary btn-sm" id="create-backup-btn">${icons.plus} Create Backup Now</button>
+                <div style="display: flex; gap: var(--space-2);">
+                    <button class="btn btn-sm btn-ghost" id="refresh-backups">${icons.refresh} Refresh</button>
+                    <button class="btn btn-primary btn-sm" id="create-backup-btn">${icons.plus} Create Backup Now</button>
+                </div>
             </div>
             ${backups.length === 0 ? `
                 <div class="empty-state" style="padding: var(--space-6);">
@@ -1354,34 +1385,56 @@ async function renderBackups(container, site, siteId) {
             ` : `
                 <div class="table-responsive">
                     <table class="data-table responsive-cards">
-                        <thead><tr><th>Date</th><th>Size</th><th>Type</th><th>Method</th><th>Actions</th></tr></thead>
-                        <tbody>
-                            ${backups.map(b => `
-                            <tr>
-                                <td data-label="Date">${new Date(b.created_at).toLocaleString()}</td>
-                                <td data-label="Size">${b.size ? formatBytes(parseInt(b.size)) : 'N/A'}</td>
-                                <td data-label="Type"><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${b.type}</span></td>
-                                <td data-label="Method">${escapeHtml(b.method || 'local')}</td>
-                                <td>
-                                    <div class="table-actions">
-                                        <button class="btn btn-sm btn-secondary download-backup" data-id="${b.id}" title="Download"><span class="nav-icon" style="width:14px;height:14px;">${icons.download}</span></button>
-                                        <button class="btn btn-sm btn-secondary restore-backup" data-id="${b.id}">Restore</button>
-                                        <button class="btn btn-sm btn-danger delete-backup" data-id="${b.id}">Delete</button>
-                                    </div>
-                                </td>
-                            </tr>`).join('')}
-                        </tbody>
+                        <thead><tr><th>Date</th><th>Size</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="backup-tbody"></tbody>
                     </table>
                 </div>
+                <div id="backup-pagination" style="display: flex; justify-content: center; align-items: center; gap: var(--space-2); padding: var(--space-3);"></div>
             `}
         </div>`;
 
+        // Client-side pagination
+        const perPage = 10;
+        let currentPage = 1;
+        const totalPages = Math.ceil(backups.length / perPage);
+
+        function renderBackupRows() {
+            const tbody = document.getElementById('backup-tbody');
+            const pag = document.getElementById('backup-pagination');
+            if (!tbody) return;
+            const start = (currentPage - 1) * perPage;
+            const pageItems = backups.slice(start, start + perPage);
+            tbody.innerHTML = pageItems.map(b => `
+                <tr>
+                    <td data-label="Date">${new Date(b.created_at).toLocaleString()}</td>
+                    <td data-label="Size">${b.size ? formatBytes(parseInt(b.size)) : (b.status === 'in_progress' ? '...' : 'N/A')}</td>
+                    <td data-label="Type"><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${b.type}</span></td>
+                    <td data-label="Status"><span class="badge ${b.status === 'completed' ? 'badge-success' : b.status === 'in_progress' ? 'badge-warning' : 'badge-danger'}">${b.status === 'in_progress' ? 'In Progress' : b.status}</span></td>
+                    <td>
+                        <div class="table-actions">
+                            ${b.status === 'completed' ? `<button class="btn btn-sm btn-secondary download-backup" data-id="${b.id}" title="Download"><span class="nav-icon" style="width:14px;height:14px;">${icons.download}</span></button>
+                            <button class="btn btn-sm btn-secondary restore-backup" data-id="${b.id}">Restore</button>` : ''}
+                            <button class="btn btn-sm btn-danger delete-backup" data-id="${b.id}">Delete</button>
+                        </div>
+                    </td>
+                </tr>`).join('');
+            if (pag && totalPages > 1) {
+                pag.innerHTML = `
+                    <button class="btn btn-sm btn-ghost" id="bk-prev" ${currentPage <= 1 ? 'disabled' : ''}>← Prev</button>
+                    <span style="font-size: var(--font-size-xs); color: var(--text-secondary);">Page ${currentPage} of ${totalPages}</span>
+                    <button class="btn btn-sm btn-ghost" id="bk-next" ${currentPage >= totalPages ? 'disabled' : ''}>Next →</button>`;
+                pag.querySelector('#bk-prev')?.addEventListener('click', () => { currentPage--; renderBackupRows(); bindBackupActions(); });
+                pag.querySelector('#bk-next')?.addEventListener('click', () => { currentPage++; renderBackupRows(); bindBackupActions(); });
+            }
+        }
+        renderBackupRows();
+        bindBackupActions();
+
         document.getElementById('save-backup-schedule')?.addEventListener('click', async () => {
             try {
-                await request('/api/backups?action=schedule', {
-                    method: 'POST',
+                await request(`/api/backups?site_id=${siteId}`, {
+                    method: 'PUT',
                     body: JSON.stringify({
-                        site_id: parseInt(siteId),
                         frequency: document.getElementById('backup-frequency').value,
                         retention: parseInt(document.getElementById('backup-retention').value),
                         method: document.getElementById('backup-method').value,
@@ -1391,19 +1444,46 @@ async function renderBackups(container, site, siteId) {
             } catch (err) { showToast(err.message, 'error'); }
         });
 
+        document.getElementById('refresh-backups')?.addEventListener('click', () => renderBackups(container, site, siteId));
+
         document.getElementById('create-backup-btn')?.addEventListener('click', async () => {
             if (!await showConfirm('Create Backup', `Create a backup of ${escapeHtml(site.domain)} now? This may take a moment for large sites.`, 'Create Backup', 'btn-primary')) return;
+            const btn = document.getElementById('create-backup-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Creating...';
             try {
-                showToast('Backup started...', 'info');
-                await request('/api/backups', {
+                const result = await request('/api/backups', {
                     method: 'POST',
                     body: JSON.stringify({ site_id: parseInt(siteId) }),
                 });
-                showToast('Backup created successfully!', 'success');
-                renderBackups(container, site, siteId);
-            } catch (err) { showToast(err.message, 'error'); }
+                const backupId = result.id;
+                showToast('Backup started in background...', 'info');
+                // Poll for completion
+                const poll = setInterval(async () => {
+                    try {
+                        const status = await request('/api/backups?action=status', {
+                            method: 'POST',
+                            body: JSON.stringify({ backup_id: backupId }),
+                        });
+                        if (status.status === 'completed') {
+                            clearInterval(poll);
+                            showToast('Backup completed successfully!', 'success');
+                            renderBackups(container, site, siteId);
+                        } else if (status.status === 'failed') {
+                            clearInterval(poll);
+                            showToast('Backup failed', 'error');
+                            renderBackups(container, site, siteId);
+                        }
+                    } catch { clearInterval(poll); }
+                }, 3000);
+            } catch (err) {
+                showToast(err.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = `${icons.plus} Create Backup Now`;
+            }
         });
 
+        function bindBackupActions() {
         container.querySelectorAll('.download-backup').forEach(btn => {
             btn.addEventListener('click', async () => {
                 try {
@@ -1511,6 +1591,90 @@ async function renderBackups(container, site, siteId) {
                     renderBackups(container, site, siteId);
                 } catch (err) { showToast(err.message, 'error'); }
             });
+        });
+        } // end bindBackupActions
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+    }
+}
+
+// ---- phpMyAdmin ----
+async function renderPhpMyAdmin(container, siteId) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    try {
+        const [allDbs, allUsers] = await Promise.all([databases.list(), dbUsers.list()]);
+        const siteDbs = (allDbs || []).filter(db => String(db.site_id) === String(siteId));
+        const siteUsers = (allUsers || []).filter(u => String(u.site_id) === String(siteId));
+
+        if (siteDbs.length === 0) {
+            container.innerHTML = `<div class="card"><div class="empty-state" style="padding: var(--space-6);"><div class="empty-state-title">No databases</div><div class="empty-state-text">Create a database first to use phpMyAdmin.</div></div></div>`;
+            return;
+        }
+
+        container.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">phpMyAdmin</h3>
+            </div>
+            <div style="padding: var(--space-4);">
+                <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">Select a database and optionally a specific user to open phpMyAdmin with matching privileges.</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Database</label>
+                        <select class="form-select" id="pma-database">
+                            ${siteDbs.map(db => `<option value="${db.id}" data-name="${escapeHtml(db.db_name)}">${escapeHtml(db.db_name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Database User (optional)</label>
+                        <select class="form-select" id="pma-user">
+                            <option value="">— Full access —</option>
+                            ${siteUsers.map(u => `<option value="${u.id}" data-db="${u.database_id}" data-level="${escapeHtml(u.privilege_level)}">${escapeHtml(u.username)} (${escapeHtml(u.privilege_level)})</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="pma-open-btn">${icons.database} Open phpMyAdmin</button>
+            </div>
+        </div>`;
+
+        // Filter users when database changes
+        const dbSelect = document.getElementById('pma-database');
+        const userSelect = document.getElementById('pma-user');
+        function filterUsers() {
+            const dbId = dbSelect.value;
+            Array.from(userSelect.options).forEach(opt => {
+                if (!opt.value) return; // keep the "full access" option
+                opt.style.display = opt.dataset.db === dbId ? '' : 'none';
+                if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+            });
+        }
+        dbSelect.addEventListener('change', filterUsers);
+        filterUsers();
+
+        document.getElementById('pma-open-btn')?.addEventListener('click', async () => {
+            const dbId = parseInt(dbSelect.value);
+            const dbName = dbSelect.selectedOptions[0]?.dataset.name || '';
+            const userId = userSelect.value ? parseInt(userSelect.value) : null;
+            const btn = document.getElementById('pma-open-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Opening...';
+            try {
+                const body = { database_id: dbId };
+                if (userId) body.db_user_id = userId;
+                const data = await request('/api/pma', {
+                    method: 'POST',
+                    body: JSON.stringify(body),
+                });
+                if (data.url) {
+                    window.open(data.url, '_blank');
+                    showToast(`phpMyAdmin opened for ${escapeHtml(dbName)}`, 'success');
+                }
+            } catch (err) {
+                showToast(`phpMyAdmin error: ${err.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `${icons.database} Open phpMyAdmin`;
+            }
         });
     } catch (err) {
         container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;

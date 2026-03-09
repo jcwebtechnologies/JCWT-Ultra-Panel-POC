@@ -118,6 +118,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://www.google.com; img-src 'self' data: blob: https:;")
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 
 		// No caching for API responses
 		if strings.HasPrefix(r.URL.Path, "/api/") {

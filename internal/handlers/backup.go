@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -36,6 +37,8 @@ func (h *BackupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.updateSchedule(w, r)
 		case "download-token":
 			h.generateDownloadToken(w, r)
+		case "status":
+			h.status(w, r)
 		default:
 			h.create(w, r)
 		}
@@ -111,6 +114,21 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create a pending backup record
+	id, err := h.DB.CreateBackupPending(req.SiteID, req.Type, "local")
+	if err != nil {
+		jsonError(w, "failed to create backup record", http.StatusInternalServerError)
+		return
+	}
+
+	// Return immediately with the backup ID for status polling
+	jsonSuccess(w, map[string]interface{}{"id": id, "status": "in_progress"})
+
+	// Run backup in background
+	go h.runBackup(id, req.SiteID, req.Type, site)
+}
+
+func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, site map[string]interface{}) {
 	domain := site["domain"].(string)
 	webRoot := site["web_root"].(string)
 	sysUser := site["system_user"].(string)
@@ -121,7 +139,7 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	exec.Command("sudo", "chmod", "0750", backupDir).Run()
 
 	timestamp := time.Now().Format("20060102-150405")
-	backupName := fmt.Sprintf("%s-%s-%s.tar.gz", domain, req.Type, timestamp)
+	backupName := fmt.Sprintf("%s-%s-%s.tar.gz", domain, backupType, timestamp)
 	backupPath := filepath.Join(backupDir, backupName)
 
 	// Create a staging directory for the backup contents
@@ -129,61 +147,66 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	exec.Command("sudo", "mkdir", "-p", stagingDir).Run()
 	defer exec.Command("sudo", "rm", "-rf", stagingDir).Run()
 
-	switch req.Type {
+	var backupErr error
+
+	switch backupType {
 	case "files":
-		// Files only — tar the web root directly
 		cmd := exec.Command("sudo", "tar", "-czf", backupPath, "-C", filepath.Dir(webRoot), filepath.Base(webRoot))
 		if output, err := cmd.CombinedOutput(); err != nil {
-			jsonError(w, fmt.Sprintf("backup failed: %s", string(output)), http.StatusInternalServerError)
-			return
+			backupErr = fmt.Errorf("backup failed: %s", string(output))
 		}
 
 	case "full":
-		// Step 1: Copy web files into staging using tar pipe (avoids sudo cp which may not be in sudoers)
 		htdocsStaging := filepath.Join(stagingDir, "htdocs")
 		exec.Command("sudo", "mkdir", "-p", htdocsStaging).Run()
 		pipeCmd := fmt.Sprintf("sudo tar cf - -C '%s' . | sudo tar xf - -C '%s'",
 			webRoot, htdocsStaging)
 		cmd := exec.Command("bash", "-c", pipeCmd)
 		if output, err := cmd.CombinedOutput(); err != nil {
-			jsonError(w, fmt.Sprintf("backup failed copying files: %s", string(output)), http.StatusInternalServerError)
-			return
+			backupErr = fmt.Errorf("backup failed copying files: %s", string(output))
 		}
 
-		// Step 2: Dump each site database individually
-		siteDbs, _ := h.DB.ListDatabasesBySite(req.SiteID)
-		if len(siteDbs) > 0 {
-			dbStaging := filepath.Join(stagingDir, "databases")
-			exec.Command("sudo", "mkdir", "-p", dbStaging).Run()
-			for _, db := range siteDbs {
-				dbName := db["db_name"].(string)
-				dumpFile := filepath.Join(dbStaging, dbName+".sql.gz")
-				dumpCmd := fmt.Sprintf("sudo mysqldump --single-transaction %s 2>/dev/null | gzip > %s",
-					dbName, dumpFile)
-				exec.Command("bash", "-c", dumpCmd).Run()
+		if backupErr == nil {
+			siteDbs, _ := h.DB.ListDatabasesBySite(siteID)
+			if len(siteDbs) > 0 {
+				dbStaging := filepath.Join(stagingDir, "databases")
+				exec.Command("sudo", "mkdir", "-p", dbStaging).Run()
+				for _, db := range siteDbs {
+					dbName := db["db_name"].(string)
+					dumpFile := filepath.Join(dbStaging, dbName+".sql.gz")
+					dumpCmd := fmt.Sprintf("sudo mysqldump --single-transaction %s 2>/dev/null | gzip > %s",
+						dbName, dumpFile)
+					exec.Command("bash", "-c", dumpCmd).Run()
+				}
 			}
 		}
 
-		// Step 3: Export cron jobs
-		cronJobs, _ := h.DB.ListCronJobs(req.SiteID)
-		if len(cronJobs) > 0 {
-			cronData, _ := json.MarshalIndent(cronJobs, "", "  ")
-			cronFile := filepath.Join(stagingDir, "cron_jobs.json")
-			writeCmd := exec.Command("sudo", "tee", cronFile)
-			writeCmd.Stdin = strings.NewReader(string(cronData))
-			writeCmd.Stdout = nil
-			writeCmd.Run()
+		if backupErr == nil {
+			cronJobs, _ := h.DB.ListCronJobs(siteID)
+			if len(cronJobs) > 0 {
+				cronData, _ := json.MarshalIndent(cronJobs, "", "  ")
+				cronFile := filepath.Join(stagingDir, "cron_jobs.json")
+				writeCmd := exec.Command("sudo", "tee", cronFile)
+				writeCmd.Stdin = strings.NewReader(string(cronData))
+				writeCmd.Stdout = nil
+				writeCmd.Run()
+			}
 		}
 
-		// Step 4: Tar the entire staging directory
-		cmd = exec.Command("sudo", "tar", "-czf", backupPath, "-C", stagingDir, ".")
-		if output, err := cmd.CombinedOutput(); err != nil {
-			jsonError(w, fmt.Sprintf("backup failed: %s", string(output)), http.StatusInternalServerError)
-			return
+		if backupErr == nil {
+			cmd = exec.Command("sudo", "tar", "-czf", backupPath, "-C", stagingDir, ".")
+			if output, err := cmd.CombinedOutput(); err != nil {
+				backupErr = fmt.Errorf("backup failed: %s", string(output))
+			}
 		}
 
 	default:
-		jsonError(w, "invalid backup type: use full or files", http.StatusBadRequest)
+		backupErr = fmt.Errorf("invalid backup type: %s", backupType)
+	}
+
+	if backupErr != nil {
+		log.Printf("Backup %d failed: %v", backupID, backupErr)
+		h.DB.UpdateBackupStatus(backupID, "failed", "", "")
 		return
 	}
 
@@ -193,23 +216,41 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	// Get backup file size
 	var size string
-	if info, err := os.Stat(backupPath); err == nil {
-		size = strconv.FormatInt(info.Size(), 10)
+	sizeCmd := exec.Command("sudo", "stat", "-c", "%s", backupPath)
+	if sizeOut, err := sizeCmd.Output(); err == nil {
+		size = strings.TrimSpace(string(sizeOut))
 	}
 
-	id, err := h.DB.CreateBackup(req.SiteID, req.Type, "local", backupPath, size)
-	if err != nil {
-		jsonError(w, "backup created but failed to save record", http.StatusInternalServerError)
+	h.DB.UpdateBackupStatus(backupID, "completed", backupPath, size)
+	log.Printf("Backup %d completed: %s (%s bytes)", backupID, backupPath, size)
+
+	// Clean old backups based on schedule retention
+	schedule, _ := h.DB.GetBackupSchedule(siteID)
+	if retention, ok := schedule["retention"].(int); ok && retention > 0 {
+		h.DB.CleanOldBackups(siteID, retention)
+	}
+}
+
+func (h *BackupHandler) status(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		BackupID int64 `json:"backup_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Clean old backups based on schedule retention
-	schedule, _ := h.DB.GetBackupSchedule(req.SiteID)
-	if retention, ok := schedule["retention"].(int); ok && retention > 0 {
-		h.DB.CleanOldBackups(req.SiteID, retention)
+	backup, err := h.DB.GetBackup(req.BackupID)
+	if err != nil {
+		jsonError(w, "backup not found", http.StatusNotFound)
+		return
 	}
 
-	jsonSuccess(w, map[string]interface{}{"id": id, "file": backupName, "size": size})
+	jsonSuccess(w, map[string]interface{}{
+		"id":     backup["id"],
+		"status": backup["status"],
+		"size":   backup["size"],
+	})
 }
 
 func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {

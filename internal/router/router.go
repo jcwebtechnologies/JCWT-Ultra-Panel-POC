@@ -72,6 +72,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 
 	// Files (File Browser manager)
 	filesHandler := &handlers.FilesHandler{DB: database, Cfg: cfg}
+	filesHandler.StartIdleReaper()
 	mux.Handle("/api/files", middleware.RequireAuth(middleware.RequireCSRF(filesHandler)))
 
 	// File Browser reverse proxy — requires auth but not CSRF (File Browser handles its own requests)
@@ -94,6 +95,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 
 	// phpMyAdmin auto-login (POST /api/pma returns a URL the frontend opens directly)
 	pmaHandler := &handlers.PhpMyAdminHandler{DB: database}
+	pmaHandler.CleanupStaleTempUsers()
 	mux.Handle("/api/pma", middleware.RequireAuth(middleware.RequireCSRF(pmaHandler)))
 
 	// Current user info

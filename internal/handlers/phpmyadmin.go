@@ -41,6 +41,7 @@ func (h *PhpMyAdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *PhpMyAdminHandler) createToken(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DatabaseID int64 `json:"database_id"`
+		DBUserID   int64 `json:"db_user_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -60,6 +61,32 @@ func (h *PhpMyAdminHandler) createToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Determine privilege level: if a specific DB user is provided, match their privileges
+	privilegeLevel := "full"
+	if req.DBUserID > 0 {
+		var pLevel string
+		err := h.DB.Conn.QueryRow(
+			"SELECT COALESCE(privilege_level, 'full') FROM db_users WHERE id = ? AND database_id = ?",
+			req.DBUserID, req.DatabaseID,
+		).Scan(&pLevel)
+		if err != nil {
+			jsonError(w, "database user not found", http.StatusNotFound)
+			return
+		}
+		privilegeLevel = pLevel
+	}
+
+	// Build grant SQL based on privilege level
+	var grantPrivileges string
+	switch privilegeLevel {
+	case "readonly":
+		grantPrivileges = "SELECT"
+	case "readwrite":
+		grantPrivileges = "SELECT, INSERT, UPDATE, DELETE"
+	default:
+		grantPrivileges = "ALL PRIVILEGES"
+	}
+
 	// Create a temporary MariaDB user for phpMyAdmin access
 	passBytes := make([]byte, 16)
 	rand.Read(passBytes)
@@ -73,7 +100,7 @@ func (h *PhpMyAdminHandler) createToken(w http.ResponseWriter, r *http.Request) 
 	cmds := []string{
 		fmt.Sprintf("DROP USER IF EXISTS '%s'@'localhost';", tempUser),
 		fmt.Sprintf("CREATE USER '%s'@'localhost' IDENTIFIED BY '%s';", tempUser, tempPass),
-		fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'localhost';", dbName, tempUser),
+		fmt.Sprintf("GRANT %s ON `%s`.* TO '%s'@'localhost';", grantPrivileges, dbName, tempUser),
 		"FLUSH PRIVILEGES;",
 	}
 
@@ -139,6 +166,31 @@ exit;
 func PhpMyAdminInstalled() bool {
 	_, err := exec.Command("sudo", "ls", "/usr/share/phpmyadmin/index.php").Output()
 	return err == nil
+}
+
+// CleanupStaleTempUsers drops any leftover pma_* MariaDB users and signon PHP files
+// from a previous panel run. Called once at startup.
+func (h *PhpMyAdminHandler) CleanupStaleTempUsers() {
+	// Drop pma_* MariaDB users
+	out, err := exec.Command("sudo", "mysql", "-N", "-e",
+		"SELECT CONCAT('''', user, '''@''', host, '''') FROM mysql.user WHERE user LIKE 'pma\\_%'").Output()
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		exec.Command("sudo", "mysql", "-e", fmt.Sprintf("DROP USER IF EXISTS %s;", line)).Run()
+	}
+	if len(strings.TrimSpace(string(out))) > 0 {
+		exec.Command("sudo", "mysql", "-e", "FLUSH PRIVILEGES;").Run()
+		log.Printf("Cleaned up stale PMA temp users at startup")
+	}
+
+	// Remove leftover signon PHP files
+	exec.Command("sudo", "bash", "-c", "rm -f /usr/share/phpmyadmin/signon_*.php").Run()
 }
 
 // GetDBInfo returns the database name for a given database ID

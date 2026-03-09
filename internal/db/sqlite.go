@@ -572,6 +572,23 @@ func (d *DB) CreateBackup(siteID int64, btype, method, filePath, size string) (i
 	return res.LastInsertId()
 }
 
+// CreateBackupPending creates a backup record with status 'in_progress'
+func (d *DB) CreateBackupPending(siteID int64, btype, method string) (int64, error) {
+	res, err := d.Conn.Exec("INSERT INTO backups (site_id, type, method, file_path, size, status) VALUES (?, ?, ?, '', '', 'in_progress')",
+		siteID, btype, method)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// UpdateBackupStatus updates a backup's status, file_path, and size
+func (d *DB) UpdateBackupStatus(id int64, status, filePath, size string) error {
+	_, err := d.Conn.Exec("UPDATE backups SET status = ?, file_path = ?, size = ? WHERE id = ?",
+		status, filePath, size, id)
+	return err
+}
+
 func (d *DB) GetBackup(id int64) (map[string]interface{}, error) {
 	var siteID int64
 	var btype, method, filePath, size, status, created string

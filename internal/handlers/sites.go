@@ -267,6 +267,11 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-generate self-signed SSL certificate
 	certPath, keyPath, sslErr := system.GenerateSelfSignedCert(h.Cfg.SSLBaseDir, req.Domain)
+
+	// Set up log rotation (daily, 7 day retention)
+	if err := system.WriteLogrotateConfig(h.Cfg.WebRootBase, req.SystemUser, req.Domain); err != nil {
+		log.Printf("logrotate config for %s failed (non-fatal): %v", req.Domain, err)
+	}
 	if sslErr == nil {
 		// Store in ssl_certificates table and activate
 		certID, certErr := h.DB.CreateSSLCertificate(id, "self-signed", "Self-Signed (Auto)", certPath, keyPath, true)
@@ -458,6 +463,9 @@ func (h *SitesHandler) delete(w http.ResponseWriter, r *http.Request) {
 
 	// Remove SSL certificates
 	system.RemoveCert(h.Cfg.SSLBaseDir, domain)
+
+	// Remove logrotate config
+	system.RemoveLogrotateConfig(domain)
 
 	jsonSuccess(w, map[string]interface{}{"deleted": true})
 }

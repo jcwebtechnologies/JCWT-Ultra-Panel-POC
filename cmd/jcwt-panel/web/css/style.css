@@ -1373,6 +1373,17 @@ a:hover {
     min-width: 0;
 }
 
+/* ---- Back Navigation ---- */
+.back-nav {
+    margin-bottom: var(--space-4);
+}
+
+.back-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
 /* ---- Settings Section ---- */
 .settings-section {
     margin-bottom: var(--space-8);
@@ -1539,6 +1550,20 @@ a:hover {
     .page-header .btn {
         align-self: flex-start;
         width: auto;
+    }
+
+    /* Mobile back navigation: full-width, larger touch target */
+    .back-nav {
+        margin-bottom: var(--space-3);
+    }
+
+    .back-nav-btn {
+        width: 100%;
+        justify-content: center;
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--font-size-sm);
+        border: 1px solid var(--border-primary);
+        border-radius: var(--radius-md);
     }
 
     /* Page title in header: always visible */

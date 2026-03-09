@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jcwt/ultra-panel/internal/config"
@@ -28,9 +29,10 @@ type FilesHandler struct {
 }
 
 type fbInstance struct {
-	Port    int
-	Process *exec.Cmd
-	Started time.Time
+	Port       int
+	Process    *exec.Cmd
+	Started    time.Time
+	LastAccess time.Time
 }
 
 func (h *FilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +107,7 @@ func (h *FilesHandler) stop(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	inst, exists := h.instances[siteID]
 	if exists {
-		inst.Process.Process.Kill()
+		gracefulStop(inst.Process)
 		delete(h.instances, siteID)
 	}
 	h.mu.Unlock()
@@ -131,11 +133,12 @@ func (h *FilesHandler) GetInstance(siteID int64) (int, bool) {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", inst.Port), 300*time.Millisecond)
 	if err != nil {
 		// Port not responding — process may be hanging, kill and clean up
-		inst.Process.Process.Kill()
+		gracefulStop(inst.Process)
 		delete(h.instances, siteID)
 		return 0, false
 	}
 	conn.Close()
+	inst.LastAccess = time.Now()
 	return inst.Port, true
 }
 
@@ -144,8 +147,30 @@ func (h *FilesHandler) StopAll() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for id, inst := range h.instances {
-		inst.Process.Process.Kill()
+		gracefulStop(inst.Process)
 		delete(h.instances, id)
+	}
+}
+
+// gracefulStop sends SIGTERM and waits up to 5 seconds for the process to exit.
+// Falls back to SIGKILL if the process doesn't terminate in time.
+func gracefulStop(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	// Try graceful termination first
+	cmd.Process.Signal(syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		cmd.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		// Exited cleanly
+	case <-time.After(5 * time.Second):
+		// Force kill
+		cmd.Process.Kill()
 	}
 }
 
@@ -268,9 +293,10 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		h.instances = make(map[int64]*fbInstance)
 	}
 	h.instances[siteID] = &fbInstance{
-		Port:    port,
-		Process: cmd,
-		Started: time.Now(),
+		Port:       port,
+		Process:    cmd,
+		Started:    time.Now(),
+		LastAccess: time.Now(),
 	}
 	h.mu.Unlock()
 
@@ -285,6 +311,27 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	log.Printf("File Browser started for site %d on port %d (user: %s, root: %s)", siteID, port, sysUser, webRoot)
 	return port, nil
+}
+
+// StartIdleReaper launches a background goroutine that stops File Browser instances
+// idle for more than 15 minutes. This prevents leaked processes when users navigate away.
+func (h *FilesHandler) StartIdleReaper() {
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			h.mu.Lock()
+			now := time.Now()
+			for id, inst := range h.instances {
+				if now.Sub(inst.LastAccess) > 15*time.Minute {
+					gracefulStop(inst.Process)
+					delete(h.instances, id)
+					log.Printf("Reaped idle File Browser instance for site %d (idle %s)", id, now.Sub(inst.LastAccess).Round(time.Minute))
+				}
+			}
+			h.mu.Unlock()
+		}
+	}()
 }
 
 func splitPath(path string) []string {
