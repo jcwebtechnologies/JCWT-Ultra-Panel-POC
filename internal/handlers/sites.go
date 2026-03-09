@@ -214,9 +214,6 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-			req.WPSiteTitle = req.Domain
-		}
-	}
 
 	// Validate proxy URL format
 	if req.SiteType == "proxy" && !strings.HasPrefix(req.ProxyURL, "http") {
