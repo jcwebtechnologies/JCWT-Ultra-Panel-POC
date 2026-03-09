@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/smtp"
-	"regexp"
 	"strings"
 	"time"
 
@@ -51,8 +50,6 @@ func (h *SMTPHandler) get(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonSuccess(w, settings)
 }
-
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
 func (h *SMTPHandler) update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
