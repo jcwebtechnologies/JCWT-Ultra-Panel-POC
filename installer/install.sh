@@ -212,7 +212,7 @@ install_packages() {
 
     # ---- Nginx ----
     log_info "Installing Nginx web server..."
-    apt_run apt-get install -y nginx
+    apt_run apt-get install -y nginx libnginx-mod-http-headers-more-filter
     NGINX_VER=$(nginx -v 2>&1 | awk -F/ '{print $2}' || echo "unknown")
     log_ok "Nginx ${BOLD}v${NGINX_VER}${NC} installed"
 
@@ -576,8 +576,9 @@ configure_nginx() {
 # Upload size
 client_max_body_size 100M;
 
-# Hide server version
+# Hide server version and Server header
 server_tokens off;
+more_clear_headers Server;
 
 # Compression
 gzip on;
@@ -994,6 +995,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tail *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/sed *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync *
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
 EOF
     chmod 440 /etc/sudoers.d/jcwt-panel

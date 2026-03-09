@@ -239,6 +239,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		// Generate PHP-FPM pool
 		poolData := php.PoolData{
 			User: req.SystemUser, PHPVersion: req.PHPVersion, WebRoot: webRoot,
+			HomeDir: filepath.Dir(webRoot),
 			MemoryLimit: "128M", MaxExecutionTime: 30, MaxInputTime: 30,
 			MaxInputVars: 1000, PostMaxSize: "16M", UploadMaxFilesize: "16M",
 		}
@@ -384,6 +385,7 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 
 		poolData := php.PoolData{
 			User: sysUser, PHPVersion: req.PHPVersion, WebRoot: site["web_root"].(string),
+			HomeDir: filepath.Dir(site["web_root"].(string)),
 			MemoryLimit: phpSettings["memory_limit"].(string),
 			MaxExecutionTime: phpSettings["max_execution_time"].(int),
 			MaxInputTime: phpSettings["max_input_time"].(int),

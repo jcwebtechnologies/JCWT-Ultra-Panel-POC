@@ -392,7 +392,7 @@ function renderSSL(el, site, siteId) {
                 <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4);">
                     ${!hasSelfSigned ? `<button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>` : ''}
                     <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Certificate</button>
-                    <button class="btn btn-success" id="ssl-letsencrypt">${icons.shield} Let's Encrypt</button>
+                    <button class="btn btn-success" id="ssl-letsencrypt">${icons.shield} Issue Let's Encrypt</button>
                 </div>
             </div>
         </div>
@@ -492,10 +492,14 @@ function renderSSL(el, site, siteId) {
             const aliases = (site.aliases || '').split(/\s+/).filter(Boolean);
             const allDomains = [mainDomain, ...aliases];
 
-            const domainCheckboxes = allDomains.map((d, i) => `
-                <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; padding: var(--space-2) 0;">
-                    <input type="checkbox" class="le-domain" value="${escapeHtml(d)}" ${i === 0 ? 'checked' : ''}> ${escapeHtml(d)}
-                </label>
+            const domainToggles = allDomains.map((d, i) => `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) 0;">
+                    <span style="font-size: var(--font-size-sm);">${escapeHtml(d)}</span>
+                    <label class="toggle">
+                        <input type="checkbox" class="le-domain" value="${escapeHtml(d)}" ${i === 0 ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             `).join('');
 
             const content = `
@@ -504,14 +508,14 @@ function renderSSL(el, site, siteId) {
                 </p>
                 <div class="form-group">
                     <label class="form-label">Domains</label>
-                    ${domainCheckboxes}
+                    ${domainToggles}
                 </div>
             `;
             const footer = `
                 <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
                 <button class="btn btn-success" id="le-issue-btn">${icons.shield} Issue Certificate</button>
             `;
-            const modal = showModal("Let's Encrypt SSL", content, footer);
+            const modal = showModal("New Let's Encrypt SSL Certificate", content, footer, { persistent: true });
 
             modal.querySelector('#le-issue-btn')?.addEventListener('click', async () => {
                 const checked = [...modal.querySelectorAll('.le-domain:checked')].map(cb => cb.value);

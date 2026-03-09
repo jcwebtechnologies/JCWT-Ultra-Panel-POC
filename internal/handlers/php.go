@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"github.com/jcwt/ultra-panel/internal/config"
@@ -121,6 +122,7 @@ func (h *PHPHandler) update(w http.ResponseWriter, r *http.Request) {
 		User:              sysUser,
 		PHPVersion:        phpVersion,
 		WebRoot:           webRoot,
+		HomeDir:           filepath.Dir(webRoot),
 		MemoryLimit:       req.MemoryLimit,
 		MaxExecutionTime:  req.MaxExecutionTime,
 		MaxInputTime:      req.MaxInputTime,

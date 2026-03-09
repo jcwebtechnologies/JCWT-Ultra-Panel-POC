@@ -249,7 +249,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"--address", "127.0.0.1",
 		"--port", strconv.Itoa(port),
 		"--baseurl", fmt.Sprintf("/fb/%d", siteID),
-		"--database", fmt.Sprintf("/tmp/filebrowser-%d.db", siteID),
+		"--database", filepath.Join(filepath.Dir(webRoot), "tmp", fmt.Sprintf("filebrowser-%d.db", siteID)),
 	)
 
 	// Capture stderr for debugging

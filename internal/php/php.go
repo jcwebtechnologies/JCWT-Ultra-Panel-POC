@@ -21,10 +21,13 @@ listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
 
-pm = ondemand
-pm.max_children = 5
+pm = dynamic
+pm.max_children = 10
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 4
 pm.process_idle_timeout = 10s
-pm.max_requests = 200
+pm.max_requests = 500
 
 ; Security
 chdir = /
@@ -37,7 +40,7 @@ php_admin_value[max_input_time] = {{.MaxInputTime}}
 php_admin_value[max_input_vars] = {{.MaxInputVars}}
 php_admin_value[post_max_size] = {{.PostMaxSize}}
 php_admin_value[upload_max_filesize] = {{.UploadMaxFilesize}}
-php_admin_value[open_basedir] = {{.WebRoot}}:/tmp
+php_admin_value[open_basedir] = {{.WebRoot}}:{{.HomeDir}}/tmp:/tmp
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen
 php_admin_value[error_log] = /var/log/php/{{.User}}-error.log
 {{.CustomDirectives}}
@@ -48,6 +51,7 @@ type PoolData struct {
 	User              string
 	PHPVersion        string
 	WebRoot           string
+	HomeDir           string
 	MemoryLimit       string
 	MaxExecutionTime  int
 	MaxInputTime      int

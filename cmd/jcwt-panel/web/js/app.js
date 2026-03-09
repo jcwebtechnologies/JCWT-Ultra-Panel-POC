@@ -66,7 +66,7 @@ export function showToast(message, type = 'info') {
 }
 
 // ---- Modal ----
-export function showModal(title, content, footer = '') {
+export function showModal(title, content, footer = '', options = {}) {
     closeModal();
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -81,9 +81,11 @@ export function showModal(title, content, footer = '') {
             ${footer ? `<div class="modal-footer">${footer}</div>` : ''}
         </div>
     `;
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) overlay.remove();
-    });
+    if (!options.persistent) {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+    }
     document.body.appendChild(overlay);
     return overlay;
 }
