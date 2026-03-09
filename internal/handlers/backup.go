@@ -86,6 +86,22 @@ func (h *BackupHandler) list(w http.ResponseWriter, r *http.Request) {
 		backups = []map[string]interface{}{}
 	}
 
+	// Fill in missing sizes for completed backups
+	for _, b := range backups {
+		status, _ := b["status"].(string)
+		size, _ := b["size"].(string)
+		filePath, _ := b["file_path"].(string)
+		if status == "completed" && size == "" && filePath != "" {
+			sizeCmd := exec.Command("sudo", "stat", "-c", "%s", filePath)
+			if sizeOut, err := sizeCmd.Output(); err == nil {
+				s := strings.TrimSpace(string(sizeOut))
+				b["size"] = s
+				// Persist the size so we don't stat every time
+				h.DB.UpdateBackupStatus(b["id"].(int64), status, filePath, s)
+			}
+		}
+	}
+
 	schedule, _ := h.DB.GetBackupSchedule(siteID)
 
 	jsonSuccess(w, map[string]interface{}{

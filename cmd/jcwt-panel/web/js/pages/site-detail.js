@@ -20,10 +20,8 @@ export async function render(container, siteToken, section) {
         let _prevSection = null;
 
         function renderPage() {
-            // Stop file browser instance when navigating away from files section
-            if (_prevSection === 'files' && activeSection !== 'files') {
-                files.stop(siteId).catch(() => {});
-            }
+            // Don't stop file browser on section change — let idle reaper reclaim it.
+            // The instance stays alive so it can be reused when the user returns to files.
             _prevSection = activeSection;
 
             container.innerHTML = `
@@ -40,7 +38,7 @@ export async function render(container, siteToken, section) {
                 <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:16px;height:16px;">${icons.sites}</span> All Sites</a>
             </div>
 
-            ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-ghost back-nav-btn"><span class="nav-icon" style="width:16px;height:16px;">${icons.chevronLeft}</span> Site Overview</a></div>` : `
+            ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-primary back-nav-btn"><span class="nav-icon" style="width:16px;height:16px;">${icons.chevronLeft}</span> Site Overview</a></div>` : `
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Configuration</div>
                 <div class="site-cards-grid">
@@ -84,7 +82,7 @@ export async function render(container, siteToken, section) {
                         <div class="site-card-title">Backups</div>
                     </div>
                     <div class="site-card" data-section="phpmyadmin">
-                        <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.database}</span></div>
+                        <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.pma}</span></div>
                         <div class="site-card-title">phpMyAdmin</div>
                     </div>
                 </div>
@@ -1373,7 +1371,7 @@ async function renderBackups(container, site, siteId) {
             <div class="card-header">
                 <h3 class="card-title">Backups</h3>
                 <div style="display: flex; gap: var(--space-2);">
-                    <button class="btn btn-sm btn-ghost" id="refresh-backups">${icons.refresh} Refresh</button>
+                    <button class="btn btn-sm btn-ghost" id="refresh-backups"><span class="nav-icon" style="width:14px;height:14px;">${icons.refresh}</span> Refresh</button>
                     <button class="btn btn-primary btn-sm" id="create-backup-btn">${icons.plus} Create Backup Now</button>
                 </div>
             </div>
@@ -1633,7 +1631,7 @@ async function renderPhpMyAdmin(container, siteId) {
                         </select>
                     </div>
                 </div>
-                <button class="btn btn-primary" id="pma-open-btn">${icons.database} Open phpMyAdmin</button>
+                <button class="btn btn-primary" id="pma-open-btn"><span class="nav-icon" style="width:16px;height:16px;">${icons.pma}</span> Open phpMyAdmin</button>
             </div>
         </div>`;
 
@@ -1673,7 +1671,7 @@ async function renderPhpMyAdmin(container, siteId) {
                 showToast(`phpMyAdmin error: ${err.message}`, 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `${icons.database} Open phpMyAdmin`;
+                btn.innerHTML = `<span class="nav-icon" style="width:16px;height:16px;">${icons.pma}</span> Open phpMyAdmin`;
             }
         });
     } catch (err) {

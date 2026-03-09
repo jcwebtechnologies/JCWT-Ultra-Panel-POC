@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+// uniqueCertSuffix returns a short random hex string for unique cert filenames.
+func uniqueCertSuffix() string {
+	b := make([]byte, 4)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 // GenerateSelfSignedCert generates a self-signed SSL certificate for a domain
 func GenerateSelfSignedCert(sslBaseDir, domain string) (certPath, keyPath string, err error) {
 	certDir := filepath.Join(sslBaseDir, domain)
@@ -18,8 +25,9 @@ func GenerateSelfSignedCert(sslBaseDir, domain string) (certPath, keyPath string
 		return "", "", fmt.Errorf("create ssl dir: %s: %s", err, string(output))
 	}
 
-	certPath = filepath.Join(certDir, "cert.pem")
-	keyPath = filepath.Join(certDir, "key.pem")
+	suffix := uniqueCertSuffix()
+	certPath = filepath.Join(certDir, fmt.Sprintf("cert_%s.pem", suffix))
+	keyPath = filepath.Join(certDir, fmt.Sprintf("key_%s.pem", suffix))
 
 	cmd = exec.Command("sudo", "openssl", "req",
 		"-x509",
@@ -51,8 +59,9 @@ func SaveCustomCert(sslBaseDir, domain string, certData, keyData []byte) (certPa
 		return "", "", fmt.Errorf("create ssl dir: %s: %s", err, string(output))
 	}
 
-	certPath = filepath.Join(certDir, "cert.pem")
-	keyPath = filepath.Join(certDir, "key.pem")
+	suffix := uniqueCertSuffix()
+	certPath = filepath.Join(certDir, fmt.Sprintf("cert_%s.pem", suffix))
+	keyPath = filepath.Join(certDir, fmt.Sprintf("key_%s.pem", suffix))
 
 	// Write cert via sudo tee
 	cmd = exec.Command("sudo", "tee", certPath)

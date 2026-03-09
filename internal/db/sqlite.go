@@ -370,7 +370,7 @@ func (d *DB) DeleteDatabase(id int64) (string, error) {
 
 func (d *DB) ListDBUsers() ([]map[string]interface{}, error) {
 	rows, err := d.Conn.Query(`
-		SELECT u.id, u.username, u.database_id, d.db_name, COALESCE(u.privilege_level,'full'), u.created_at
+		SELECT u.id, u.username, u.database_id, d.db_name, d.site_id, COALESCE(u.privilege_level,'full'), u.created_at
 		FROM db_users u LEFT JOIN databases d ON u.database_id = d.id ORDER BY u.id DESC`)
 	if err != nil {
 		return nil, err
@@ -379,14 +379,14 @@ func (d *DB) ListDBUsers() ([]map[string]interface{}, error) {
 
 	var users []map[string]interface{}
 	for rows.Next() {
-		var id, dbID int64
+		var id, dbID, siteID int64
 		var username, dbName, privilegeLevel, createdAt string
-		if err := rows.Scan(&id, &username, &dbID, &dbName, &privilegeLevel, &createdAt); err != nil {
+		if err := rows.Scan(&id, &username, &dbID, &dbName, &siteID, &privilegeLevel, &createdAt); err != nil {
 			return nil, err
 		}
 		users = append(users, map[string]interface{}{
 			"id": id, "username": username, "database_id": dbID, "db_name": dbName,
-			"privilege_level": privilegeLevel, "created_at": createdAt,
+			"site_id": siteID, "privilege_level": privilegeLevel, "created_at": createdAt,
 		})
 	}
 	return users, nil

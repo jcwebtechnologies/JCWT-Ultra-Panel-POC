@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -258,6 +259,14 @@ func (h *SSLCertsHandler) delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.DeleteSSLCertificate(id); err != nil {
 		jsonError(w, "failed to delete certificate", http.StatusInternalServerError)
 		return
+	}
+
+	// Remove the cert/key files from disk
+	if certPath, ok := cert["cert_path"].(string); ok && certPath != "" {
+		exec.Command("sudo", "rm", "-f", certPath).Run()
+	}
+	if keyPath, ok := cert["key_path"].(string); ok && keyPath != "" {
+		exec.Command("sudo", "rm", "-f", keyPath).Run()
 	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "certificate deleted"})
