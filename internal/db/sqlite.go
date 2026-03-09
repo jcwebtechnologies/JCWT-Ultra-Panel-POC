@@ -418,6 +418,25 @@ func (d *DB) DeleteDBUser(id int64) (string, error) {
 	return username, err
 }
 
+// ListDBUsersBySite returns all db_user usernames for databases belonging to a site.
+func (d *DB) ListDBUsersBySite(siteID int64) ([]string, error) {
+	rows, err := d.Conn.Query(`SELECT u.username FROM db_users u
+		JOIN databases d ON u.database_id = d.id WHERE d.site_id = ?`, siteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
 // --- Cron Job queries ---
 
 func (d *DB) ListCronJobs(siteID int64) ([]map[string]interface{}, error) {

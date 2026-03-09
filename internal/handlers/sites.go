@@ -455,7 +455,19 @@ func (h *SitesHandler) delete(w http.ResponseWriter, r *http.Request) {
 	php.RestartFPM(phpVersion)
 	system.ClearCrontab(sysUser)
 
-	// Remove from DB
+	// Drop MariaDB users and databases for this site
+	dbUsernames, _ := h.DB.ListDBUsersBySite(id)
+	for _, u := range dbUsernames {
+		system.MariaDBDropUser(u)
+	}
+	siteDbs, _ := h.DB.ListDatabasesBySite(id)
+	for _, d := range siteDbs {
+		if name, ok := d["db_name"].(string); ok {
+			system.MariaDBDropDatabase(name)
+		}
+	}
+
+	// Remove from DB (cascades to databases, db_users, cron_jobs, etc.)
 	h.DB.DeleteSite(id)
 
 	// Remove system user (and home directory)

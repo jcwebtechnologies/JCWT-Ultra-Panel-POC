@@ -589,6 +589,7 @@ a:hover {
 
 .btn-primary:hover {
     background: var(--accent-primary-hover);
+    color: white;
     box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
 }
 

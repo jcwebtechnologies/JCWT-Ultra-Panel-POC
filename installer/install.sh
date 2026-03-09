@@ -988,6 +988,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tail *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/sed *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw *
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
 EOF
