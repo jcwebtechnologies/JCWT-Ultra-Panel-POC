@@ -376,12 +376,17 @@ function renderLayout(pageName) {
                         <span class="nav-icon">${icons.shield}</span> Firewall
                     </a>` : ''}
                     ${currentRole === 'admin' || currentRole === 'manager' ? `
-                    <a href="#/settings" class="nav-item ${pageName === 'settings' || pageName === 'smtp-settings' ? 'active' : ''}">
-                        <span class="nav-icon">${icons.settings}</span> Settings
-                    </a>
-                    <a href="#/smtp-settings" class="nav-item ${pageName === 'smtp-settings' ? 'active' : ''}" style="padding-left: 2.75rem; font-size: var(--font-size-xs);">
-                        <span class="nav-icon">${icons.mail}</span> SMTP
-                    </a>` : ''}
+                    <div class="nav-item-group">
+                        <a href="#/settings" class="nav-item ${pageName === 'settings' || pageName === 'smtp-settings' ? 'active' : ''}" data-has-submenu="true">
+                            <span class="nav-icon">${icons.settings}</span> Settings
+                            <svg class="submenu-arrow ${pageName === 'smtp-settings' ? 'open' : ''}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                        </a>
+                        <div class="nav-submenu ${pageName === 'smtp-settings' ? 'open' : ''}" id="settings-submenu">
+                            <a href="#/smtp-settings" class="nav-item nav-subitem ${pageName === 'smtp-settings' ? 'active' : ''}">
+                                <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> SMTP
+                            </a>
+                        </div>
+                    </div>` : ''}
                 </div>
             </nav>
             <div class="sidebar-footer">
@@ -558,6 +563,19 @@ async function navigate() {
         item.addEventListener('click', () => {
             document.getElementById('sidebar')?.classList.remove('open');
             document.getElementById('sidebar-overlay')?.classList.remove('active');
+        });
+    });
+
+    // Settings submenu toggle
+    document.querySelectorAll('[data-has-submenu]').forEach(item => {
+        const arrow = item.querySelector('.submenu-arrow');
+        const submenu = item.parentElement.querySelector('.nav-submenu');
+        if (!arrow || !submenu) return;
+        arrow.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            arrow.classList.toggle('open');
+            submenu.classList.toggle('open');
         });
     });
 
