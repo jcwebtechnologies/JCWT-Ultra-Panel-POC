@@ -140,7 +140,17 @@ export const settings = {
 // Services
 export const services = {
     list: () => request('/api/services'),
+    start: (name) => request('/api/services?action=start', { method: 'POST', body: JSON.stringify({ service: name }) }),
+    stop: (name) => request('/api/services?action=stop', { method: 'POST', body: JSON.stringify({ service: name }) }),
     restart: (name) => request('/api/services', { method: 'POST', body: JSON.stringify({ service: name }) }),
+    reload: (name) => request('/api/services?action=reload', { method: 'POST', body: JSON.stringify({ service: name }) }),
+};
+
+// SMTP Settings
+export const smtpSettings = {
+    get: () => request('/api/smtp'),
+    update: (data) => request('/api/smtp', { method: 'PUT', body: JSON.stringify(data) }),
+    testEmail: (to) => request('/api/smtp?action=test', { method: 'POST', body: JSON.stringify({ to }) }),
 };
 
 // Two-Factor Authentication

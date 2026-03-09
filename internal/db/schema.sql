@@ -130,6 +130,21 @@ CREATE TABLE IF NOT EXISTS ssl_certificates (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- SMTP settings (singleton, like panel_settings)
+CREATE TABLE IF NOT EXISTS smtp_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    host TEXT DEFAULT '',
+    port INTEGER DEFAULT 587,
+    encryption TEXT DEFAULT 'tls',
+    auth_enabled INTEGER DEFAULT 1,
+    username TEXT DEFAULT '',
+    password TEXT DEFAULT '',
+    from_email TEXT DEFAULT '',
+    from_name TEXT DEFAULT 'JCWT Ultra Panel'
+);
+
+INSERT OR IGNORE INTO smtp_settings (id) VALUES (1);
+
 -- Firewall rules
 CREATE TABLE IF NOT EXISTS firewall_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

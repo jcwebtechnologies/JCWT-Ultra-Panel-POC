@@ -63,6 +63,20 @@ func Open(dataDir string) (*DB, error) {
 	// Migrate any existing 'administrator' users to 'full'
 	conn.Exec("UPDATE db_users SET privilege_level = 'full' WHERE privilege_level = 'administrator'")
 
+	// SMTP settings table
+	conn.Exec(`CREATE TABLE IF NOT EXISTS smtp_settings (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		host TEXT DEFAULT '',
+		port INTEGER DEFAULT 587,
+		encryption TEXT DEFAULT 'tls',
+		auth_enabled INTEGER DEFAULT 1,
+		username TEXT DEFAULT '',
+		password TEXT DEFAULT '',
+		from_email TEXT DEFAULT '',
+		from_name TEXT DEFAULT 'JCWT Ultra Panel'
+	)`)
+	conn.Exec("INSERT OR IGNORE INTO smtp_settings (id) VALUES (1)")
+
 	// Add access_log and error_log columns to sites
 	conn.Exec("ALTER TABLE sites ADD COLUMN access_log INTEGER DEFAULT 1")
 	conn.Exec("ALTER TABLE sites ADD COLUMN error_log INTEGER DEFAULT 1")
@@ -510,6 +524,35 @@ func (d *DB) UpdatePanelSettings(name, tagline, logoURL, faviconURL, primaryColo
 		primary_color=?, accent_color=?, footer_text=?,
 		session_timeout=?, recaptcha_site_key=?, recaptcha_secret_key=?, timezone=? WHERE id = 1`,
 		name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText, sessionTimeout, recaptchaSiteKey, recaptchaSecretKey, timezone,
+	)
+	return err
+}
+
+// --- SMTP Settings queries ---
+
+func (d *DB) GetSMTPSettings() (map[string]interface{}, error) {
+	var host, encryption, username, password, fromEmail, fromName string
+	var port, authEnabled int
+	err := d.Conn.QueryRow(
+		"SELECT host, port, encryption, auth_enabled, username, password, from_email, from_name FROM smtp_settings WHERE id = 1",
+	).Scan(&host, &port, &encryption, &authEnabled, &username, &password, &fromEmail, &fromName)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"host": host, "port": port, "encryption": encryption,
+		"auth_enabled": authEnabled == 1, "username": username, "password": password,
+		"from_email": fromEmail, "from_name": fromName,
+	}, nil
+}
+
+func (d *DB) UpdateSMTPSettings(host string, port int, encryption string, authEnabled bool, username, password, fromEmail, fromName string) error {
+	auth := 0
+	if authEnabled {
+		auth = 1
+	}
+	_, err := d.Conn.Exec(`UPDATE smtp_settings SET host=?, port=?, encryption=?, auth_enabled=?, username=?, password=?, from_email=?, from_name=? WHERE id = 1`,
+		host, port, encryption, auth, username, password, fromEmail, fromName,
 	)
 	return err
 }

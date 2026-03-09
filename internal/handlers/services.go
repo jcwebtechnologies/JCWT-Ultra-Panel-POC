@@ -36,9 +36,14 @@ func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.list(w, r)
 	case "POST":
 		action := r.URL.Query().Get("action")
-		if action == "reload" {
+		switch action {
+		case "reload":
 			h.reload(w, r)
-		} else {
+		case "stop":
+			h.stop(w, r)
+		case "start":
+			h.start(w, r)
+		default:
 			h.restart(w, r)
 		}
 	default:
@@ -188,6 +193,119 @@ func (h *ServicesHandler) reload(w http.ResponseWriter, r *http.Request) {
 		"service":  req.Service,
 		"status":   status["status"],
 		"active":   status["active"],
+	})
+}
+
+// stop gracefully stops a whitelisted service
+func (h *ServicesHandler) stop(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Service string `json:"service"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	unitName, ok := allowedServices[req.Service]
+	if !ok {
+		jsonError(w, "unknown service", http.StatusBadRequest)
+		return
+	}
+
+	if req.Service == "jcwt-panel" {
+		jsonError(w, "cannot stop panel via API — use systemctl directly", http.StatusForbidden)
+		return
+	}
+
+	// Rate limit
+	h.restartMu.Lock()
+	if h.restartLog == nil {
+		h.restartLog = make(map[string][]time.Time)
+	}
+	now := time.Now()
+	cutoff := now.Add(-5 * time.Minute)
+	var recent []time.Time
+	for _, t := range h.restartLog[req.Service] {
+		if t.After(cutoff) {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= 3 {
+		h.restartMu.Unlock()
+		jsonError(w, "too many attempts — try again in a few minutes", http.StatusTooManyRequests)
+		return
+	}
+	h.restartLog[req.Service] = append(recent, now)
+	h.restartMu.Unlock()
+
+	output, err := exec.Command("sudo", "systemctl", "stop", unitName).CombinedOutput()
+	if err != nil {
+		jsonError(w, "stop failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
+		return
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	status := getServiceStatus(unitName)
+
+	jsonSuccess(w, map[string]interface{}{
+		"stopped": true,
+		"service": req.Service,
+		"status":  status["status"],
+		"active":  status["active"],
+	})
+}
+
+// start starts a whitelisted service
+func (h *ServicesHandler) start(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Service string `json:"service"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	unitName, ok := allowedServices[req.Service]
+	if !ok {
+		jsonError(w, "unknown service", http.StatusBadRequest)
+		return
+	}
+
+	// Rate limit
+	h.restartMu.Lock()
+	if h.restartLog == nil {
+		h.restartLog = make(map[string][]time.Time)
+	}
+	now := time.Now()
+	cutoff := now.Add(-5 * time.Minute)
+	var recent []time.Time
+	for _, t := range h.restartLog[req.Service] {
+		if t.After(cutoff) {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= 3 {
+		h.restartMu.Unlock()
+		jsonError(w, "too many attempts — try again in a few minutes", http.StatusTooManyRequests)
+		return
+	}
+	h.restartLog[req.Service] = append(recent, now)
+	h.restartMu.Unlock()
+
+	output, err := exec.Command("sudo", "systemctl", "start", unitName).CombinedOutput()
+	if err != nil {
+		jsonError(w, "start failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
+		return
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	status := getServiceStatus(unitName)
+
+	jsonSuccess(w, map[string]interface{}{
+		"started": true,
+		"service": req.Service,
+		"status":  status["status"],
+		"active":  status["active"],
 	})
 }
 

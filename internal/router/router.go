@@ -157,6 +157,11 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	// SSL Certificates (multi-cert)
 	mux.Handle("/api/ssl-certs", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SSLCertsHandler{DB: database, Cfg: cfg})))
 
+	// SMTP Settings (admin only)
+	mux.Handle("/api/smtp", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.SMTPHandler{DB: database, Cfg: cfg}),
+	)))
+
 	// Firewall (admin only)
 	mux.Handle("/api/firewall", middleware.RequireAuth(middleware.RequireCSRF(
 		middleware.RequireRole("admin")(&handlers.FirewallHandler{DB: database, Cfg: cfg}),

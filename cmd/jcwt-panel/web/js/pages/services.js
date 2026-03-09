@@ -49,8 +49,8 @@ async function loadServices(container) {
             const isActive = svc.active === 'active';
             const statusClass = isActive ? 'status-active' : 'status-inactive';
             const statusText = isActive ? 'Running' : 'Stopped';
-            const canRestart = svc.name !== 'jcwt-panel';
-            const canReload = canRestart && (svc.name === 'nginx' || svc.name.startsWith('php'));
+            const isPanel = svc.name === 'jcwt-panel';
+            const canReload = !isPanel && (svc.name === 'nginx' || svc.name.startsWith('php'));
 
             let memoryText = '';
             if (svc.memory && svc.memory !== '[not set]') {
@@ -75,14 +75,19 @@ async function loadServices(container) {
                     ${memoryText ? `<span class="service-meta-item">Memory: ${memoryText}</span>` : ''}
                     ${svc.uptime ? `<span class="service-meta-item">Since: ${escapeHtml(svc.uptime.split('.')[0] || svc.uptime)}</span>` : ''}
                 </div>
-                ${canRestart ? `
-                <div class="service-actions" style="margin-top: var(--space-3); display: flex; gap: var(--space-2);">
-                    ${canReload ? `<button class="btn btn-sm btn-secondary reload-service" data-service="${escapeHtml(svc.name)}">
+                ${!isPanel ? `
+                <div class="service-actions" style="margin-top: var(--space-3); display: flex; gap: var(--space-2); flex-wrap: wrap;">
+                    ${!isActive ? `<button class="btn btn-sm btn-primary start-service" data-service="${escapeHtml(svc.name)}">
+                        <span class="nav-icon">${icons.play}</span> Start
+                    </button>` : `<button class="btn btn-sm btn-danger stop-service" data-service="${escapeHtml(svc.name)}">
+                        <span class="nav-icon">${icons.stop}</span> Stop
+                    </button>`}
+                    ${isActive ? `<button class="btn btn-sm btn-secondary restart-service" data-service="${escapeHtml(svc.name)}">
+                        <span class="nav-icon">${icons.refreshCw}</span> Restart
+                    </button>` : ''}
+                    ${isActive && canReload ? `<button class="btn btn-sm btn-secondary reload-service" data-service="${escapeHtml(svc.name)}">
                         <span class="nav-icon">${icons.refresh}</span> Reload
                     </button>` : ''}
-                    <button class="btn btn-sm btn-secondary restart-service" data-service="${escapeHtml(svc.name)}">
-                        <span class="nav-icon">${icons.refresh}</span> Restart
-                    </button>
                 </div>` : `
                 <div style="margin-top: var(--space-3); font-size: var(--font-size-xs); color: var(--text-tertiary);">
                     Use systemctl restart jcwt-panel to restart the panel
@@ -96,7 +101,7 @@ async function loadServices(container) {
                 const name = btn.dataset.service;
                 if (!await showConfirm('Restart Service', `Restart ${name}? This may briefly interrupt the service.`, 'Restart', 'btn-primary')) return;
                 btn.disabled = true;
-                btn.innerHTML = `<span class="nav-icon">${icons.refresh}</span> Restarting...`;
+                btn.innerHTML = `<span class="nav-icon">${icons.refreshCw}</span> Restarting...`;
                 try {
                     await request('/api/services', {
                         method: 'POST',
@@ -107,7 +112,7 @@ async function loadServices(container) {
                 } catch (err) {
                     showToast(err.message, 'error');
                     btn.disabled = false;
-                    btn.innerHTML = `<span class="nav-icon">${icons.refresh}</span> Restart`;
+                    btn.innerHTML = `<span class="nav-icon">${icons.refreshCw}</span> Restart`;
                 }
             });
         });
@@ -130,6 +135,49 @@ async function loadServices(container) {
                     showToast(err.message, 'error');
                     btn.disabled = false;
                     btn.innerHTML = `<span class="nav-icon">${icons.refresh}</span> Reload`;
+                }
+            });
+        });
+
+        // Bind stop buttons
+        listEl.querySelectorAll('.stop-service').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const name = btn.dataset.service;
+                if (!await showConfirm('Stop Service', `Stop ${name}? The service will no longer be running until started again.`, 'Stop', 'btn-danger')) return;
+                btn.disabled = true;
+                btn.innerHTML = `<span class="nav-icon">${icons.stop}</span> Stopping...`;
+                try {
+                    await request('/api/services?action=stop', {
+                        method: 'POST',
+                        body: JSON.stringify({ service: name }),
+                    });
+                    showToast(`${name} stopped`, 'success');
+                    setTimeout(() => loadServices(container), 1000);
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = `<span class="nav-icon">${icons.stop}</span> Stop`;
+                }
+            });
+        });
+
+        // Bind start buttons
+        listEl.querySelectorAll('.start-service').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const name = btn.dataset.service;
+                btn.disabled = true;
+                btn.innerHTML = `<span class="nav-icon">${icons.play}</span> Starting...`;
+                try {
+                    await request('/api/services?action=start', {
+                        method: 'POST',
+                        body: JSON.stringify({ service: name }),
+                    });
+                    showToast(`${name} started`, 'success');
+                    setTimeout(() => loadServices(container), 1000);
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = `<span class="nav-icon">${icons.play}</span> Start`;
                 }
             });
         });
