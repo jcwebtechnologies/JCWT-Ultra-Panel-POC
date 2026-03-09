@@ -319,7 +319,7 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	// Extract to a temp directory first to inspect contents
 	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("jcwt-restore-%d", time.Now().UnixNano()))
 	os.MkdirAll(tmpDir, 0750)
-	defer os.RemoveAll(tmpDir)
+	defer exec.Command("sudo", "rm", "-rf", tmpDir).Run()
 
 	cmd := exec.Command("sudo", "tar", "-xzf", filePath, "-C", tmpDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -376,10 +376,30 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 					if len(allowedDBs) > 0 && !allowedDBs[dbName] {
 						continue
 					}
+					// Ensure the database exists before importing
+					createSQL := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbName)
+					exec.Command("sudo", "mysql", "-e", createSQL).Run()
+
 					dumpFile := filepath.Join(dbDir, entry.Name())
 					importCmd := fmt.Sprintf("gunzip -c %s | sudo mysql %s", dumpFile, dbName)
-					exec.Command("bash", "-c", importCmd).Run()
-					restored = append(restored, "database:"+dbName)
+					if output, err := exec.Command("bash", "-c", importCmd).CombinedOutput(); err != nil {
+						log.Printf("Failed to restore database %s: %s: %s", dbName, err, string(output))
+					} else {
+						restored = append(restored, "database:"+dbName)
+					}
+
+					// Re-create panel DB record if missing
+					existingDBs, _ := h.DB.ListDatabasesBySite(siteID)
+					found := false
+					for _, d := range existingDBs {
+						if d["db_name"].(string) == dbName {
+							found = true
+							break
+						}
+					}
+					if !found {
+						h.DB.CreateDatabase(dbName, siteID)
+					}
 				}
 			}
 		}

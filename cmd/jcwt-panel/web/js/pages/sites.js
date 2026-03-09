@@ -51,6 +51,7 @@ export async function render(container) {
                             <td data-label="User"><span class="mono">${escapeHtml(s.system_user)}</span></td>
                             <td data-label="Type">
                                 ${s.site_type === 'php' ? `<span class="badge badge-info">PHP ${escapeHtml(s.php_version)}</span>` : ''}
+                                ${s.site_type === 'wordpress' ? `<span class="badge" style="background:#21759b;color:white">WordPress</span>` : ''}
                                 ${s.site_type === 'html' ? `<span class="badge" style="background:var(--error);color:white">HTML</span>` : ''}
                                 ${s.site_type === 'proxy' ? `<span class="badge" style="background:var(--text-secondary);color:white">Proxy</span>` : ''}
                             </td>
@@ -93,6 +94,7 @@ export async function render(container) {
                             <label class="form-label">Site Type</label>
                             <select class="form-select" id="site-type">
                                 <option value="php">PHP Application</option>
+                                <option value="wordpress">WordPress</option>
                                 <option value="html">Static HTML</option>
                                 <option value="proxy">Reverse Proxy</option>
                             </select>
@@ -108,17 +110,46 @@ export async function render(container) {
                             <input type="url" class="form-input" id="site-proxy" placeholder="http://127.0.0.1:3000">
                         </div>
                     </div>
+                    <div id="wp-fields" style="display: none;">
+                        <div style="border-top: 1px solid var(--border-primary); margin: var(--space-3) 0; padding-top: var(--space-3);">
+                            <div style="font-weight: 600; margin-bottom: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary);">WordPress Admin</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Site Title</label>
+                                    <input type="text" class="form-input" id="wp-site-title" placeholder="My WordPress Site">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Admin Username</label>
+                                    <input type="text" class="form-input" id="wp-admin-user" placeholder="admin" value="admin">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Admin Email</label>
+                                    <input type="email" class="form-input" id="wp-admin-email" placeholder="admin@example.com" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Admin Password</label>
+                                    <input type="password" class="form-input" id="wp-admin-pass" placeholder="Strong password" required>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </form>
             `, `
-                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-secondary" id="cancel-site-btn">Cancel</button>
                 <button class="btn btn-primary" id="submit-site">Create Site</button>
-            `);
+            `, { persistent: false });
+
+            // Cancel button handler
+            document.getElementById('cancel-site-btn')?.addEventListener('click', () => closeModal());
 
             // Toggle visibility of type specifics
             document.getElementById('site-type')?.addEventListener('change', (e) => {
                 const type = e.target.value;
-                document.getElementById('php-version-group').style.display = type === 'php' ? 'block' : 'none';
+                document.getElementById('php-version-group').style.display = (type === 'php' || type === 'wordpress') ? 'block' : 'none';
                 document.getElementById('proxy-url-group').style.display = type === 'proxy' ? 'block' : 'none';
+                document.getElementById('wp-fields').style.display = type === 'wordpress' ? 'block' : 'none';
             });
 
             // Auto-generate user from domain
@@ -152,12 +183,51 @@ export async function render(container) {
                     return;
                 }
 
+                const data = { domain, aliases, system_user: systemUser, site_type: siteType, php_version: phpVersion, proxy_url: proxyUrl };
+
+                // WordPress-specific fields & validation
+                if (siteType === 'wordpress') {
+                    const wpEmail = document.getElementById('wp-admin-email').value.trim();
+                    const wpPass = document.getElementById('wp-admin-pass').value.trim();
+                    const wpUser = document.getElementById('wp-admin-user').value.trim() || 'admin';
+                    const wpTitle = document.getElementById('wp-site-title').value.trim() || domain;
+
+                    if (!wpEmail || !wpPass) {
+                        showToast('WordPress admin email and password are required', 'error');
+                        return;
+                    }
+                    data.wp_admin_user = wpUser;
+                    data.wp_admin_email = wpEmail;
+                    data.wp_admin_password = wpPass;
+                    data.wp_site_title = wpTitle;
+                }
+
+                // Show progress spinner — disable all modal interactions
+                const submitBtn = document.getElementById('submit-site');
+                const cancelBtn = document.getElementById('cancel-site-btn');
+                const origText = submitBtn.textContent;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>' + (siteType === 'wordpress' ? 'Installing WordPress...' : 'Creating Site...');
+                cancelBtn.disabled = true;
+                cancelBtn.style.opacity = '0.5';
+                cancelBtn.style.pointerEvents = 'none';
+
+                // Disable all form inputs
+                document.querySelectorAll('#add-site-form input, #add-site-form select').forEach(el => el.disabled = true);
+
                 try {
-                    await sites.create({ domain, aliases, system_user: systemUser, site_type: siteType, php_version: phpVersion, proxy_url: proxyUrl });
+                    await sites.create(data);
                     closeModal();
-                    showToast('Site created successfully!', 'success');
+                    showToast(siteType === 'wordpress' ? 'WordPress site created successfully!' : 'Site created successfully!', 'success');
                     render(container);
                 } catch (err) {
+                    // Re-enable everything on error
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = origText;
+                    cancelBtn.disabled = false;
+                    cancelBtn.style.opacity = '';
+                    cancelBtn.style.pointerEvents = '';
+                    document.querySelectorAll('#add-site-form input, #add-site-form select').forEach(el => el.disabled = false);
                     showToast(err.message, 'error');
                 }
             });
@@ -177,7 +247,7 @@ export async function render(container) {
                     ? `<div style="margin-top: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"><div style="font-weight: 600; margin-bottom: var(--space-1); font-size: var(--font-size-sm);">Databases that will also be deleted:</div>${siteDbs.map(db => `<div style="font-size: var(--font-size-xs); color: var(--text-secondary);">• <span class="mono">${escapeHtml(db.db_name)}</span></div>`).join('')}</div>`
                     : '';
                 showModal('Delete Site', `
-                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6;">Delete site "<strong>${escapeHtml(domain)}</strong>"? This will remove all configs, the system user, web files, and backups. This action cannot be undone.</p>
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6;">Delete site "<strong>${escapeHtml(domain)}</strong>"? This will remove all configs, the system user, web files, databasesand backups. This action cannot be undone.</p>
                     ${dbList}
                 `, `
                     <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>

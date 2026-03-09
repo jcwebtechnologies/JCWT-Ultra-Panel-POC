@@ -46,7 +46,7 @@ export async function render(container, siteToken, section) {
                         <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.settings}</span></div>
                         <div class="site-card-title">Site Settings</div>
                     </div>
-                    ${site.site_type === 'php' ? `
+                    ${(site.site_type === 'php' || site.site_type === 'wordpress') ? `
                     <div class="site-card" data-section="php">
                         <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.code}</span></div>
                         <div class="site-card-title">PHP Settings</div>
@@ -169,11 +169,12 @@ function renderOverview(el, site, versions, siteId) {
                     <label class="form-label">Site Type</label>
                     <select class="form-select" id="edit-type">
                         <option value="php" ${site.site_type === 'php' ? 'selected' : ''}>PHP Application</option>
+                        <option value="wordpress" ${site.site_type === 'wordpress' ? 'selected' : ''}>WordPress</option>
                         <option value="html" ${site.site_type === 'html' ? 'selected' : ''}>Static HTML</option>
                         <option value="proxy" ${site.site_type === 'proxy' ? 'selected' : ''}>Reverse Proxy</option>
                     </select>
                 </div>
-                <div class="form-group" id="edit-php-group" style="${site.site_type === 'php' ? '' : 'display: none;'}">
+                <div class="form-group" id="edit-php-group" style="${(site.site_type === 'php' || site.site_type === 'wordpress') ? '' : 'display: none;'}">
                     <label class="form-label">PHP Version</label>
                     <select class="form-select" id="edit-php">${versionOpts}</select>
                 </div>
@@ -216,7 +217,7 @@ function renderOverview(el, site, versions, siteId) {
 
     document.getElementById('edit-type')?.addEventListener('change', (e) => {
         const type = e.target.value;
-        document.getElementById('edit-php-group').style.display = type === 'php' ? 'block' : 'none';
+        document.getElementById('edit-php-group').style.display = (type === 'php' || type === 'wordpress') ? 'block' : 'none';
         document.getElementById('edit-proxy-group').style.display = type === 'proxy' ? 'block' : 'none';
         document.getElementById('edit-webroot-group').style.display = type !== 'proxy' ? 'block' : 'none';
     });
@@ -1738,7 +1739,7 @@ async function renderLogs(container, site, siteId) {
                         <select class="form-select" id="log-type" style="width: auto; min-width: 140px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
                             <option value="access" ${activeLog === 'access' ? 'selected' : ''}>Access Log</option>
                             <option value="error" ${activeLog === 'error' ? 'selected' : ''}>Error Log</option>
-                            ${site.site_type === 'php' ? `<option value="php-fpm" ${activeLog === 'php-fpm' ? 'selected' : ''}>PHP-FPM Error</option>` : ''}
+                            ${(site.site_type === 'php' || site.site_type === 'wordpress') ? `<option value="php-fpm" ${activeLog === 'php-fpm' ? 'selected' : ''}>PHP-FPM Error</option>` : ''}
                         </select>
                         <select class="form-select" id="log-lines" style="width: auto; min-width: 80px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
                             ${[25,50,100,200,500].map(n => `<option value="${n}" ${logLines === n ? 'selected' : ''}>${n} lines</option>`).join('')}

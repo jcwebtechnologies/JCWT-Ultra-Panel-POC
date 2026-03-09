@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -139,12 +141,16 @@ func (h *SitesHandler) diskUsage(w http.ResponseWriter, r *http.Request) {
 
 func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Domain     string `json:"domain"`
-		Aliases    string `json:"aliases"`
-		SystemUser string `json:"system_user"`
-		SiteType   string `json:"site_type"`
-		PHPVersion string `json:"php_version"`
-		ProxyURL   string `json:"proxy_url"`
+		Domain        string `json:"domain"`
+		Aliases       string `json:"aliases"`
+		SystemUser    string `json:"system_user"`
+		SiteType      string `json:"site_type"`
+		PHPVersion    string `json:"php_version"`
+		ProxyURL      string `json:"proxy_url"`
+		WPAdminUser   string `json:"wp_admin_user"`
+		WPAdminEmail  string `json:"wp_admin_email"`
+		WPAdminPass   string `json:"wp_admin_password"`
+		WPSiteTitle   string `json:"wp_site_title"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -165,7 +171,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	validVersions := map[string]bool{"8.2": true, "8.3": true, "8.4": true, "8.5": true}
-	if req.SiteType == "php" && !validVersions[req.PHPVersion] {
+	if (req.SiteType == "php" || req.SiteType == "wordpress") && !validVersions[req.PHPVersion] {
 		jsonError(w, "invalid PHP version", http.StatusBadRequest)
 		return
 	}
@@ -176,10 +182,24 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate site type
-	validTypes := map[string]bool{"php": true, "html": true, "proxy": true}
+	validTypes := map[string]bool{"php": true, "html": true, "proxy": true, "wordpress": true}
 	if !validTypes[req.SiteType] {
-		jsonError(w, "invalid site type (must be php, html, or proxy)", http.StatusBadRequest)
+		jsonError(w, "invalid site type (must be php, html, proxy, or wordpress)", http.StatusBadRequest)
 		return
+	}
+
+	// Validate WordPress fields
+	if req.SiteType == "wordpress" {
+		if req.WPAdminEmail == "" || req.WPAdminPass == "" {
+			jsonError(w, "WordPress admin email and password are required", http.StatusBadRequest)
+			return
+		}
+		if req.WPAdminUser == "" {
+			req.WPAdminUser = "admin"
+		}
+		if req.WPSiteTitle == "" {
+			req.WPSiteTitle = req.Domain
+		}
 	}
 
 	// Validate proxy URL format
@@ -225,23 +245,31 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write welcome page
-	if err := system.WriteWelcomePage(webRoot, req.SiteType, req.Domain, req.SystemUser); err != nil {
-		// Log but don't fail the whole creation
-		fmt.Printf("Failed to write welcome page: %v\n", err)
+	// Write welcome page (skip for wordpress — WP files will replace it)
+	if req.SiteType != "wordpress" {
+		if err := system.WriteWelcomePage(webRoot, req.SiteType, req.Domain, req.SystemUser); err != nil {
+			fmt.Printf("Failed to write welcome page: %v\n", err)
+		}
 	}
 
-	// PHP specific configs
-	if req.SiteType == "php" {
-		// Create default PHP settings
-		h.DB.UpsertPHPSettings(id, "128M", 30, 30, 1000, "16M", "16M", "")
+	// PHP specific configs (applies to both php and wordpress types)
+	if req.SiteType == "php" || req.SiteType == "wordpress" {
+		memoryLimit := "128M"
+		postMaxSize := "16M"
+		uploadMaxFilesize := "16M"
+		if req.SiteType == "wordpress" {
+			memoryLimit = "256M"
+			postMaxSize = "64M"
+			uploadMaxFilesize = "64M"
+		}
 
-		// Generate PHP-FPM pool
+		h.DB.UpsertPHPSettings(id, memoryLimit, 30, 30, 1000, postMaxSize, uploadMaxFilesize, "")
+
 		poolData := php.PoolData{
 			User: req.SystemUser, PHPVersion: req.PHPVersion, WebRoot: webRoot,
 			HomeDir: filepath.Dir(webRoot),
-			MemoryLimit: "128M", MaxExecutionTime: 30, MaxInputTime: 30,
-			MaxInputVars: 1000, PostMaxSize: "16M", UploadMaxFilesize: "16M",
+			MemoryLimit: memoryLimit, MaxExecutionTime: 30, MaxInputTime: 30,
+			MaxInputVars: 1000, PostMaxSize: postMaxSize, UploadMaxFilesize: uploadMaxFilesize,
 		}
 		if err := php.WritePool(h.Cfg.PHPFPMBaseDir, req.PHPVersion, req.SystemUser, poolData); err != nil {
 			jsonError(w, fmt.Sprintf("failed to write PHP pool: %v", err), http.StatusInternalServerError)
@@ -250,10 +278,21 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		php.RestartFPM(req.PHPVersion)
 	}
 
+	// WordPress setup: download, extract, create DB/user, generate wp-config.php
+	if req.SiteType == "wordpress" {
+		if err := h.setupWordPress(id, req.Domain, req.SystemUser, webRoot, req.PHPVersion, req.WPAdminUser, req.WPAdminEmail, req.WPAdminPass, req.WPSiteTitle); err != nil {
+			jsonError(w, fmt.Sprintf("WordPress setup failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// For nginx template, wordpress uses "wordpress" siteType for optimized vhost
+	vhostSiteType := req.SiteType
+
 	// Generate Nginx vhost (initially without SSL)
 	vhostData := nginx.VHostData{
 		Domain: req.Domain, Aliases: req.Aliases, User: req.SystemUser,
-		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL, 
+		SiteType: vhostSiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL,
 		WebRoot: webRoot, SSLType: "none",
 		AccessLog: true, ErrorLog: true,
 	}
@@ -294,6 +333,151 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, map[string]interface{}{"id": id, "domain": req.Domain, "web_root": webRoot})
 }
 
+// generatePassword creates a secure random password
+func generatePassword(length int) string {
+	b := make([]byte, length)
+	rand.Read(b)
+	return hex.EncodeToString(b)[:length]
+}
+
+// setupWordPress downloads, extracts, and configures WordPress
+func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, phpVersion, wpAdminUser, wpAdminEmail, wpAdminPass, wpSiteTitle string) error {
+	homeDir := filepath.Dir(webRoot)
+	tmpDir := filepath.Join(homeDir, "tmp")
+
+	// Download latest WordPress
+	wpArchive := filepath.Join(tmpDir, "wordpress.tar.gz")
+	cmd := exec.Command("sudo", "-u", sysUser, "wget", "-q", "https://wordpress.org/latest.tar.gz", "-O", wpArchive)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("download WordPress: %s", string(output))
+	}
+
+	// Extract WordPress to webroot (tar extracts to wordpress/ subfolder)
+	cmd = exec.Command("sudo", "-u", sysUser, "tar", "-xzf", wpArchive, "-C", tmpDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("extract WordPress: %s", string(output))
+	}
+
+	// Move WordPress files to webroot (overwrite welcome page)
+	mvCmd := fmt.Sprintf("sudo -u %s bash -c 'rm -rf %s/* && mv %s/wordpress/* %s/ && rm -rf %s/wordpress %s'",
+		sysUser, webRoot, tmpDir, webRoot, tmpDir, wpArchive)
+	cmd = exec.Command("bash", "-c", mvCmd)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("move WordPress files: %s", string(output))
+	}
+
+	// Create WordPress database and user
+	dbName := strings.ReplaceAll(sysUser, "-", "_") + "_wp"
+	dbUser := dbName + "_u"
+	dbPass := generatePassword(24)
+
+	// Truncate dbUser to 32 chars (MariaDB max)
+	if len(dbUser) > 32 {
+		dbUser = dbUser[:32]
+	}
+
+	if err := system.MariaDBCreateDatabase(dbName); err != nil {
+		return fmt.Errorf("create database: %v", err)
+	}
+	if err := system.MariaDBCreateUser(dbUser, dbPass); err != nil {
+		return fmt.Errorf("create db user: %v", err)
+	}
+	if err := system.MariaDBGrantAccess(dbUser, dbName, "full"); err != nil {
+		return fmt.Errorf("grant db access: %v", err)
+	}
+
+	// Record database and user in panel DB
+	dbID, _ := h.DB.CreateDatabase(dbName, siteID)
+	if dbID > 0 {
+		h.DB.CreateDBUser(dbUser, dbID, "full")
+	}
+
+	// Generate wp-config.php with secure keys/salts
+	wpConfig := generateWPConfig(dbName, dbUser, dbPass)
+	configCmd := exec.Command("sudo", "-u", sysUser, "tee", filepath.Join(webRoot, "wp-config.php"))
+	configCmd.Stdin = strings.NewReader(wpConfig)
+	configCmd.Stdout = nil
+	if output, err := configCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("write wp-config.php: %s", string(output))
+	}
+
+	// Remove wp-config-sample.php
+	exec.Command("sudo", "-u", sysUser, "rm", "-f", filepath.Join(webRoot, "wp-config-sample.php")).Run()
+
+	// Install WP-CLI if not present and run WordPress install
+	wpCLI := "/usr/local/bin/wp"
+	if output, err := exec.Command("test", "-f", wpCLI).CombinedOutput(); err != nil {
+		// Download WP-CLI
+		_ = output
+		exec.Command("sudo", "wget", "-q", "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar", "-O", wpCLI).Run()
+		exec.Command("sudo", "chmod", "+x", wpCLI).Run()
+	}
+
+	// Run WordPress core install via WP-CLI
+	installCmd := exec.Command("sudo", "-u", sysUser,
+		fmt.Sprintf("php%s", phpVersion), wpCLI, "core", "install",
+		"--path="+webRoot,
+		"--url="+domain,
+		"--title="+wpSiteTitle,
+		"--admin_user="+wpAdminUser,
+		"--admin_email="+wpAdminEmail,
+		"--admin_password="+wpAdminPass,
+		"--skip-email",
+	)
+	if output, err := installCmd.CombinedOutput(); err != nil {
+		log.Printf("WP-CLI install output: %s", string(output))
+		// Non-fatal — user can complete setup via browser
+		log.Printf("WP-CLI install failed (user can complete via browser): %v", err)
+	}
+
+	// Set correct permissions
+	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
+	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type d -exec chmod 755 {} \\;", webRoot)).Run()
+	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type f -exec chmod 644 {} \\;", webRoot)).Run()
+
+	return nil
+}
+
+// generateWPConfig generates a wp-config.php with secure salts
+func generateWPConfig(dbName, dbUser, dbPass string) string {
+	// Generate secure salts
+	salts := make([]string, 8)
+	saltNames := []string{
+		"AUTH_KEY", "SECURE_AUTH_KEY", "LOGGED_IN_KEY", "NONCE_KEY",
+		"AUTH_SALT", "SECURE_AUTH_SALT", "LOGGED_IN_SALT", "NONCE_SALT",
+	}
+	for i := range salts {
+		b := make([]byte, 32)
+		rand.Read(b)
+		salts[i] = hex.EncodeToString(b)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("<?php\n")
+	sb.WriteString("/** WordPress Configuration - Generated by JCWT Ultra Panel */\n\n")
+	sb.WriteString(fmt.Sprintf("define('DB_NAME', '%s');\n", dbName))
+	sb.WriteString(fmt.Sprintf("define('DB_USER', '%s');\n", dbUser))
+	sb.WriteString(fmt.Sprintf("define('DB_PASSWORD', '%s');\n", dbPass))
+	sb.WriteString("define('DB_HOST', 'localhost');\n")
+	sb.WriteString("define('DB_CHARSET', 'utf8mb4');\n")
+	sb.WriteString("define('DB_COLLATE', '');\n\n")
+
+	for i, name := range saltNames {
+		sb.WriteString(fmt.Sprintf("define('%s', '%s');\n", name, salts[i]))
+	}
+
+	sb.WriteString("\n$table_prefix = 'wp_';\n\n")
+	sb.WriteString("define('WP_DEBUG', false);\n")
+	sb.WriteString("define('WP_AUTO_UPDATE_CORE', true);\n")
+	sb.WriteString("define('DISALLOW_FILE_EDIT', true);\n")
+	sb.WriteString("define('WP_MEMORY_LIMIT', '256M');\n")
+	sb.WriteString("define('WP_MAX_MEMORY_LIMIT', '512M');\n\n")
+	sb.WriteString("if (!defined('ABSPATH')) {\n\tdefine('ABSPATH', __DIR__ . '/');\n}\n\n")
+	sb.WriteString("require_once ABSPATH . 'wp-settings.php';\n")
+
+	return sb.String()
+}
+
 func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID         int64  `json:"id"`
@@ -311,9 +495,9 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate site type
-	validTypes := map[string]bool{"php": true, "html": true, "proxy": true}
+	validTypes := map[string]bool{"php": true, "html": true, "proxy": true, "wordpress": true}
 	if req.SiteType != "" && !validTypes[req.SiteType] {
-		jsonError(w, "invalid site type (must be php, html, or proxy)", http.StatusBadRequest)
+		jsonError(w, "invalid site type (must be php, html, proxy, or wordpress)", http.StatusBadRequest)
 		return
 	}
 
@@ -340,9 +524,9 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle web root update for php/html sites
+	// Handle web root update for php/html/wordpress sites
 	webRoot := site["web_root"].(string)
-	if req.WebRoot != "" && (req.SiteType == "php" || req.SiteType == "html") {
+	if req.WebRoot != "" && (req.SiteType == "php" || req.SiteType == "html" || req.SiteType == "wordpress") {
 		// Validate: must be under /home/ and not contain path traversal
 		if strings.Contains(req.WebRoot, "..") || !strings.HasPrefix(req.WebRoot, "/home/") {
 			jsonError(w, "invalid web root: must be under /home/ and cannot contain '..'", http.StatusBadRequest)
@@ -366,15 +550,16 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	oldSiteType := site["site_type"].(string)
 	sysUser := site["system_user"].(string)
 
-	// If changing site type away from PHP or updating PHP version, deal with FPM pool
-	if oldSiteType == "php" && (req.SiteType != "php" || req.PHPVersion != site["php_version"].(string)) {
+	// If changing site type away from PHP/WordPress or updating PHP version, deal with FPM pool
+	phpTypes := map[string]bool{"php": true, "wordpress": true}
+	if phpTypes[oldSiteType] && (!phpTypes[req.SiteType] || req.PHPVersion != site["php_version"].(string)) {
 		oldVersion := site["php_version"].(string)
 		php.RemovePool(h.Cfg.PHPFPMBaseDir, oldVersion, sysUser)
 		php.RestartFPM(oldVersion)
 	}
 
-	// Create/Update FPM pool if it's currently a PHP site
-	if req.SiteType == "php" && (oldSiteType != "php" || req.PHPVersion != site["php_version"].(string)) {
+	// Create/Update FPM pool if it's currently a PHP/WordPress site
+	if phpTypes[req.SiteType] && (!phpTypes[oldSiteType] || req.PHPVersion != site["php_version"].(string)) {
 		phpSettings, _ := h.DB.GetPHPSettings(req.ID)
 		
 		// If getting settings failed (e.g. was html before and didn't have settings), create defaults

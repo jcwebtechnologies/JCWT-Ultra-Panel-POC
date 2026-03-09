@@ -242,14 +242,19 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		return 0, fmt.Errorf("allocate port: %w", err)
 	}
 
+	// Ensure tmp directory exists (may be missing for sites created before this dir was added)
+	tmpDir := filepath.Join(filepath.Dir(webRoot), "tmp")
+	exec.Command("sudo", "mkdir", "-p", tmpDir).Run()
+	exec.Command("sudo", "chown", sysUser+":"+sysUser, tmpDir).Run()
+
 	cmd := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser",
 		"--noauth",
 		"--root", webRoot,
 		"--address", "127.0.0.1",
 		"--port", strconv.Itoa(port),
-		"--baseurl", fmt.Sprintf("/fb/%d", siteID),
-		"--database", filepath.Join(filepath.Dir(webRoot), "tmp", fmt.Sprintf("filebrowser-%d.db", siteID)),
+		"--baseURL", fmt.Sprintf("/fb/%d", siteID),
+		"--database", filepath.Join(tmpDir, fmt.Sprintf("filebrowser-%d.db", siteID)),
 	)
 
 	// Capture stderr for debugging

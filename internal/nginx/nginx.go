@@ -71,6 +71,39 @@ server {
     error_log /dev/null;
 {{- end}}
 
+{{- if eq .SiteType "wordpress"}}
+    client_max_body_size 64m;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php{{.PHPVersion}}-fpm-{{.User}}.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_intercept_errors on;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    # WordPress security: block access to sensitive files
+    location ~ /wp-config\.php$ { deny all; }
+    location ~ /xmlrpc\.php$ { deny all; }
+    location ~ /wp-content/debug\.log$ { deny all; }
+    location ~* /wp-content/uploads/.*\.php$ { deny all; }
+    location ~* /wp-includes/.*\.php$ {
+        deny all;
+    }
+
+    # Static assets caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|webp|woff|woff2|ttf|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+{{- else}}
     location / {
 {{- if eq .SiteType "html"}}
         try_files $uri $uri/ =404;
@@ -86,6 +119,7 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
+{{- end}}
 {{- end}}
 
     location ~ /\.(ht|git|svn) {
@@ -154,6 +188,39 @@ server {
     error_log /dev/null;
 {{- end}}
 
+{{- if eq .SiteType "wordpress"}}
+    client_max_body_size 64m;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php{{.PHPVersion}}-fpm-{{.User}}.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_intercept_errors on;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    # WordPress security: block access to sensitive files
+    location ~ /wp-config\.php$ { deny all; }
+    location ~ /xmlrpc\.php$ { deny all; }
+    location ~ /wp-content/debug\.log$ { deny all; }
+    location ~* /wp-content/uploads/.*\.php$ { deny all; }
+    location ~* /wp-includes/.*\.php$ {
+        deny all;
+    }
+
+    # Static assets caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|webp|woff|woff2|ttf|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+{{- else}}
     location / {
 {{- if eq .SiteType "html"}}
         try_files $uri $uri/ =404;
@@ -169,6 +236,7 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
+{{- end}}
 {{- end}}
 
     location ~ /\.(ht|git|svn) {
