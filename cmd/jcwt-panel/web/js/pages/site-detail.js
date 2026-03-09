@@ -38,7 +38,7 @@ export async function render(container, siteToken, section) {
                 <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:16px;height:16px;">${icons.sites}</span> All Sites</a>
             </div>
 
-            ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-primary back-nav-btn"><span class="nav-icon" style="width:16px;height:16px;">${icons.chevronLeft}</span> Site Overview</a></div>` : `
+            ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-primary back-nav-btn" title="Back to Site Overview"><span class="nav-icon" style="width:16px;height:16px;">${icons.chevronLeft}</span> Site Overview</a></div>` : `
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Configuration</div>
                 <div class="site-cards-grid">
@@ -1609,13 +1609,18 @@ async function renderPhpMyAdmin(container, siteId) {
             return;
         }
 
+        if (siteUsers.length === 0) {
+            container.innerHTML = `<div class="card"><div class="empty-state" style="padding: var(--space-6);"><div class="empty-state-title">No database users</div><div class="empty-state-text">Create a database user first to open phpMyAdmin.</div></div></div>`;
+            return;
+        }
+
         container.innerHTML = `
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">phpMyAdmin</h3>
             </div>
             <div style="padding: var(--space-4);">
-                <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">Select a database and optionally a specific user to open phpMyAdmin with matching privileges.</p>
+                <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">Select a database and user to open phpMyAdmin with matching privileges.</p>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">Database</label>
@@ -1624,9 +1629,9 @@ async function renderPhpMyAdmin(container, siteId) {
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Database User (optional)</label>
+                        <label class="form-label">Database User</label>
                         <select class="form-select" id="pma-user">
-                            <option value="">— Full access —</option>
+                            <option value="" disabled selected>— Select a user —</option>
                             ${siteUsers.map(u => `<option value="${u.id}" data-db="${u.database_id}" data-level="${escapeHtml(u.privilege_level)}">${escapeHtml(u.username)} (${escapeHtml(u.privilege_level)})</option>`).join('')}
                         </select>
                     </div>
@@ -1640,11 +1645,18 @@ async function renderPhpMyAdmin(container, siteId) {
         const userSelect = document.getElementById('pma-user');
         function filterUsers() {
             const dbId = dbSelect.value;
+            let hasVisible = false;
             Array.from(userSelect.options).forEach(opt => {
-                if (!opt.value) return; // keep the "full access" option
-                opt.style.display = opt.dataset.db === dbId ? '' : 'none';
-                if (opt.style.display === 'none' && opt.selected) opt.selected = false;
+                if (!opt.value) return; // keep the placeholder option
+                const show = opt.dataset.db === dbId;
+                opt.style.display = show ? '' : 'none';
+                if (!show && opt.selected) opt.selected = false;
+                if (show) hasVisible = true;
             });
+            // Reset to placeholder when switching databases
+            if (!userSelect.value || userSelect.selectedOptions[0]?.style.display === 'none') {
+                userSelect.value = '';
+            }
         }
         dbSelect.addEventListener('change', filterUsers);
         filterUsers();
@@ -1652,13 +1664,16 @@ async function renderPhpMyAdmin(container, siteId) {
         document.getElementById('pma-open-btn')?.addEventListener('click', async () => {
             const dbId = parseInt(dbSelect.value);
             const dbName = dbSelect.selectedOptions[0]?.dataset.name || '';
-            const userId = userSelect.value ? parseInt(userSelect.value) : null;
+            if (!userSelect.value) {
+                showToast('Please select a database user first', 'error');
+                return;
+            }
+            const userId = parseInt(userSelect.value);
             const btn = document.getElementById('pma-open-btn');
             btn.disabled = true;
             btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Opening...';
             try {
-                const body = { database_id: dbId };
-                if (userId) body.db_user_id = userId;
+                const body = { database_id: dbId, db_user_id: userId };
                 const data = await request('/api/pma', {
                     method: 'POST',
                     body: JSON.stringify(body),

@@ -92,12 +92,13 @@ func (h *BackupHandler) list(w http.ResponseWriter, r *http.Request) {
 		size, _ := b["size"].(string)
 		filePath, _ := b["file_path"].(string)
 		if status == "completed" && size == "" && filePath != "" {
-			sizeCmd := exec.Command("sudo", "stat", "-c", "%s", filePath)
+			sizeCmd := exec.Command("sudo", "du", "-b", filePath)
 			if sizeOut, err := sizeCmd.Output(); err == nil {
-				s := strings.TrimSpace(string(sizeOut))
-				b["size"] = s
-				// Persist the size so we don't stat every time
-				h.DB.UpdateBackupStatus(b["id"].(int64), status, filePath, s)
+				parts := strings.Fields(strings.TrimSpace(string(sizeOut)))
+				if len(parts) > 0 {
+					b["size"] = parts[0]
+					h.DB.UpdateBackupStatus(b["id"].(int64), status, filePath, parts[0])
+				}
 			}
 		}
 	}
@@ -232,9 +233,12 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, sit
 
 	// Get backup file size
 	var size string
-	sizeCmd := exec.Command("sudo", "stat", "-c", "%s", backupPath)
+	sizeCmd := exec.Command("sudo", "du", "-b", backupPath)
 	if sizeOut, err := sizeCmd.Output(); err == nil {
-		size = strings.TrimSpace(string(sizeOut))
+		parts := strings.Fields(strings.TrimSpace(string(sizeOut)))
+		if len(parts) > 0 {
+			size = parts[0]
+		}
 	}
 
 	h.DB.UpdateBackupStatus(backupID, "completed", backupPath, size)
@@ -445,16 +449,32 @@ func (h *BackupHandler) download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filePath := backup["file_path"].(string)
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+
+	// Check file exists via sudo (panel user may not have direct access)
+	checkCmd := exec.Command("sudo", "test", "-f", filePath)
+	if err := checkCmd.Run(); err != nil {
 		jsonError(w, "backup file not found on disk", http.StatusNotFound)
 		return
+	}
+
+	// Get file size for Content-Length header
+	sizeCmd := exec.Command("sudo", "du", "-b", filePath)
+	if sizeOut, err := sizeCmd.Output(); err == nil {
+		parts := strings.Fields(strings.TrimSpace(string(sizeOut)))
+		if len(parts) > 0 {
+			w.Header().Set("Content-Length", parts[0])
+		}
 	}
 
 	filename := filepath.Base(filePath)
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	w.Header().Set("Cache-Control", "no-store")
-	http.ServeFile(w, r, filePath)
+
+	// Stream file content via sudo cat (panel user may not have direct read access)
+	catCmd := exec.Command("sudo", "cat", filePath)
+	catCmd.Stdout = w
+	catCmd.Run()
 }
 
 // generateDownloadToken creates a one-time download token for a backup
