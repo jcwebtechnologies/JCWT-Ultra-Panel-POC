@@ -101,6 +101,7 @@ export const dbUsers = {
 export const ssl = {
     selfSigned: (siteId) => request(`/api/ssl-certs?type=self-signed&site_id=${siteId}`, { method: 'POST' }),
     custom: (siteId, formData) => request(`/api/ssl-certs?type=custom&site_id=${siteId}`, { method: 'POST', body: formData }),
+    letsEncrypt: (siteId, domains) => request(`/api/ssl-certs?type=letsencrypt&site_id=${siteId}`, { method: 'POST', body: JSON.stringify({ domains }) }),
 };
 
 // Cron
@@ -150,7 +151,7 @@ export const services = {
 export const smtpSettings = {
     get: () => request('/api/smtp'),
     update: (data) => request('/api/smtp', { method: 'PUT', body: JSON.stringify(data) }),
-    testEmail: (to) => request('/api/smtp?action=test', { method: 'POST', body: JSON.stringify({ to }) }),
+    testEmail: (to, contentType = 'plain') => request('/api/smtp?action=test', { method: 'POST', body: JSON.stringify({ to, content_type: contentType }) }),
 };
 
 // Two-Factor Authentication

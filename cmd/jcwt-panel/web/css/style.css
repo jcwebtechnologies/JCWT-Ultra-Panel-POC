@@ -360,6 +360,12 @@ a:hover {
 .nav-item-group {
     display: flex;
     flex-direction: column;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.nav-item-group > .nav-item {
+    border-radius: 0;
 }
 
 .nav-item[data-has-submenu] {
@@ -380,7 +386,6 @@ a:hover {
 .nav-submenu {
     display: none;
     flex-direction: column;
-    padding-left: var(--space-3);
 }
 
 .nav-submenu.open {
@@ -389,8 +394,9 @@ a:hover {
 
 .nav-subitem {
     font-size: var(--font-size-xs);
-    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-8);
+    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
     gap: var(--space-2);
+    border-radius: 0;
 }
 
 .sidebar-footer {

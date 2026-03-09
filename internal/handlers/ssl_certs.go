@@ -148,8 +148,39 @@ func (h *SSLCertsHandler) create(w http.ResponseWriter, r *http.Request) {
 			label = "Custom Certificate"
 		}
 
+	case "letsencrypt":
+		var req struct {
+			Domains []string `json:"domains"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonError(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Validate domains — only allow the site's own domain and aliases
+		allowed := map[string]bool{domain: true}
+		for _, a := range strings.Fields(site["aliases"].(string)) {
+			allowed[strings.TrimSpace(a)] = true
+		}
+		for _, d := range req.Domains {
+			if !allowed[d] {
+				jsonError(w, fmt.Sprintf("domain %q is not associated with this site", d), http.StatusBadRequest)
+				return
+			}
+		}
+		if len(req.Domains) == 0 {
+			req.Domains = []string{domain}
+		}
+
+		certPath, keyPath, err = system.ObtainLetsEncryptCert(h.Cfg.SSLBaseDir, webRoot, req.Domains)
+		if err != nil {
+			jsonError(w, fmt.Sprintf("Let's Encrypt failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		label = "Let's Encrypt"
+
 	default:
-		jsonError(w, "invalid type: use self-signed or custom", http.StatusBadRequest)
+		jsonError(w, "invalid type: use self-signed, custom, or letsencrypt", http.StatusBadRequest)
 		return
 	}
 

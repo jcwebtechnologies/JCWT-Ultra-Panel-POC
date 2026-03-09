@@ -117,7 +117,8 @@ func (h *SMTPHandler) update(w http.ResponseWriter, r *http.Request) {
 
 func (h *SMTPHandler) testEmail(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		To string `json:"to"`
+		To          string `json:"to"`
+		ContentType string `json:"content_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -128,6 +129,10 @@ func (h *SMTPHandler) testEmail(w http.ResponseWriter, r *http.Request) {
 	if !emailRegex.MatchString(req.To) {
 		jsonError(w, "invalid recipient email address", http.StatusBadRequest)
 		return
+	}
+
+	if req.ContentType != "html" {
+		req.ContentType = "plain"
 	}
 
 	settings, err := h.DB.GetSMTPSettings()
@@ -160,10 +165,18 @@ func (h *SMTPHandler) testEmail(w http.ResponseWriter, r *http.Request) {
 		from = fmt.Sprintf("%s <%s>", fromName, fromEmail)
 	}
 	subject := "JCWT Ultra Panel — SMTP Test"
-	body := "This is a test email from JCWT Ultra Panel to verify your SMTP configuration is working correctly.\r\n\r\nIf you received this, your SMTP settings are configured properly."
 
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nDate: %s\r\n\r\n%s",
-		from, req.To, subject, time.Now().Format(time.RFC1123Z), body)
+	var body, contentTypeHeader string
+	if req.ContentType == "html" {
+		contentTypeHeader = "text/html; charset=UTF-8"
+		body = "<html><body style=\"font-family:sans-serif;padding:20px;\"><h2 style=\"color:#6366f1;\">JCWT Ultra Panel</h2><p>This is a <strong>test email</strong> from your panel to verify SMTP configuration.</p><p style=\"color:#888;\">If you received this, your SMTP settings are configured properly.</p></body></html>"
+	} else {
+		contentTypeHeader = "text/plain; charset=UTF-8"
+		body = "This is a test email from JCWT Ultra Panel to verify your SMTP configuration is working correctly.\r\n\r\nIf you received this, your SMTP settings are configured properly."
+	}
+
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: %s\r\nDate: %s\r\n\r\n%s",
+		from, req.To, subject, contentTypeHeader, time.Now().Format(time.RFC1123Z), body)
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 

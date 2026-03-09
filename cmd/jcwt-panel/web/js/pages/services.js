@@ -42,8 +42,8 @@ async function loadServices(container) {
             return;
         }
 
-        // Sort: active first
-        services.sort((a, b) => (a.active === 'active' ? -1 : 1) - (b.active === 'active' ? -1 : 1));
+        // Sort alphabetically by name
+        services.sort((a, b) => a.name.localeCompare(b.name));
 
         listEl.innerHTML = `<div class="services-grid">${services.map(svc => {
             const isActive = svc.active === 'active';

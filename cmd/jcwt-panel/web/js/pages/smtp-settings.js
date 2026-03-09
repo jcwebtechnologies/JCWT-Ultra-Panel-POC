@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — SMTP Settings Page
 import { smtpSettings } from '../api.js';
-import { showToast, icons, escapeHtml } from '../app.js';
+import { showToast, showModal, closeModal, icons, escapeHtml } from '../app.js';
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'SMTP Settings';
@@ -122,21 +122,47 @@ async function loadForm() {
         });
 
         // Test email
-        document.getElementById('smtp-test-btn')?.addEventListener('click', async () => {
-            const to = prompt('Enter recipient email address for the test:');
-            if (!to || !to.trim()) return;
+        document.getElementById('smtp-test-btn')?.addEventListener('click', () => {
+            const content = `
+                <div class="form-group">
+                    <label class="form-label">Recipient Email</label>
+                    <input type="email" class="form-input" id="test-email-to" placeholder="you@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email Format</label>
+                    <div style="display: flex; gap: var(--space-3); margin-top: var(--space-2);">
+                        <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
+                            <input type="radio" name="email-format" value="plain" checked> Plain Text
+                        </label>
+                        <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
+                            <input type="radio" name="email-format" value="html"> HTML
+                        </label>
+                    </div>
+                </div>
+            `;
+            const footer = `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" id="send-test-btn"><span class="nav-icon">${icons.mail}</span> Send</button>
+            `;
+            const modal = showModal('Send Test Email', content, footer);
 
-            const btn = document.getElementById('smtp-test-btn');
-            btn.disabled = true;
-            btn.innerHTML = `<span class="nav-icon">${icons.mail}</span> Sending...`;
-            try {
-                await smtpSettings.testEmail(to.trim());
-                showToast('Test email sent successfully!', 'success');
-            } catch (err) {
-                showToast(err.message || 'Test failed', 'error');
-            }
-            btn.disabled = false;
-            btn.innerHTML = `<span class="nav-icon">${icons.mail}</span> Send Test Email`;
+            modal.querySelector('#send-test-btn')?.addEventListener('click', async () => {
+                const to = modal.querySelector('#test-email-to')?.value?.trim();
+                if (!to) { showToast('Enter a recipient email', 'error'); return; }
+                const format = modal.querySelector('input[name="email-format"]:checked')?.value || 'plain';
+                const btn = modal.querySelector('#send-test-btn');
+                btn.disabled = true;
+                btn.innerHTML = `<span class="nav-icon">${icons.mail}</span> Sending...`;
+                try {
+                    await smtpSettings.testEmail(to, format);
+                    closeModal();
+                    showToast('Test email sent successfully!', 'success');
+                } catch (err) {
+                    showToast(err.message || 'Test failed', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = `<span class="nav-icon">${icons.mail}</span> Send`;
+                }
+            });
         });
 
     } catch (err) {

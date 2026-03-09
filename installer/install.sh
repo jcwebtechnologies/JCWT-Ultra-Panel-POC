@@ -394,8 +394,8 @@ PMANGINX
     fi
 
     # ---- Utilities ----
-    log_info "Installing utilities (openssl, ufw, curl, wget, jq, gcc)..."
-    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils"
+    log_info "Installing utilities (openssl, ufw, curl, wget, jq, gcc, certbot)..."
+    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils certbot"
     apt_run apt-get install -y $UTIL_PKGS
     log_ok "Utilities installed"
 
@@ -974,6 +974,8 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysql *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysqldump *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/crontab *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/openssl *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/certbot *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/cp *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir *

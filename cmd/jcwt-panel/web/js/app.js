@@ -377,11 +377,20 @@ function renderLayout(pageName) {
                     </a>` : ''}
                     ${currentRole === 'admin' || currentRole === 'manager' ? `
                     <div class="nav-item-group">
-                        <a href="#/settings" class="nav-item ${pageName === 'settings' || pageName === 'smtp-settings' ? 'active' : ''}" data-has-submenu="true">
+                        <a href="javascript:void(0)" class="nav-item ${['branding-appearance','login-security','backup-config','smtp-settings'].includes(pageName) ? 'active' : ''}" data-has-submenu="true">
                             <span class="nav-icon">${icons.settings}</span> Settings
-                            <svg class="submenu-arrow ${pageName === 'smtp-settings' ? 'open' : ''}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                            <svg class="submenu-arrow ${['branding-appearance','login-security','backup-config','smtp-settings'].includes(pageName) ? 'open' : ''}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                         </a>
-                        <div class="nav-submenu ${pageName === 'smtp-settings' ? 'open' : ''}" id="settings-submenu">
+                        <div class="nav-submenu ${['branding-appearance','login-security','backup-config','smtp-settings'].includes(pageName) ? 'open' : ''}" id="settings-submenu">
+                            <a href="#/branding-appearance" class="nav-item nav-subitem ${pageName === 'branding-appearance' ? 'active' : ''}">
+                                <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Branding & Appearance
+                            </a>
+                            <a href="#/login-security" class="nav-item nav-subitem ${pageName === 'login-security' ? 'active' : ''}">
+                                <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Login Security
+                            </a>
+                            <a href="#/backup-config" class="nav-item nav-subitem ${pageName === 'backup-config' ? 'active' : ''}">
+                                <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Backup Configuration
+                            </a>
                             <a href="#/smtp-settings" class="nav-item nav-subitem ${pageName === 'smtp-settings' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> SMTP
                             </a>
@@ -487,6 +496,12 @@ async function navigate() {
         return;
     }
 
+    // Redirect legacy /settings to first sub-page
+    if (path === '/settings') {
+        window.location.hash = '#/branding-appearance';
+        return;
+    }
+
     // Load panel settings if not loaded
     if (!panelSettings) {
         try {
@@ -571,12 +586,13 @@ async function navigate() {
         const arrow = item.querySelector('.submenu-arrow');
         const submenu = item.parentElement.querySelector('.nav-submenu');
         if (!arrow || !submenu) return;
-        arrow.addEventListener('click', (e) => {
+        const toggle = (e) => {
             e.preventDefault();
             e.stopPropagation();
             arrow.classList.toggle('open');
             submenu.classList.toggle('open');
-        });
+        };
+        item.addEventListener('click', toggle);
     });
 
     // Render page content

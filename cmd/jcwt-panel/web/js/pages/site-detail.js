@@ -392,6 +392,7 @@ function renderSSL(el, site, siteId) {
                 <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4);">
                     ${!hasSelfSigned ? `<button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>` : ''}
                     <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Certificate</button>
+                    <button class="btn btn-success" id="ssl-letsencrypt">${icons.shield} Let's Encrypt</button>
                 </div>
             </div>
         </div>
@@ -417,7 +418,7 @@ function renderSSL(el, site, siteId) {
                             const expiryDate = expiry ? expiry.toLocaleDateString() : '';
                             return `
                         <tr>
-                            <td data-label="Type"><span class="badge ${c.type === 'self-signed' ? 'badge-warning' : 'badge-info'}">${escapeHtml(c.type)}</span></td>
+                            <td data-label="Type"><span class="badge ${c.type === 'self-signed' ? 'badge-warning' : c.type === 'letsencrypt' ? 'badge-success' : 'badge-info'}">${escapeHtml(c.type)}</span></td>
                             <td data-label="Label / CN">${escapeHtml(c.label || c.type)}${c.common_name ? `<br><small class="mono" style="color:var(--text-tertiary)">${escapeHtml(c.common_name)}</small>` : ''}</td>
                             <td data-label="SAN"><small class="mono" style="word-break:break-all;color:var(--text-secondary)">${escapeHtml(san)}</small></td>
                             <td data-label="Expires">${expiryBadge}${expiryDate ? `<br><small style="color:var(--text-tertiary)">${expiryDate}</small>` : ''}</td>
@@ -482,6 +483,53 @@ function renderSSL(el, site, siteId) {
                     const mod = await import('./site-detail.js');
                     mod.render(document.getElementById('page-content'), site.token, 'ssl');
                 } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        // Let's Encrypt
+        document.getElementById('ssl-letsencrypt')?.addEventListener('click', () => {
+            const mainDomain = site.domain;
+            const aliases = (site.aliases || '').split(/\s+/).filter(Boolean);
+            const allDomains = [mainDomain, ...aliases];
+
+            const domainCheckboxes = allDomains.map((d, i) => `
+                <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer; padding: var(--space-2) 0;">
+                    <input type="checkbox" class="le-domain" value="${escapeHtml(d)}" ${i === 0 ? 'checked' : ''}> ${escapeHtml(d)}
+                </label>
+            `).join('');
+
+            const content = `
+                <p style="margin-bottom: var(--space-4); font-size: var(--font-size-sm); color: var(--text-secondary);">
+                    Select which domains to include in the certificate. All selected domains must point to this server's IP via DNS (A/AAAA record).
+                </p>
+                <div class="form-group">
+                    <label class="form-label">Domains</label>
+                    ${domainCheckboxes}
+                </div>
+            `;
+            const footer = `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-success" id="le-issue-btn">${icons.shield} Issue Certificate</button>
+            `;
+            const modal = showModal("Let's Encrypt SSL", content, footer);
+
+            modal.querySelector('#le-issue-btn')?.addEventListener('click', async () => {
+                const checked = [...modal.querySelectorAll('.le-domain:checked')].map(cb => cb.value);
+                if (checked.length === 0) { showToast('Select at least one domain', 'error'); return; }
+                const btn = modal.querySelector('#le-issue-btn');
+                btn.disabled = true;
+                btn.innerHTML = `${icons.shield} Issuing...`;
+                try {
+                    await ssl.letsEncrypt(siteId, checked);
+                    closeModal();
+                    showToast("Let's Encrypt certificate issued & activated!", 'success');
+                    const mod = await import('./site-detail.js');
+                    mod.render(document.getElementById('page-content'), site.token, 'ssl');
+                } catch (err) {
+                    showToast(err.message || "Let's Encrypt failed", 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = `${icons.shield} Issue Certificate`;
+                }
             });
         });
 

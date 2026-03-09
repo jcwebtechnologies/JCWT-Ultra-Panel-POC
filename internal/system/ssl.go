@@ -96,6 +96,65 @@ func RemoveCert(sslBaseDir, domain string) error {
 	return nil
 }
 
+// ObtainLetsEncryptCert obtains a Let's Encrypt certificate via certbot webroot challenge.
+// domains should include the main domain and any aliases to include in the SAN.
+func ObtainLetsEncryptCert(sslBaseDir, webRoot string, domains []string) (certPath, keyPath string, err error) {
+	if len(domains) == 0 {
+		return "", "", fmt.Errorf("at least one domain is required")
+	}
+
+	mainDomain := domains[0]
+	certDir := filepath.Join(sslBaseDir, mainDomain)
+
+	mkdirCmd := exec.Command("sudo", "mkdir", "-p", certDir)
+	if output, err := mkdirCmd.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("create ssl dir: %s: %s", err, string(output))
+	}
+
+	// Build certbot args
+	args := []string{
+		"certbot", "certonly",
+		"--webroot",
+		"-w", webRoot,
+		"--agree-tos",
+		"--non-interactive",
+		"--register-unsafely-without-email",
+		"--cert-name", mainDomain,
+	}
+	for _, d := range domains {
+		args = append(args, "-d", d)
+	}
+
+	cmd := exec.Command("sudo", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", "", fmt.Errorf("certbot failed: %s: %s", err, string(output))
+	}
+
+	// Certbot stores certs in /etc/letsencrypt/live/<domain>/
+	leCertPath := fmt.Sprintf("/etc/letsencrypt/live/%s/fullchain.pem", mainDomain)
+	leKeyPath := fmt.Sprintf("/etc/letsencrypt/live/%s/privkey.pem", mainDomain)
+
+	// Copy to our SSL dir so we have a consistent path and can manage permissions
+	suffix := uniqueCertSuffix()
+	certPath = filepath.Join(certDir, fmt.Sprintf("cert_%s.pem", suffix))
+	keyPath = filepath.Join(certDir, fmt.Sprintf("key_%s.pem", suffix))
+
+	cpCert := exec.Command("sudo", "cp", leCertPath, certPath)
+	if out, err := cpCert.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("copy cert: %s: %s", err, string(out))
+	}
+	cpKey := exec.Command("sudo", "cp", leKeyPath, keyPath)
+	if out, err := cpKey.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("copy key: %s: %s", err, string(out))
+	}
+
+	exec.Command("sudo", "chmod", "0644", certPath).Run()
+	exec.Command("sudo", "chmod", "0600", keyPath).Run()
+
+	return certPath, keyPath, nil
+}
+
 // GenerateRandomPassword generates a random password
 func GenerateRandomPassword(length int) string {
 	b := make([]byte, length)
