@@ -163,12 +163,12 @@ export async function render(container) {
                     showModal('Create Database User', `
                         <div class="form-group">
                             <label class="form-label">Username</label>
-                            <input type="text" class="form-input" id="dbuser-name" required pattern="^[a-zA-Z][a-zA-Z0-9_]*$" maxlength="32">
+                            <input type="text" class="form-input" id="dbuser-name" required pattern="^[a-zA-Z][a-zA-Z0-9_]*$" maxlength="32" autocomplete="off">
                             <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Letters, numbers, underscore only. Must start with a letter.</small>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Password</label>
-                            <input type="password" class="form-input" id="dbuser-pwd" required minlength="8">
+                            <input type="password" class="form-input" id="dbuser-pwd" required minlength="8" autocomplete="new-password">
                             <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Minimum 8 characters</small>
                         </div>
                         <div class="form-group">

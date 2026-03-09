@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -248,6 +251,20 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	exec.Command("sudo", "mkdir", "-p", tmpDir).Run()
 	exec.Command("sudo", "chown", sysUser+":"+sysUser, tmpDir).Run()
 
+	dbPath := filepath.Join(tmpDir, fmt.Sprintf("filebrowser-%d.db", siteID))
+
+	// Pre-initialize File Browser database for syntax highlighting & proper config.
+	// This runs 'config init' and 'config set' to enable the code editor by default.
+	exec.Command("sudo", "-u", sysUser,
+		"/usr/local/bin/filebrowser", "config", "init",
+		"--database", dbPath,
+	).Run()
+	exec.Command("sudo", "-u", sysUser,
+		"/usr/local/bin/filebrowser", "config", "set",
+		"--database", dbPath,
+		"--auth.method=noauth",
+	).Run()
+
 	cmd := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser",
 		"--noauth",
@@ -255,7 +272,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"--address", "127.0.0.1",
 		"--port", strconv.Itoa(port),
 		"--baseURL", fmt.Sprintf("/fb/%d", siteID),
-		"--database", filepath.Join(tmpDir, fmt.Sprintf("filebrowser-%d.db", siteID)),
+		"--database", dbPath,
 	)
 
 	// Capture stderr for debugging
@@ -317,6 +334,74 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	log.Printf("File Browser started for site %d on port %d (user: %s, root: %s)", siteID, port, sysUser, webRoot)
 	return port, nil
+}
+
+// DeleteFile handles POST /api/files/delete — deletes a file or directory by path.
+// The file path is sent in the JSON body (not the URL) to avoid Cloudflare WAF blocking
+// requests that contain sensitive filenames like wp-config.php in the URL.
+func (h *FilesHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != "POST" {
+		http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		SiteID int64  `json:"site_id"`
+		Path   string `json:"path"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.SiteID == 0 || req.Path == "" {
+		jsonError(w, "site_id and path are required", http.StatusBadRequest)
+		return
+	}
+
+	site, err := h.DB.GetSite(req.SiteID)
+	if err != nil {
+		jsonError(w, "site not found", http.StatusNotFound)
+		return
+	}
+
+	sysUser, _ := site["system_user"].(string)
+	if sysUser == "" {
+		jsonError(w, "site missing system user", http.StatusInternalServerError)
+		return
+	}
+
+	homeDir := filepath.Join(h.Cfg.WebRootBase, sysUser)
+
+	// Resolve the full path and ensure it stays within the user's home directory
+	cleanPath := filepath.Clean(req.Path)
+	// Strip any leading slash — path is relative to home dir
+	cleanPath = strings.TrimPrefix(cleanPath, "/")
+	fullPath := filepath.Join(homeDir, cleanPath)
+
+	// Security: ensure resolved path is within the user's home directory (prevent path traversal)
+	absHome, _ := filepath.Abs(homeDir)
+	absTarget, _ := filepath.Abs(fullPath)
+	if !strings.HasPrefix(absTarget, absHome+string(os.PathSeparator)) && absTarget != absHome {
+		jsonError(w, "path is outside site directory", http.StatusForbidden)
+		return
+	}
+
+	// Don't allow deleting the home directory itself
+	if absTarget == absHome {
+		jsonError(w, "cannot delete home directory", http.StatusForbidden)
+		return
+	}
+
+	// Use sudo -u to delete as the site's system user (respects file ownership)
+	out, err := exec.Command("sudo", "-u", sysUser, "rm", "-rf", fullPath).CombinedOutput()
+	if err != nil {
+		jsonError(w, fmt.Sprintf("failed to delete: %s", strings.TrimSpace(string(out))), http.StatusInternalServerError)
+		return
+	}
+
+	jsonSuccess(w, map[string]interface{}{"deleted": true, "path": cleanPath})
 }
 
 // StartIdleReaper launches a background goroutine that stops File Browser instances

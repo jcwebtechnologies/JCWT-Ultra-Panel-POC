@@ -133,13 +133,18 @@ export async function render(container) {
                                     <input type="password" class="form-input" id="wp-admin-pass" placeholder="Strong password" required autocomplete="new-password">
                                 </div>
                             </div>
+                            <div class="form-group">
+                                <label class="form-label">Table Prefix</label>
+                                <input type="text" class="form-input" id="wp-table-prefix" placeholder="wp_" value="wp_" autocomplete="off" maxlength="20" pattern="^[a-zA-Z_][a-zA-Z0-9_]*_$">
+                                <div class="form-help">Must end with underscore. Letters, numbers, underscore only.</div>
+                            </div>
                         </div>
                     </div>
                 </form>
             `, `
                 <button class="btn btn-secondary" id="cancel-site-btn">Cancel</button>
                 <button class="btn btn-primary" id="submit-site">Create Site</button>
-            `, { persistent: false });
+            `, { persistent: true });
 
             // Cancel button handler
             document.getElementById('cancel-site-btn')?.addEventListener('click', () => closeModal());
@@ -196,10 +201,16 @@ export async function render(container) {
                         showToast('WordPress admin email and password are required', 'error');
                         return;
                     }
+                    const wpTablePrefix = document.getElementById('wp-table-prefix').value.trim() || 'wp_';
+                    if (!/^[a-zA-Z_][a-zA-Z0-9_]*_$/.test(wpTablePrefix) || wpTablePrefix.length > 20) {
+                        showToast('Table prefix must end with underscore, contain only letters/numbers/underscore, and be at most 20 characters', 'error');
+                        return;
+                    }
                     data.wp_admin_user = wpUser;
                     data.wp_admin_email = wpEmail;
                     data.wp_admin_password = wpPass;
                     data.wp_site_title = wpTitle;
+                    data.wp_table_prefix = wpTablePrefix;
                 }
 
                 // Show progress spinner — disable all modal interactions

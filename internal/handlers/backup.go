@@ -348,14 +348,15 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 			// Extract htdocs/ from archive directly into webroot using a temp dir under the user's home
 			homeDir := filepath.Dir(webRoot)
 			restoreDir := filepath.Join(homeDir, "tmp", "restore-stage")
-			exec.Command("sudo", "-u", sysUser, "mkdir", "-p", restoreDir).Run()
-			// Clean up staging dir when done (user-owned, safe to remove as user)
-			defer exec.Command("sudo", "-u", sysUser, "rm", "-rf", restoreDir).Run()
+			exec.Command("sudo", "mkdir", "-p", restoreDir).Run()
+			exec.Command("sudo", "chown", sysUser+":"+sysUser, restoreDir).Run()
+			// Clean up staging dir when done
+			defer exec.Command("sudo", "rm", "-rf", restoreDir).Run()
 
-			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "htdocs")
+			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "./htdocs")
 			if output, err := cmd.CombinedOutput(); err != nil {
-				// Try with ./ prefix
-				cmd = exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "./htdocs")
+				// Try without ./ prefix (legacy backups)
+				cmd = exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "htdocs")
 				if output2, err2 := cmd.CombinedOutput(); err2 != nil {
 					jsonError(w, fmt.Sprintf("restore files failed: %s / %s", string(output), string(output2)), http.StatusInternalServerError)
 					return

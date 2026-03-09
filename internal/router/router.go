@@ -74,6 +74,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	filesHandler := &handlers.FilesHandler{DB: database, Cfg: cfg}
 	filesHandler.StartIdleReaper()
 	mux.Handle("/api/files", middleware.RequireAuth(middleware.RequireCSRF(filesHandler)))
+	mux.Handle("/api/files/delete", middleware.RequireAuth(middleware.RequireCSRF(http.HandlerFunc(filesHandler.DeleteFile))))
 
 	// File Browser reverse proxy — requires auth but not CSRF (File Browser handles its own requests)
 	mux.Handle("/fb/", middleware.RequireAuth(http.HandlerFunc(filesHandler.ProxyHandler())))

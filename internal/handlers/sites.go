@@ -151,6 +151,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		WPAdminEmail  string `json:"wp_admin_email"`
 		WPAdminPass   string `json:"wp_admin_password"`
 		WPSiteTitle   string `json:"wp_site_title"`
+		WPTablePrefix string `json:"wp_table_prefix"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -198,6 +199,21 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 			req.WPAdminUser = "admin"
 		}
 		if req.WPSiteTitle == "" {
+			req.WPSiteTitle = req.Domain
+		}
+		// Validate table prefix: alphanumeric and underscore, must end with _
+		if req.WPTablePrefix == "" {
+			req.WPTablePrefix = "wp_"
+		}
+		if !regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*_$`).MatchString(req.WPTablePrefix) {
+			jsonError(w, "invalid table prefix: must contain only letters, numbers, underscore and end with _", http.StatusBadRequest)
+			return
+		}
+		if len(req.WPTablePrefix) > 20 {
+			jsonError(w, "table prefix too long (max 20 characters)", http.StatusBadRequest)
+			return
+		}
+	}
 			req.WPSiteTitle = req.Domain
 		}
 	}
@@ -280,7 +296,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	// WordPress setup: download, extract, create DB/user, generate wp-config.php
 	if req.SiteType == "wordpress" {
-		if err := h.setupWordPress(id, req.Domain, req.SystemUser, webRoot, req.PHPVersion, req.WPAdminUser, req.WPAdminEmail, req.WPAdminPass, req.WPSiteTitle); err != nil {
+		if err := h.setupWordPress(id, req.Domain, req.SystemUser, webRoot, req.PHPVersion, req.WPAdminUser, req.WPAdminEmail, req.WPAdminPass, req.WPSiteTitle, req.WPTablePrefix); err != nil {
 			jsonError(w, fmt.Sprintf("WordPress setup failed: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -341,7 +357,7 @@ func generatePassword(length int) string {
 }
 
 // setupWordPress downloads, extracts, and configures WordPress
-func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, phpVersion, wpAdminUser, wpAdminEmail, wpAdminPass, wpSiteTitle string) error {
+func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, phpVersion, wpAdminUser, wpAdminEmail, wpAdminPass, wpSiteTitle, wpTablePrefix string) error {
 	homeDir := filepath.Dir(webRoot)
 	tmpDir := filepath.Join(homeDir, "tmp")
 
@@ -393,7 +409,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	}
 
 	// Generate wp-config.php with secure keys/salts
-	wpConfig := generateWPConfig(dbName, dbUser, dbPass)
+	wpConfig := generateWPConfig(dbName, dbUser, dbPass, wpTablePrefix)
 	configCmd := exec.Command("sudo", "tee", filepath.Join(webRoot, "wp-config.php"))
 	configCmd.Stdin = strings.NewReader(wpConfig)
 	configCmd.Stdout = nil
@@ -435,11 +451,33 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type d -exec chmod 755 {} \\;", webRoot)).Run()
 	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type f -exec chmod 644 {} \\;", webRoot)).Run()
 
+	// Disable WordPress built-in HTTP cron (we use a system cron instead)
+	wpConfigPath := filepath.Join(webRoot, "wp-config.php")
+	disableCron := "define('DISABLE_WP_CRON', true);\n"
+	// Insert before the ABSPATH line
+	sedCmd := fmt.Sprintf(`sudo sed -i '/if (!defined(.ABSPATH.))/i %s' %s`, disableCron, wpConfigPath)
+	exec.Command("bash", "-c", sedCmd).Run()
+
+	// Create system cron job for wp-cron.php (direct PHP call, every 30 minutes)
+	cronLogDir := filepath.Join(homeDir, "logs", "custom-cron")
+	exec.Command("sudo", "mkdir", "-p", cronLogDir).Run()
+	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, cronLogDir).Run()
+
+	phpBin := fmt.Sprintf("/usr/bin/php%s", phpVersion)
+	cronCommand := fmt.Sprintf("%s %s/wp-cron.php doing_wp_cron >> %s/wp-cron-exec.log 2>&1",
+		phpBin, webRoot, cronLogDir)
+	cronSchedule := "*/30 * * * *"
+	cronID, cronErr := h.DB.CreateCronJob(siteID, cronSchedule, cronCommand)
+	if cronErr == nil && cronID > 0 {
+		// Sync crontab for the system user
+		h.syncSiteCrontab(siteID, sysUser)
+	}
+
 	return nil
 }
 
 // generateWPConfig generates a wp-config.php with secure salts
-func generateWPConfig(dbName, dbUser, dbPass string) string {
+func generateWPConfig(dbName, dbUser, dbPass, tablePrefix string) string {
 	// Generate secure salts
 	salts := make([]string, 8)
 	saltNames := []string{
@@ -466,7 +504,7 @@ func generateWPConfig(dbName, dbUser, dbPass string) string {
 		sb.WriteString(fmt.Sprintf("define('%s', '%s');\n", name, salts[i]))
 	}
 
-	sb.WriteString("\n$table_prefix = 'wp_';\n\n")
+	sb.WriteString(fmt.Sprintf("\n$table_prefix = '%s';\n\n", tablePrefix))
 	sb.WriteString("define('WP_DEBUG', false);\n")
 	sb.WriteString("define('WP_AUTO_UPDATE_CORE', true);\n")
 	sb.WriteString("define('DISALLOW_FILE_EDIT', true);\n")
@@ -476,6 +514,23 @@ func generateWPConfig(dbName, dbUser, dbPass string) string {
 	sb.WriteString("require_once ABSPATH . 'wp-settings.php';\n")
 
 	return sb.String()
+}
+
+// syncSiteCrontab syncs the crontab for a site's system user
+func (h *SitesHandler) syncSiteCrontab(siteID int64, sysUser string) {
+	jobs, err := h.DB.ListCronJobs(siteID)
+	if err != nil {
+		return
+	}
+	var entries []system.CronEntry
+	for _, j := range jobs {
+		entries = append(entries, system.CronEntry{
+			Schedule: j["schedule"].(string),
+			Command:  j["command"].(string),
+			Enabled:  j["enabled"].(bool),
+		})
+	}
+	system.SyncCrontab(sysUser, entries)
 }
 
 func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {

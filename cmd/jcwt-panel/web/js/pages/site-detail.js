@@ -931,7 +931,13 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
             btn.addEventListener('click', async () => {
                 const id = btn.dataset.id;
                 const name = btn.dataset.name;
-                if (!await showConfirm('Delete Database', `Delete database "${name}"? This will also drop it from MariaDB.`, 'Delete', 'btn-danger')) return;
+                const linkedUsers = (allUsers || []).filter(u => String(u.database_id) === String(id));
+                let msg = `Delete database "<strong>${escapeHtml(name)}</strong>"? This will also drop it from MariaDB.`;
+                if (linkedUsers.length > 0) {
+                    msg += `<br><br><strong style="color: var(--danger);">The following database user${linkedUsers.length > 1 ? 's' : ''} will also be deleted:</strong><br>` +
+                        linkedUsers.map(u => `• <span class="mono">${escapeHtml(u.username)}</span>`).join('<br>');
+                }
+                if (!await showConfirm('Delete Database', msg, 'Delete', 'btn-danger')) return;
                 try {
                     await databases.delete(id);
                     showToast(`Database ${name} deleted`, 'success');
@@ -1008,12 +1014,12 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
             showModal('Create Database User', `
                 <div class="form-group">
                     <label class="form-label">Username</label>
-                    <input type="text" class="form-input" id="new-dbuser-name" placeholder="app_user" required pattern="^[a-zA-Z][a-zA-Z0-9_]*$" maxlength="32">
+                    <input type="text" class="form-input" id="new-dbuser-name" placeholder="app_user" required pattern="^[a-zA-Z][a-zA-Z0-9_]*$" maxlength="32" autocomplete="off">
                     <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Letters, numbers, underscore only. Must start with a letter.</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Password</label>
-                    <input type="password" class="form-input" id="new-dbuser-pass" placeholder="Min 8 characters" required minlength="8">
+                    <input type="password" class="form-input" id="new-dbuser-pass" placeholder="Min 8 characters" required minlength="8" autocomplete="new-password">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Database</label>
@@ -1022,9 +1028,9 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
                 <div class="form-group">
                     <label class="form-label">Privilege Level</label>
                     <select class="form-select" id="new-dbuser-priv">
-                        <option value="full">Full — All DML + DDL operations</option>
-                        <option value="readwrite">Read / Write — SELECT, INSERT, UPDATE, DELETE</option>
                         <option value="readonly">Read Only — SELECT only</option>
+                        <option value="readwrite" selected>Read / Write — SELECT, INSERT, UPDATE, DELETE</option>
+                        <option value="full">Full — All DML + DDL operations</option>
                     </select>
                 </div>
             `, `

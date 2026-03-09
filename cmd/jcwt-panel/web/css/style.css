@@ -879,6 +879,25 @@ a:hover {
     overflow-y: auto;
     box-shadow: var(--shadow-xl);
     animation: slideUp 250ms ease;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-primary) transparent;
+}
+
+.modal::-webkit-scrollbar {
+    width: 4px;
+}
+
+.modal::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal::-webkit-scrollbar-thumb {
+    background: var(--border-primary);
+    border-radius: var(--radius-full);
+}
+
+.modal::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
 }
 
 .modal-header {

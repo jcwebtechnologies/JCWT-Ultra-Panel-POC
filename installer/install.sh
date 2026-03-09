@@ -455,8 +455,17 @@ PMANGINX
     log_info "Installing File Browser (file manager)..."
     if [ -f /usr/local/bin/filebrowser ]; then
         FB_VER=$(/usr/local/bin/filebrowser version 2>/dev/null | head -1 || echo "unknown")
-        log_ok "File Browser already installed: $FB_VER"
-    else
+        # Check if version supports syntax highlighting (v2.25+)
+        FB_MAJOR=$(echo "$FB_VER" | grep -oP 'v?\K[0-9]+' | head -1 || echo "0")
+        FB_MINOR=$(echo "$FB_VER" | grep -oP 'v?[0-9]+\.\K[0-9]+' | head -1 || echo "0")
+        if [ "$FB_MAJOR" -ge 2 ] 2>/dev/null && [ "$FB_MINOR" -ge 25 ] 2>/dev/null; then
+            log_ok "File Browser already installed: $FB_VER (syntax highlighting supported)"
+        else
+            log_warn "File Browser $FB_VER is outdated (need v2.25+ for syntax highlighting). Upgrading..."
+            rm -f /usr/local/bin/filebrowser
+        fi
+    fi
+    if [ ! -f /usr/local/bin/filebrowser ]; then
         FB_INSTALLED=false
 
         # Method 1: Official install script (may hang on IPv6-only)
@@ -578,6 +587,38 @@ configure_nginx() {
         sed -i 's/^\([[:space:]]*\)server_tokens\(.*\)/\1# server_tokens\2 # Managed by JCWT Panel/' /etc/nginx/nginx.conf
         log_detail "Commented out default 'server_tokens' in nginx.conf"
     fi
+    # Comment out any ssl_* directives in nginx.conf (managed by jcwt-optimization.conf)
+    if grep -q "^[[:space:]]*ssl_protocols" /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i 's/^\([[:space:]]*\)ssl_protocols\(.*\)/\1# ssl_protocols\2 # Managed by JCWT Panel/' /etc/nginx/nginx.conf
+        log_detail "Commented out default 'ssl_protocols' in nginx.conf"
+    fi
+    if grep -q "^[[:space:]]*ssl_prefer_server_ciphers" /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i 's/^\([[:space:]]*\)ssl_prefer_server_ciphers\(.*\)/\1# ssl_prefer_server_ciphers\2 # Managed by JCWT Panel/' /etc/nginx/nginx.conf
+        log_detail "Commented out default 'ssl_prefer_server_ciphers' in nginx.conf"
+    fi
+    if grep -q "^[[:space:]]*ssl_ciphers" /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i 's/^\([[:space:]]*\)ssl_ciphers\(.*\)/\1# ssl_ciphers\2 # Managed by JCWT Panel/' /etc/nginx/nginx.conf
+        log_detail "Commented out default 'ssl_ciphers' in nginx.conf"
+    fi
+    if grep -q "^[[:space:]]*ssl_session_cache" /etc/nginx/nginx.conf 2>/dev/null; then
+        sed -i 's/^\([[:space:]]*\)ssl_session_cache\(.*\)/\1# ssl_session_cache\2 # Managed by JCWT Panel/' /etc/nginx/nginx.conf
+        log_detail "Commented out default 'ssl_session_cache' in nginx.conf"
+    fi
+
+    # On re-install: strip duplicate SSL directives from existing vhost files
+    log_info "Cleaning SSL/include directives from existing vhost files..."
+    for VHOST in /etc/nginx/sites-available/*.conf; do
+        [ -f "$VHOST" ] || continue
+        [ "$(basename $VHOST)" = "000-default.conf" ] && continue
+        # Remove per-server SSL directives (now in jcwt-optimization.conf at http{} level)
+        sed -i '/^[[:space:]]*ssl_protocols/d' "$VHOST"
+        sed -i '/^[[:space:]]*ssl_ciphers/d' "$VHOST"
+        sed -i '/^[[:space:]]*ssl_prefer_server_ciphers/d' "$VHOST"
+        sed -i '/^[[:space:]]*ssl_session_cache/d' "$VHOST"
+        # Migrate old phpMyAdmin include to new common snippet
+        sed -i 's|include /etc/nginx/snippets/phpmyadmin\.conf;|include /etc/nginx/snippets/jcwt-server-common.conf;|g' "$VHOST"
+    done
+    log_ok "Existing vhosts cleaned up"
 
     log_info "Writing JCWT optimization config..."
     cat > /etc/nginx/conf.d/jcwt-optimization.conf << 'EOF'
@@ -615,6 +656,17 @@ EOF
     log_detail "  • client_max_body_size = 100M"
     log_detail "  • gzip compression enabled (level 5)"
     log_detail "  • Security headers: X-Frame-Options, X-Content-Type-Options, etc."
+
+    # Create common server-level snippet (included inside each server{} block)
+    log_info "Writing common server snippet..."
+    cat > /etc/nginx/snippets/jcwt-server-common.conf << 'SRVEOF'
+# JCWT Ultra Panel — common server-block includes
+# Add per-server-block directives here (included inside every server{} block)
+
+# phpMyAdmin (if installed)
+include /etc/nginx/snippets/phpmyadmin.conf;
+SRVEOF
+    log_detail "Config written: /etc/nginx/snippets/jcwt-server-common.conf"
 
     # Generate self-signed cert for nginx default HTTPS catch-all
     log_info "Generating nginx default SSL certificate..."
@@ -706,8 +758,8 @@ server {
         try_files $uri $uri/ =404;
     }
 
-    # phpMyAdmin (if installed)
-    include /etc/nginx/snippets/phpmyadmin.conf;
+    # Common server-level includes (phpMyAdmin, etc.)
+    include /etc/nginx/snippets/jcwt-server-common.conf;
 
     # Prevent access to hidden files
     location ~ /\. {
@@ -730,7 +782,7 @@ server {
         try_files $uri $uri/ =404;
     }
 
-    include /etc/nginx/snippets/phpmyadmin.conf;
+    include /etc/nginx/snippets/jcwt-server-common.conf;
 
     location ~ /\. {
         deny all;

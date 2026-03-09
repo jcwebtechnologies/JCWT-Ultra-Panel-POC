@@ -127,8 +127,8 @@ server {
     }
 {{- end}}
 
-    # phpMyAdmin (if installed)
-    include /etc/nginx/snippets/phpmyadmin.conf;
+    # Common server-level includes (phpMyAdmin, etc.)
+    include /etc/nginx/snippets/jcwt-server-common.conf;
 }
 {{- else}}
 server {
@@ -240,8 +240,8 @@ server {
     }
 {{- end}}
 
-    # phpMyAdmin (if installed)
-    include /etc/nginx/snippets/phpmyadmin.conf;
+    # Common server-level includes (phpMyAdmin, etc.)
+    include /etc/nginx/snippets/jcwt-server-common.conf;
 }
 {{- end}}
 `
