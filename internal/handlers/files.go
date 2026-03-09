@@ -253,19 +253,25 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	dbPath := filepath.Join(tmpDir, fmt.Sprintf("filebrowser-%d.db", siteID))
 
-	// Initialize File Browser database only if it doesn't exist yet.
-	// Then always enforce noauth via 'config set' so stale DBs are fixed too.
-	if _, statErr := os.Stat(dbPath); statErr != nil {
-		exec.Command("sudo", "-u", sysUser,
-			"/usr/local/bin/filebrowser", "config", "init",
-			"--database", dbPath,
-		).Run()
+	// Always start with a clean File Browser database.
+	// Stale DBs may retain password auth from previous broken init sequences.
+	exec.Command("sudo", "rm", "-f", dbPath).Run()
+
+	// Initialize fresh database and configure noauth.
+	// Using space-separated --auth.method noauth (not =) for compatibility across FB versions.
+	if out, err := exec.Command("sudo", "-u", sysUser,
+		"/usr/local/bin/filebrowser", "config", "init",
+		"--database", dbPath,
+	).CombinedOutput(); err != nil {
+		log.Printf("File Browser config init failed for site %d: %v: %s", siteID, err, string(out))
 	}
-	exec.Command("sudo", "-u", sysUser,
+	if out, err := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser", "config", "set",
 		"--database", dbPath,
-		"--auth.method=noauth",
-	).Run()
+		"--auth.method", "noauth",
+	).CombinedOutput(); err != nil {
+		log.Printf("File Browser config set noauth failed for site %d: %v: %s", siteID, err, string(out))
+	}
 
 	cmd := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser",
