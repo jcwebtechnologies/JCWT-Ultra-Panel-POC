@@ -937,7 +937,7 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
                     msg += `<br><br><strong style="color: var(--danger);">The following database user${linkedUsers.length > 1 ? 's' : ''} will also be deleted:</strong><br>` +
                         linkedUsers.map(u => `• <span class="mono">${escapeHtml(u.username)}</span>`).join('<br>');
                 }
-                if (!await showConfirm('Delete Database', msg, 'Delete', 'btn-danger')) return;
+                if (!await showConfirm('Delete Database', msg, 'Delete', 'btn-danger', { html: true })) return;
                 try {
                     await databases.delete(id);
                     showToast(`Database ${name} deleted`, 'success');
@@ -977,7 +977,7 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Database Users for ${escapeHtml(site.domain)}</h3>
-                <button class="btn btn-primary btn-sm" id="add-db-user" ${siteDbs.length === 0 ? 'disabled title="Create a database first"' : ''}>${icons.plus} Create User</button>
+                <button class="btn btn-primary btn-sm" id="add-db-user">${icons.plus} Create User</button>
             </div>
             ${siteUsers.length === 0 ? `
             <div class="empty-state" style="padding: var(--space-6);">
@@ -1010,6 +1010,7 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
 
         // Create User button
         document.getElementById('add-db-user')?.addEventListener('click', () => {
+            if (siteDbs.length === 0) { showToast('Create a database first', 'warning'); return; }
             const dbOpts = siteDbs.map(db => `<option value="${db.id}">${escapeHtml(db.db_name)}</option>`).join('');
             showModal('Create Database User', `
                 <div class="form-group">

@@ -96,7 +96,7 @@ export function closeModal() {
 }
 
 // ---- Confirm Dialog (replaces window.confirm) ----
-export function showConfirm(title, message, confirmText = 'Confirm', confirmClass = 'btn-danger') {
+export function showConfirm(title, message, confirmText = 'Confirm', confirmClass = 'btn-danger', { html = false } = {}) {
     return new Promise((resolve) => {
         closeModal();
         const overlay = document.createElement('div');
@@ -109,7 +109,7 @@ export function showConfirm(title, message, confirmText = 'Confirm', confirmClas
                     <button class="modal-close" id="confirm-close-btn">×</button>
                 </div>
                 <div class="modal-body">
-                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6;">${escapeHtml(message)}</p>
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6;">${html ? message : escapeHtml(message)}</p>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" id="confirm-cancel-btn">Cancel</button>
@@ -621,8 +621,34 @@ async function navigate() {
     }
 }
 
+// ---- Global Autofill Prevention ----
+// MutationObserver sets autocomplete="off" on all form inputs and
+// autocomplete="new-password" on password fields. This runs automatically
+// for every dynamically-added form. To allow autofill later, remove this block.
+function disableAutofill(root) {
+    root.querySelectorAll('input:not([data-allow-autofill]), textarea:not([data-allow-autofill])').forEach(el => {
+        if (!el.hasAttribute('autocomplete')) {
+            el.setAttribute('autocomplete', el.type === 'password' ? 'new-password' : 'off');
+        }
+    });
+    root.querySelectorAll('form:not([data-allow-autofill])').forEach(form => {
+        if (!form.hasAttribute('autocomplete')) {
+            form.setAttribute('autocomplete', 'off');
+        }
+    });
+}
+const _autofillObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+        for (const node of m.addedNodes) {
+            if (node.nodeType === 1) disableAutofill(node);
+        }
+    }
+});
+_autofillObserver.observe(document.documentElement, { childList: true, subtree: true });
+
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', () => {
+    disableAutofill(document);
     initTheme();
     window.addEventListener('hashchange', navigate);
     navigate();

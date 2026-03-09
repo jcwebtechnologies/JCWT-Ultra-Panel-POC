@@ -382,7 +382,7 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Restore databases — pipe directly from archive, no temp files
-	if req.RestoreDBs && isNewStyle && len(dbFiles) > 0 {
+	if req.RestoreDBs && len(dbFiles) > 0 {
 		allowedDBs := make(map[string]bool)
 		if len(req.RestoreDBNames) > 0 {
 			for _, name := range req.RestoreDBNames {

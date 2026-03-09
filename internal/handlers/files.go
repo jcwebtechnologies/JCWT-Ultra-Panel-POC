@@ -253,8 +253,11 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	dbPath := filepath.Join(tmpDir, fmt.Sprintf("filebrowser-%d.db", siteID))
 
+	// Remove any existing File Browser database so config init always succeeds.
+	// Without this, a stale DB retains the default password auth and ignores --noauth.
+	exec.Command("sudo", "rm", "-f", dbPath).Run()
+
 	// Pre-initialize File Browser database for syntax highlighting & proper config.
-	// This runs 'config init' and 'config set' to enable the code editor by default.
 	exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser", "config", "init",
 		"--database", dbPath,
