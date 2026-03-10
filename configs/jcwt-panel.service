@@ -11,7 +11,7 @@ ExecStart=/usr/local/bin/jcwt-panel --data-dir /var/lib/jcwt-panel --listen [::]
 Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/jcwt-panel/panel.log
-StandardError=append:/var/log/jcwt-panel/panel-error.log
+StandardError=append:/var/log/jcwt-panel/panel.log
 
 # Note: No ProtectSystem — panel needs to create users (/etc/passwd), manage nginx/php configs
 NoNewPrivileges=false

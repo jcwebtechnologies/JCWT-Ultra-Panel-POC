@@ -21,6 +21,10 @@ const Version = "1.0.0"
 var webEmbed embed.FS
 
 func main() {
+	// Redirect all log output to stdout so systemd's StandardOutput captures it in panel.log.
+	// By default Go's log package writes to stderr, which would end up in panel-error.log only.
+	log.SetOutput(os.Stdout)
+
 	cfg := config.DefaultConfig()
 
 	flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "Listen address (default [::]:8443)")

@@ -1022,7 +1022,7 @@ ExecStart=$PANEL_BIN --data-dir $DATA_DIR --listen [::]:$PANEL_PORT
 Restart=always
 RestartSec=5
 StandardOutput=append:$LOG_DIR/panel.log
-StandardError=append:$LOG_DIR/panel-error.log
+StandardError=append:$LOG_DIR/panel.log
 
 # Note: No ProtectSystem — panel needs to create users (/etc/passwd), manage nginx/php configs
 NoNewPrivileges=false
