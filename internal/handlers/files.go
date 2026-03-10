@@ -273,7 +273,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	// noauth requires at least one user record (ID 1) to auto-login as.
 	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "users", "add", "admin", "admin",
+		"/usr/local/bin/filebrowser", "users", "add", "admin", "admin-noauth-panel",
 		"--perm.admin",
 		"--database", dbPath,
 	).CombinedOutput(); err != nil {
