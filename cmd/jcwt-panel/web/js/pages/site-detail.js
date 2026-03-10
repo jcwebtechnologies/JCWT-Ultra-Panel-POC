@@ -79,7 +79,7 @@ export async function render(container, siteToken, section) {
                     </div>
                     <div class="site-card" data-section="backups">
                         <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.download}</span></div>
-                        <div class="site-card-title">Backups</div>
+                        <div class="site-card-title">Backup & Restore</div>
                     </div>
                     <div class="site-card" data-section="phpmyadmin">
                         <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.pma}</span></div>
@@ -290,7 +290,7 @@ function renderOverview(el, site, versions, siteId) {
 
 async function renderPHP(el, siteId) {
     const phpOpts = {
-        memory_limit: ['128M', '256M', '512M', '768M', '1024M', '2048M'],
+        memory_limit: ['32M', '64M', '128M', '256M', '512M', '768M', '1024M', '2048M'],
         max_execution_time: ['30', '60', '120', '300', '600', '900'],
         max_input_time: ['30', '60', '120', '300', '600', '900'],
         max_input_vars: ['1000', '2000', '3000', '5000', '10000'],
@@ -514,7 +514,7 @@ function renderSSL(el, site, siteId) {
             `;
             const footer = `
                 <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
-                <button class="btn btn-success" id="le-issue-btn">${icons.shield} Issue Certificate</button>
+                <button class="btn btn-success" id="le-issue-btn"><span class="nav-icon" style="width:16px;height:16px;">${icons.shield}</span> Issue Certificate</button>
             `;
             const modal = showModal("New Let's Encrypt SSL Certificate", content, footer, { persistent: true });
 
@@ -533,7 +533,7 @@ function renderSSL(el, site, siteId) {
                 } catch (err) {
                     showToast(err.message || "Let's Encrypt failed", 'error');
                     btn.disabled = false;
-                    btn.innerHTML = `${icons.shield} Issue Certificate`;
+                    btn.innerHTML = `<span class="nav-icon" style="width:16px;height:16px;">${icons.shield}</span> Issue Certificate`;
                 }
             });
         });

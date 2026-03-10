@@ -27,7 +27,7 @@ export async function render(container) {
             return;
         }
         lastRefreshTime = now;
-        loadServices(container);
+        loadServices(container).then(() => showToast('Services refreshed', 'success'));
     });
     await loadServices(container);
 }

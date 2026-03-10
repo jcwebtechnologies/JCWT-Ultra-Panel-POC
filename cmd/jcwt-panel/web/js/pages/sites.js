@@ -130,7 +130,10 @@ export async function render(container) {
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Admin Password</label>
-                                    <input type="password" class="form-input" id="wp-admin-pass" placeholder="Strong password" required autocomplete="new-password">
+                                    <div style="position:relative;">
+                                        <input type="password" class="form-input" id="wp-admin-pass" placeholder="Strong password" required autocomplete="new-password" style="padding-right:40px;">
+                                        <button type="button" id="toggle-wp-pass" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:var(--text-tertiary);display:flex;align-items:center;" title="Toggle password visibility"><span class="nav-icon" style="width:18px;height:18px;">${icons.eye}</span></button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -148,6 +151,19 @@ export async function render(container) {
 
             // Cancel button handler
             document.getElementById('cancel-site-btn')?.addEventListener('click', () => closeModal());
+
+            // Toggle WP admin password visibility
+            document.getElementById('toggle-wp-pass')?.addEventListener('click', () => {
+                const passInput = document.getElementById('wp-admin-pass');
+                const toggleBtn = document.getElementById('toggle-wp-pass');
+                if (passInput.type === 'password') {
+                    passInput.type = 'text';
+                    toggleBtn.innerHTML = `<span class="nav-icon" style="width:18px;height:18px;">${icons.eyeOff}</span>`;
+                } else {
+                    passInput.type = 'password';
+                    toggleBtn.innerHTML = `<span class="nav-icon" style="width:18px;height:18px;">${icons.eye}</span>`;
+                }
+            });
 
             // Toggle visibility of type specifics
             document.getElementById('site-type')?.addEventListener('change', (e) => {
@@ -265,12 +281,17 @@ export async function render(container) {
                     <button class="btn btn-danger" id="confirm-delete-site">Delete Site</button>
                 `);
                 document.getElementById('confirm-delete-site')?.addEventListener('click', async () => {
-                    closeModal();
+                    const delBtn = document.getElementById('confirm-delete-site');
+                    delBtn.disabled = true;
+                    delBtn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Deleting...';
                     try {
                         await sites.delete(id);
+                        closeModal();
                         showToast('Site deleted', 'success');
                         render(container);
                     } catch (err) {
+                        delBtn.disabled = false;
+                        delBtn.textContent = 'Delete Site';
                         showToast(err.message, 'error');
                     }
                 });

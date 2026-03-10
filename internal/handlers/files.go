@@ -257,13 +257,20 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	// Stale DBs may retain password auth from previous broken init sequences.
 	exec.Command("sudo", "rm", "-f", dbPath).Run()
 
-	// Initialize fresh database and configure noauth.
-	// Using space-separated --auth.method noauth (not =) for compatibility across FB versions.
+	// Initialize fresh database, create a default user, and configure noauth.
+	// noauth still requires at least one user record (ID 1) to auto-login as.
 	if out, err := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser", "config", "init",
 		"--database", dbPath,
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser config init failed for site %d: %v: %s", siteID, err, string(out))
+	}
+	if out, err := exec.Command("sudo", "-u", sysUser,
+		"/usr/local/bin/filebrowser", "users", "add", "admin", "--password", "admin",
+		"--perm.admin",
+		"--database", dbPath,
+	).CombinedOutput(); err != nil {
+		log.Printf("File Browser users add failed for site %d: %v: %s", siteID, err, string(out))
 	}
 	if out, err := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser", "config", "set",
