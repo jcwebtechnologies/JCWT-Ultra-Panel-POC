@@ -7,7 +7,10 @@ export async function render(container) {
     container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
 
     try {
-        const templates = await emailTemplates.list();
+        const [templates, layout] = await Promise.all([
+            emailTemplates.list(),
+            emailTemplates.getLayout()
+        ]);
         const list = Array.isArray(templates) ? templates : [];
 
         container.innerHTML = `
@@ -58,7 +61,27 @@ export async function render(container) {
                     </table>
                 </div>
             </div>
-        `}`;
+        `}
+
+        <div style="margin-top:var(--space-6);">
+            <h3 style="margin-bottom:var(--space-3);">Email Header & Footer</h3>
+            <p style="color:var(--text-secondary);margin-bottom:var(--space-4);font-size:var(--font-size-sm);">Custom HTML for the header and footer that wraps all email templates. Leave empty to use the default layout.</p>
+            <div class="card" style="padding:var(--space-5);">
+                <form id="layout-form">
+                    <div class="form-group">
+                        <label class="form-label">Header HTML</label>
+                        <textarea class="form-input mono" id="layout-header" rows="8" style="font-size:var(--font-size-xs);line-height:1.5;" placeholder="Leave empty for default header (panel name on purple bar)">${escapeHtml(layout.email_header_html || '')}</textarea>
+                        <small style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Inline-styled HTML that appears above the email body inside the email table layout.</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Footer HTML</label>
+                        <textarea class="form-input mono" id="layout-footer" rows="6" style="font-size:var(--font-size-xs);line-height:1.5;" placeholder="Leave empty for default footer (© year panel name)">${escapeHtml(layout.email_footer_html || '')}</textarea>
+                        <small style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Inline-styled HTML that appears below the email body. Use inline styles only — email clients strip &lt;style&gt; blocks.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="save-layout-btn">Save Layout</button>
+                </form>
+            </div>
+        </div>`;
 
         // Bind edit buttons
         container.querySelectorAll('.edit-template-btn').forEach(btn => {
@@ -66,6 +89,24 @@ export async function render(container) {
                 const id = parseInt(btn.dataset.id);
                 await showEditModal(id, () => render(container));
             });
+        });
+
+        // Layout form
+        container.querySelector('#layout-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = container.querySelector('#save-layout-btn');
+            const headerHTML = container.querySelector('#layout-header').value;
+            const footerHTML = container.querySelector('#layout-footer').value;
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            try {
+                await emailTemplates.updateLayout({ email_header_html: headerHTML, email_footer_html: footerHTML });
+                showToast('Email layout updated', 'success');
+            } catch (err) {
+                showToast(err.message || 'Failed to update layout', 'error');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Save Layout';
         });
 
     } catch (err) {
@@ -91,10 +132,10 @@ async function showEditModal(templateId, onSave) {
                 <div class="form-group">
                     <label class="form-label">Body Content (HTML)</label>
                     <textarea class="form-input mono" id="et-body" rows="14" style="font-size:var(--font-size-xs);line-height:1.5;">${escapeHtml(tmpl.body_content)}</textarea>
-                    <small style="color:var(--text-tertiary);font-size:var(--font-size-xs);">HTML content inside the email body. A common header and footer are added automatically.</small>
+                    <small style="color:var(--text-tertiary);font-size:var(--font-size-xs);">HTML content inside the email body. The header and footer configured below are added automatically.</small>
                 </div>
                 <div class="form-group" style="display:flex;align-items:center;gap:var(--space-2);">
-                    <label class="toggle-switch">
+                    <label class="toggle">
                         <input type="checkbox" id="et-enabled" ${tmpl.enabled ? 'checked' : ''}>
                         <span class="toggle-slider"></span>
                     </label>

@@ -68,7 +68,14 @@ func (s *Sender) SendTemplatedEmail(slug string, to string, vars map[string]stri
 	if panelName == "" {
 		panelName = "JCWT Ultra Panel"
 	}
-	htmlBody := wrapWithLayout(renderedBody, panelName)
+
+	// Load custom email layout from DB (if configured)
+	var customHeader, customFooter string
+	if layout, err := s.DB.GetEmailLayout(); err == nil {
+		customHeader, _ = layout["email_header_html"].(string)
+		customFooter, _ = layout["email_footer_html"].(string)
+	}
+	htmlBody := wrapWithLayout(renderedBody, panelName, customHeader, customFooter)
 
 	// Build email message
 	from := fromEmail
@@ -106,7 +113,7 @@ func renderTemplate(tmplStr string, vars map[string]string) string {
 	return buf.String()
 }
 
-func wrapWithLayout(bodyContent, panelName string) string {
+func wrapWithLayout(bodyContent, panelName, customHeader, customFooter string) string {
 	year := time.Now().Format("2006")
 	var sb strings.Builder
 	sb.WriteString(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>`)
@@ -115,20 +122,32 @@ func wrapWithLayout(bodyContent, panelName string) string {
 	sb.WriteString(`<tr><td align="center">`)
 	sb.WriteString(`<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">`)
 
-	// Header
-	sb.WriteString(`<tr><td style="background:#6366f1;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;">`)
-	sb.WriteString(fmt.Sprintf(`<h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">%s</h1>`, panelName))
-	sb.WriteString(`</td></tr>`)
+	// Header — use custom if provided, otherwise default
+	if customHeader != "" {
+		sb.WriteString(`<tr><td style="border-radius:8px 8px 0 0;">`)
+		sb.WriteString(customHeader)
+		sb.WriteString(`</td></tr>`)
+	} else {
+		sb.WriteString(`<tr><td style="background:#6366f1;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;">`)
+		sb.WriteString(fmt.Sprintf(`<h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">%s</h1>`, panelName))
+		sb.WriteString(`</td></tr>`)
+	}
 
 	// Body
 	sb.WriteString(`<tr><td style="background:#ffffff;padding:32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">`)
 	sb.WriteString(bodyContent)
 	sb.WriteString(`</td></tr>`)
 
-	// Footer
-	sb.WriteString(`<tr><td style="background:#f9fafb;padding:20px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;text-align:center;">`)
-	sb.WriteString(fmt.Sprintf(`<p style="margin:0;color:#9ca3af;font-size:12px;">&copy; %s %s &mdash; This is an automated message.</p>`, year, panelName))
-	sb.WriteString(`</td></tr>`)
+	// Footer — use custom if provided, otherwise default
+	if customFooter != "" {
+		sb.WriteString(`<tr><td style="border-radius:0 0 8px 8px;">`)
+		sb.WriteString(customFooter)
+		sb.WriteString(`</td></tr>`)
+	} else {
+		sb.WriteString(`<tr><td style="background:#f9fafb;padding:20px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;text-align:center;">`)
+		sb.WriteString(fmt.Sprintf(`<p style="margin:0;color:#9ca3af;font-size:12px;">&copy; %s %s &mdash; This is an automated message.</p>`, year, panelName))
+		sb.WriteString(`</td></tr>`)
+	}
 
 	sb.WriteString(`</table></td></tr></table></body></html>`)
 	return sb.String()

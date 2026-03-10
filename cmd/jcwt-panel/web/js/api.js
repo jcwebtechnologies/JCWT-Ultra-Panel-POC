@@ -216,6 +216,8 @@ export const emailTemplates = {
     list: () => request('/api/email-templates'),
     get: (id) => request(`/api/email-templates?id=${id}`),
     update: (data) => request('/api/email-templates', { method: 'PUT', body: JSON.stringify(data) }),
+    getLayout: () => request('/api/email-templates?action=layout'),
+    updateLayout: (data) => request('/api/email-templates?action=layout', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // Disk Usage

@@ -1787,7 +1787,8 @@ async function renderLogs(container, site, siteId) {
 async function renderDiskUsage(container, site, siteId) {
     container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
 
-    let sortMode = 'size'; // 'size' or 'name'
+    let sortMode = 'size';
+    let refreshCooldown = false;
 
     async function load() {
         try {
@@ -1818,13 +1819,33 @@ async function renderDiskUsage(container, site, siteId) {
                 </div>
             </div>`;
 
-            // Sort buttons
             container.querySelector('#sort-name')?.addEventListener('click', () => { sortMode = 'name'; load(); });
             container.querySelector('#sort-size')?.addEventListener('click', () => { sortMode = 'size'; load(); });
-            container.querySelector('#refresh-du')?.addEventListener('click', () => load());
+            container.querySelector('#refresh-du')?.addEventListener('click', () => {
+                if (refreshCooldown) { showToast('Please wait before refreshing again', 'warning'); return; }
+                refreshCooldown = true;
+                showToast('Refreshing disk usage...', 'info');
+                load().then(() => setTimeout(() => { refreshCooldown = false; }, 10000));
+            });
 
-            // Expand/collapse toggles
-            bindTreeToggles(container);
+            // Event delegation for tree expand/collapse
+            const duTree = container.querySelector('#du-tree');
+            if (duTree) {
+                duTree.addEventListener('click', (e) => {
+                    const row = e.target.closest('.du-row[data-has-children="true"]');
+                    if (!row) return;
+                    e.stopPropagation();
+                    const node = row.parentElement;
+                    if (!node) return;
+                    const children = node.querySelector('.du-children');
+                    const toggle = row.querySelector('.du-toggle');
+                    if (children) {
+                        const isHidden = children.style.display === 'none';
+                        children.style.display = isHidden ? '' : 'none';
+                        if (toggle) toggle.style.transform = isHidden ? 'rotate(90deg)' : '';
+                    }
+                });
+            }
 
         } catch (err) {
             container.innerHTML = `<div class="card"><div style="padding:var(--space-4);color:var(--status-error);">Failed to load disk usage: ${escapeHtml(err.message)}</div></div>`;
@@ -1845,7 +1866,7 @@ function renderTreeHTML(children, depth, sortMode) {
     return sorted.map(node => {
         const hasChildren = node.children && node.children.length > 0;
         const indent = depth * 24;
-        const collapsed = depth > 0; // Collapse depth > 0 by default
+        const collapsed = depth > 0;
         const chevron = hasChildren
             ? `<span class="du-toggle" style="cursor:pointer;display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;transition:transform 0.15s;${collapsed ? '' : 'transform:rotate(90deg);'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></span>`
             : `<span style="display:inline-block;width:18px;"></span>`;
@@ -1864,19 +1885,4 @@ function renderTreeHTML(children, depth, sortMode) {
                 <div class="du-children" style="${collapsed ? 'display:none;' : ''}">${childrenHTML}</div>
             </div>`;
     }).join('');
-}
-
-function bindTreeToggles(container) {
-    container.querySelectorAll('.du-row[data-has-children="true"]').forEach(row => {
-        row.addEventListener('click', () => {
-            const node = row.closest('.du-node');
-            const children = node.querySelector(':scope > .du-children');
-            const toggle = row.querySelector('.du-toggle');
-            if (children) {
-                const isHidden = children.style.display === 'none';
-                children.style.display = isHidden ? '' : 'none';
-                if (toggle) toggle.style.transform = isHidden ? 'rotate(90deg)' : '';
-            }
-        });
-    });
 }

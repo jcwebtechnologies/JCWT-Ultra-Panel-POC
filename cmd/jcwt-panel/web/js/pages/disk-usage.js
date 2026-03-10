@@ -6,6 +6,8 @@ export async function render(container) {
     document.getElementById('page-title').textContent = 'Site Disk Usage';
     container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
 
+    let refreshCooldown = false;
+
     async function load() {
         try {
             const sites = await diskUsage.allSites();
@@ -48,7 +50,7 @@ export async function render(container) {
                                 ${list.map(s => `
                                 <tr>
                                     <td>
-                                        <a href="#/sites/${s.id}" style="color:var(--accent-primary);text-decoration:none;font-weight:600;">${escapeHtml(s.domain)}</a>
+                                        <a href="#/sites/${encodeURIComponent(s.token)}" style="color:var(--accent-primary);text-decoration:none;font-weight:600;">${escapeHtml(s.domain)}</a>
                                     </td>
                                     <td><code style="font-size:var(--font-size-xs);">${escapeHtml(s.system_user)}</code></td>
                                     <td style="text-align:right;font-weight:600;" class="mono">${escapeHtml(s.total)}</td>
@@ -69,8 +71,13 @@ export async function render(container) {
                 </div>
             `}`;
 
-            // Refresh button
-            container.querySelector('#refresh-all-du')?.addEventListener('click', () => load());
+            // Refresh button with rate limiting
+            container.querySelector('#refresh-all-du')?.addEventListener('click', () => {
+                if (refreshCooldown) { showToast('Please wait before refreshing again', 'warning'); return; }
+                refreshCooldown = true;
+                showToast('Refreshing disk usage...', 'info');
+                load().then(() => setTimeout(() => { refreshCooldown = false; }, 10000));
+            });
 
             // Cleanup tmp buttons
             container.querySelectorAll('.cleanup-tmp-btn').forEach(btn => {

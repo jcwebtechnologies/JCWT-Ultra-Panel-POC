@@ -266,7 +266,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		log.Printf("File Browser config init failed for site %d: %v: %s", siteID, err, string(out))
 	}
 	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "users", "add", "admin", "--password", "admin",
+		"/usr/local/bin/filebrowser", "users", "add", "admin", "admin",
 		"--perm.admin",
 		"--database", dbPath,
 	).CombinedOutput(); err != nil {
@@ -287,6 +287,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"--port", strconv.Itoa(port),
 		"--baseURL", fmt.Sprintf("/fb/%d", siteID),
 		"--database", dbPath,
+		"--auth.method", "noauth",
 	)
 
 	// Capture stderr for debugging

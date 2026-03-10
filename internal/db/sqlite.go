@@ -112,6 +112,10 @@ func Open(dataDir string) (*DB, error) {
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	)`)
 
+	// Email layout columns on panel_settings
+	conn.Exec("ALTER TABLE panel_settings ADD COLUMN email_header_html TEXT DEFAULT ''")
+	conn.Exec("ALTER TABLE panel_settings ADD COLUMN email_footer_html TEXT DEFAULT ''")
+
 	// Seed default email templates
 	conn.Exec(`INSERT OR IGNORE INTO email_templates (slug, name, description, subject, body_content) VALUES
 		('wordpress_site_created', 'WordPress Site Created', 'Sent to the WordPress admin email when a new WordPress site is created.',
@@ -970,6 +974,30 @@ func (d *DB) UpdateEmailTemplate(id int64, subject, bodyContent string, enabled 
 	_, err := d.Conn.Exec(
 		"UPDATE email_templates SET subject=?, body_content=?, enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
 		subject, bodyContent, en, id,
+	)
+	return err
+}
+
+// --- Email Layout queries ---
+
+func (d *DB) GetEmailLayout() (map[string]interface{}, error) {
+	var headerHTML, footerHTML string
+	err := d.Conn.QueryRow(
+		"SELECT COALESCE(email_header_html,''), COALESCE(email_footer_html,'') FROM panel_settings WHERE id = 1",
+	).Scan(&headerHTML, &footerHTML)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"email_header_html": headerHTML,
+		"email_footer_html": footerHTML,
+	}, nil
+}
+
+func (d *DB) UpdateEmailLayout(headerHTML, footerHTML string) error {
+	_, err := d.Conn.Exec(
+		"UPDATE panel_settings SET email_header_html=?, email_footer_html=? WHERE id = 1",
+		headerHTML, footerHTML,
 	)
 	return err
 }

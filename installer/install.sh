@@ -375,6 +375,10 @@ PMANGINX
         log_ok "PHP ${BOLD}${PHP_FULL_VER}${NC} installed with ${EXT_COUNT} extensions"
     done
 
+    # Reload systemd units after PHP package installs to prevent
+    # "unit file changed on disk" warnings during trigger processing
+    systemctl daemon-reload 2>/dev/null || true
+
     # PHP 8.5 — try but don't fail (some extensions may not exist yet)
     if apt-cache show php8.5-fpm > /dev/null 2>&1; then
         log_info "Installing PHP ${BOLD}8.5${NC} with extensions..."
@@ -1066,6 +1070,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/curl *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/find *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tail *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/sed *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test *

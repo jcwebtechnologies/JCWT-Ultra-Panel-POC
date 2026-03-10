@@ -14,11 +14,20 @@ type EmailTemplatesHandler struct {
 
 func (h *EmailTemplatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	action := r.URL.Query().Get("action")
 	switch r.Method {
 	case "GET":
-		h.list(w, r)
+		if action == "layout" {
+			h.getLayout(w, r)
+		} else {
+			h.list(w, r)
+		}
 	case "PUT":
-		h.update(w, r)
+		if action == "layout" {
+			h.updateLayout(w, r)
+		} else {
+			h.update(w, r)
+		}
 	default:
 		http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	}
@@ -83,5 +92,38 @@ func (h *EmailTemplatesHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	jsonSuccess(w, map[string]interface{}{"updated": true})
+}
+
+func (h *EmailTemplatesHandler) getLayout(w http.ResponseWriter, r *http.Request) {
+	layout, err := h.DB.GetEmailLayout()
+	if err != nil {
+		jsonError(w, "failed to load email layout", http.StatusInternalServerError)
+		return
+	}
+	jsonSuccess(w, layout)
+}
+
+func (h *EmailTemplatesHandler) updateLayout(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		HeaderHTML string `json:"email_header_html"`
+		FooterHTML string `json:"email_footer_html"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(req.HeaderHTML) > 50000 {
+		jsonError(w, "header HTML too long (max 50000 characters)", http.StatusBadRequest)
+		return
+	}
+	if len(req.FooterHTML) > 50000 {
+		jsonError(w, "footer HTML too long (max 50000 characters)", http.StatusBadRequest)
+		return
+	}
+	if err := h.DB.UpdateEmailLayout(req.HeaderHTML, req.FooterHTML); err != nil {
+		jsonError(w, "failed to update email layout", http.StatusInternalServerError)
+		return
+	}
 	jsonSuccess(w, map[string]interface{}{"updated": true})
 }

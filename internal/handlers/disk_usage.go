@@ -100,6 +100,7 @@ func (h *DiskUsageHandler) allSites(w http.ResponseWriter, r *http.Request) {
 
 	type SiteUsage struct {
 		ID         int64  `json:"id"`
+		Token      string `json:"token"`
 		Domain     string `json:"domain"`
 		SystemUser string `json:"system_user"`
 		HomeDir    string `json:"home_dir"`
@@ -114,12 +115,14 @@ func (h *DiskUsageHandler) allSites(w http.ResponseWriter, r *http.Request) {
 	var results []SiteUsage
 	for _, s := range sites {
 		id, _ := s["id"].(int64)
+		token, _ := s["token"].(string)
 		domain, _ := s["domain"].(string)
 		sysUser, _ := s["system_user"].(string)
 		homeDir := filepath.Join(h.Cfg.WebRootBase, sysUser)
 
 		usage := SiteUsage{
 			ID:         id,
+			Token:      token,
 			Domain:     domain,
 			SystemUser: sysUser,
 			HomeDir:    homeDir,
@@ -191,9 +194,17 @@ func (h *DiskUsageHandler) cleanupTmp(w http.ResponseWriter, r *http.Request) {
 	sysUser, _ := site["system_user"].(string)
 	tmpDir := filepath.Join(h.Cfg.WebRootBase, sysUser, "tmp")
 
-	// Clean contents of tmp directory but keep the directory itself
-	// Use find to delete files and subdirectories within tmp
-	cmd := exec.Command("sudo", "find", tmpDir, "-mindepth", "1", "-delete")
+	// Validate the tmp directory is inside WebRootBase before touching it
+	absTmp, _ := filepath.Abs(tmpDir)
+	absBase, _ := filepath.Abs(h.Cfg.WebRootBase)
+	if !strings.HasPrefix(absTmp, absBase+string(filepath.Separator)) {
+		jsonError(w, "invalid tmp path", http.StatusBadRequest)
+		return
+	}
+
+	// Safely remove contents of tmp directory while keeping the directory itself.
+	// Uses find -mindepth 1 -maxdepth 5 to prevent accidental traverse beyond expected depth.
+	cmd := exec.Command("sudo", "find", tmpDir, "-mindepth", "1", "-maxdepth", "5", "-delete")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		jsonError(w, fmt.Sprintf("cleanup failed: %s", strings.TrimSpace(string(output))), http.StatusInternalServerError)
 		return

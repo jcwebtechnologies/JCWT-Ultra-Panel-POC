@@ -78,7 +78,9 @@ CREATE TABLE IF NOT EXISTS panel_settings (
     allow_signup INTEGER DEFAULT 0,
     recaptcha_site_key TEXT DEFAULT '',
     recaptcha_secret_key TEXT DEFAULT '',
-    timezone TEXT DEFAULT 'UTC'
+    timezone TEXT DEFAULT 'UTC',
+    email_header_html TEXT DEFAULT '',
+    email_footer_html TEXT DEFAULT ''
 );
 
 -- Ensure there is always one row in panel_settings
