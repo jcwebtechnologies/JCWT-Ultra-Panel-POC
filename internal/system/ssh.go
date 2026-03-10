@@ -116,17 +116,29 @@ func GetSSHFingerprint(pubKey string) (string, error) {
 	return strings.TrimSpace(string(fpOut)), nil
 }
 
+// EnsureSSHDir creates the .ssh directory for a user if it doesn't exist
+func EnsureSSHDir(username, homeDir string) error {
+	if !safeDomainRegex.MatchString(username) {
+		return fmt.Errorf("invalid username")
+	}
+	sshDir := filepath.Join(homeDir, ".ssh")
+	exec.Command("sudo", "mkdir", "-p", sshDir).Run()
+	exec.Command("sudo", "chmod", "700", sshDir).Run()
+	exec.Command("sudo", "chown", username+":"+username, sshDir).Run()
+	return nil
+}
+
 // SyncAuthorizedKeys writes all authorized public keys to the user's ~/.ssh/authorized_keys
 func SyncAuthorizedKeys(username, homeDir string, publicKeys []string) error {
 	if !safeDomainRegex.MatchString(username) {
 		return fmt.Errorf("invalid username")
 	}
 
-	sshDir := filepath.Join(homeDir, ".ssh")
-	exec.Command("sudo", "mkdir", "-p", sshDir).Run()
-	exec.Command("sudo", "chmod", "700", sshDir).Run()
-	exec.Command("sudo", "chown", username+":"+username, sshDir).Run()
+	if err := EnsureSSHDir(username, homeDir); err != nil {
+		return err
+	}
 
+	sshDir := filepath.Join(homeDir, ".ssh")
 	authKeysPath := filepath.Join(sshDir, "authorized_keys")
 	content := strings.Join(publicKeys, "\n")
 	if len(publicKeys) > 0 {

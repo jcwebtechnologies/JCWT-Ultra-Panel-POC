@@ -72,7 +72,7 @@ export async function render(container) {
 
         // Bind add site
         document.getElementById('add-site-btn')?.addEventListener('click', () => {
-            const versionOptions = versions.map(v => `<option value="${v}">PHP ${v}</option>`).join('');
+            const versionOptions = versions.map(v => `<option value="${v}"${v === '8.4' ? ' selected' : ''}>PHP ${v}</option>`).join('');
             showModal('Add New Site', `
                 <form id="add-site-form" autocomplete="off">
                     <div class="form-group">

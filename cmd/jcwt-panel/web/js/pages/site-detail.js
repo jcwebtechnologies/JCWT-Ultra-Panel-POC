@@ -152,7 +152,7 @@ export async function render(container, siteToken, section) {
                             <div style="font-weight: 600; margin-bottom: var(--space-1);">Delete Site</div>
                             <div style="font-size: var(--font-size-sm); color: var(--text-secondary);">Permanently delete this site, all files, databases, backups and system user. This cannot be undone.</div>
                         </div>
-                        <button class="btn btn-danger" id="danger-delete-site">Delete this site</button>
+                        <button class="btn btn-danger" id="danger-delete-site"><span class="nav-icon" style="width:16px;height:16px;">${icons.trash}</span> Delete this site</button>
                     </div>
                 </div>
             </div>
@@ -187,17 +187,25 @@ export async function render(container, siteToken, section) {
                     </div>
                 `, `
                     <button class="btn btn-secondary" id="cancel-delete-site">Cancel</button>
-                    <button class="btn btn-danger" id="confirm-delete-site" disabled>Delete Site</button>
+                    <button class="btn btn-danger" id="confirm-delete-site">Delete Site</button>
                 `, { persistent: true });
                 // Enable delete button only when domain matches
                 const confirmInput = document.getElementById('confirm-domain-input');
                 const confirmBtn = document.getElementById('confirm-delete-site');
                 confirmInput?.addEventListener('input', () => {
                     confirmBtn.disabled = confirmInput.value.trim() !== site.domain;
+                    if (confirmInput.value.trim() === site.domain) {
+                        confirmInput.style.borderColor = '';
+                    }
                 });
                 document.getElementById('cancel-delete-site')?.addEventListener('click', () => closeModal());
                 confirmBtn?.addEventListener('click', async () => {
-                    if (confirmInput.value.trim() !== site.domain) return;
+                    if (confirmInput.value.trim() !== site.domain) {
+                        confirmInput.style.borderColor = 'var(--status-error)';
+                        confirmInput.focus();
+                        showToast(confirmInput.value.trim() === '' ? 'Please type the domain name to confirm deletion' : 'Domain name does not match', 'error');
+                        return;
+                    }
                     confirmBtn.disabled = true;
                     confirmBtn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Deleting...';
                     document.getElementById('cancel-delete-site').disabled = true;
@@ -1419,8 +1427,8 @@ async function renderSSHAccess(container, site, siteId) {
                 return '<p style="color: var(--text-tertiary); font-size: var(--font-size-sm);">No SSH keys yet. Generate or upload a key pair to get started.</p>';
             }
             return `
-            <div class="table-responsive">
-                <table class="table">
+            <div class="table-container">
+                <table class="data-table responsive-cards">
                     <thead>
                         <tr>
                             <th>Name</th>
@@ -1433,12 +1441,12 @@ async function renderSSHAccess(container, site, siteId) {
                     <tbody>
                         ${keyList.map(k => `
                         <tr>
-                            <td><strong>${escapeHtml(k.name)}</strong></td>
-                            <td><span class="mono" style="font-size:var(--font-size-xs);">${escapeHtml(k.key_type.toUpperCase())} ${k.bits}</span></td>
-                            <td><span class="mono" style="font-size:var(--font-size-xs); word-break:break-all;">${escapeHtml(k.fingerprint).substring(0, 47)}</span></td>
-                            <td>${k.authorized ? '<span style="color:var(--status-success);font-weight:600;">Yes</span>' : '<span style="color:var(--text-tertiary);">No</span>'}</td>
-                            <td style="text-align:right;">
-                                <div style="display:flex;gap:var(--space-1);justify-content:flex-end;flex-wrap:wrap;">
+                            <td data-label="Name"><strong>${escapeHtml(k.name)}</strong></td>
+                            <td data-label="Type"><span class="mono" style="font-size:var(--font-size-xs);">${escapeHtml(k.key_type.toUpperCase())} ${k.bits}</span></td>
+                            <td data-label="Fingerprint"><span class="mono" style="font-size:var(--font-size-xs); word-break:break-all;">${escapeHtml(k.fingerprint).substring(0, 47)}</span></td>
+                            <td data-label="Authorized">${k.authorized ? '<span style="color:var(--status-success);font-weight:600;">Yes</span>' : '<span style="color:var(--text-tertiary);">No</span>'}</td>
+                            <td data-label="Actions" style="text-align:right;">
+                                <div class="table-actions" style="display:flex;gap:var(--space-1);justify-content:flex-end;flex-wrap:wrap;">
                                     <button class="btn btn-sm btn-secondary ssh-view-pub" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="View Public Key"><span class="nav-icon" style="width:14px;height:14px;">${icons.eye}</span></button>
                                     ${k.has_private_key ? `<button class="btn btn-sm btn-secondary ssh-view-priv" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="View Private Key"><span class="nav-icon" style="width:14px;height:14px;">${icons.key}</span></button>` : ''}
                                     ${k.authorized
@@ -1697,7 +1705,7 @@ async function renderSSHAccess(container, site, siteId) {
                         `, `
                             <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Close</button>
                             <button class="btn btn-primary ssh-copy-key">Copy</button>
-                            <a class="btn btn-secondary ssh-dl-key" download="${escapeHtml(data.name)}">Download</a>
+                            <a class="btn btn-secondary ssh-dl-key" download="${escapeHtml(data.name)}.pem">Download</a>
                         `);
                         const blob = new Blob([data.content], { type: 'text/plain' });
                         document.querySelector('.ssh-dl-key').href = URL.createObjectURL(blob);

@@ -188,7 +188,8 @@ func (h *SSHHandler) generateKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify site exists
-	if _, err := h.DB.GetSite(req.SiteID); err != nil {
+	site, err := h.DB.GetSite(req.SiteID)
+	if err != nil {
 		jsonError(w, "site not found", http.StatusNotFound)
 		return
 	}
@@ -204,6 +205,11 @@ func (h *SSHHandler) generateKey(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "failed to save key", http.StatusInternalServerError)
 		return
 	}
+
+	// Ensure .ssh directory exists for the site user
+	sysUser := site["system_user"].(string)
+	homeDir := strings.TrimSuffix(site["web_root"].(string), "/htdocs")
+	system.EnsureSSHDir(sysUser, homeDir)
 
 	log.Printf("SSH key generated: %s (%s %d) for site %d", req.Name, req.KeyType, req.Bits, req.SiteID)
 	jsonSuccess(w, map[string]interface{}{
@@ -243,7 +249,8 @@ func (h *SSHHandler) uploadKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify site exists
-	if _, err := h.DB.GetSite(req.SiteID); err != nil {
+	site, err := h.DB.GetSite(req.SiteID)
+	if err != nil {
 		jsonError(w, "site not found", http.StatusNotFound)
 		return
 	}
@@ -260,6 +267,11 @@ func (h *SSHHandler) uploadKey(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "failed to save key", http.StatusInternalServerError)
 		return
 	}
+
+	// Ensure .ssh directory exists for the site user
+	sysUser := site["system_user"].(string)
+	homeDir := strings.TrimSuffix(site["web_root"].(string), "/htdocs")
+	system.EnsureSSHDir(sysUser, homeDir)
 
 	log.Printf("SSH key uploaded: %s for site %d", req.Name, req.SiteID)
 	jsonSuccess(w, map[string]interface{}{
