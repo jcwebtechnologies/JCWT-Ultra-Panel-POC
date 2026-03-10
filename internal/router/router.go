@@ -168,6 +168,16 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		middleware.RequireRole("admin")(&handlers.FirewallHandler{DB: database, Cfg: cfg}),
 	)))
 
+	// Email Templates (admin only)
+	mux.Handle("/api/email-templates", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.EmailTemplatesHandler{DB: database}),
+	)))
+
+	// Disk Usage (admin only)
+	mux.Handle("/api/disk-usage", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.DiskUsageHandler{DB: database, Cfg: cfg}),
+	)))
+
 	// Serve uploaded files
 	uploadsDir := filepath.Join(cfg.DataDir, "uploads")
 	os.MkdirAll(uploadsDir, 0755)

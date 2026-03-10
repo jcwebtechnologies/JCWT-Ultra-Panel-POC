@@ -1,5 +1,5 @@
 // JCWT Ultra Panel — Site Detail Page (SSL, PHP Settings, Cron, Files)
-import { sites, phpVersions, ssl, phpSettings, cron, files, databases, dbUsers } from '../api.js';
+import { sites, phpVersions, ssl, phpSettings, cron, files, databases, dbUsers, diskUsage } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes, showConfirm } from '../app.js';
 import { request } from '../api.js';
 
@@ -105,6 +105,10 @@ export async function render(container, siteToken, section) {
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Monitoring</div>
                 <div class="site-cards-grid">
+                    <div class="site-card" data-section="disk-usage">
+                        <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.database}</span></div>
+                        <div class="site-card-title">Disk Usage</div>
+                    </div>
                     <div class="site-card" data-section="logs">
                         <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.search}</span></div>
                         <div class="site-card-title">Logs</div>
@@ -138,6 +142,7 @@ export async function render(container, siteToken, section) {
                     case 'backups': renderBackups(sectionContent, site, siteId); break;
                     case 'phpmyadmin': renderPhpMyAdmin(sectionContent, siteId); break;
                     case 'logs': renderLogs(sectionContent, site, siteId); break;
+                    case 'disk-usage': renderDiskUsage(sectionContent, site, siteId); break;
                 }
             }
         }
@@ -1776,4 +1781,102 @@ async function renderLogs(container, site, siteId) {
     }
 
     await loadLog();
+}
+
+// ---- Disk Usage ----
+async function renderDiskUsage(container, site, siteId) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+
+    let sortMode = 'size'; // 'size' or 'name'
+
+    async function load() {
+        try {
+            const data = await diskUsage.siteTree(siteId);
+            const tree = data.tree;
+            const total = data.total || 'N/A';
+
+            container.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Disk Usage</h3>
+                    <div style="display:flex;gap:var(--space-2);align-items:center;">
+                        <div class="btn-group" style="display:flex;border:1px solid var(--border-primary);border-radius:var(--radius-md);overflow:hidden;">
+                            <button class="btn btn-sm ${sortMode === 'name' ? 'btn-primary' : 'btn-ghost'}" id="sort-name" style="border-radius:0;border:none;padding:var(--space-1) var(--space-3);">Name</button>
+                            <button class="btn btn-sm ${sortMode === 'size' ? 'btn-primary' : 'btn-ghost'}" id="sort-size" style="border-radius:0;border:none;padding:var(--space-1) var(--space-3);">Size</button>
+                        </div>
+                        <button class="btn btn-sm btn-ghost" id="refresh-du"><span class="nav-icon" style="width:14px;height:14px">${icons.refresh}</span></button>
+                    </div>
+                </div>
+                <div style="padding: 0;">
+                    <div style="padding:var(--space-3) var(--space-4);background:var(--bg-tertiary);border-bottom:1px solid var(--border-primary);display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-weight:600;">Total</span>
+                        <span class="mono" style="font-weight:600;">${escapeHtml(total)}</span>
+                    </div>
+                    <div id="du-tree" style="font-size:var(--font-size-sm);">
+                        ${tree ? renderTreeHTML(tree.children || [], 0, sortMode) : '<div style="padding:var(--space-4);color:var(--text-tertiary);">No data available</div>'}
+                    </div>
+                </div>
+            </div>`;
+
+            // Sort buttons
+            container.querySelector('#sort-name')?.addEventListener('click', () => { sortMode = 'name'; load(); });
+            container.querySelector('#sort-size')?.addEventListener('click', () => { sortMode = 'size'; load(); });
+            container.querySelector('#refresh-du')?.addEventListener('click', () => load());
+
+            // Expand/collapse toggles
+            bindTreeToggles(container);
+
+        } catch (err) {
+            container.innerHTML = `<div class="card"><div style="padding:var(--space-4);color:var(--status-error);">Failed to load disk usage: ${escapeHtml(err.message)}</div></div>`;
+        }
+    }
+
+    await load();
+}
+
+function renderTreeHTML(children, depth, sortMode) {
+    if (!children || children.length === 0) return '';
+
+    const sorted = [...children].sort((a, b) => {
+        if (sortMode === 'size') return b.size - a.size;
+        return a.name.localeCompare(b.name);
+    });
+
+    return sorted.map(node => {
+        const hasChildren = node.children && node.children.length > 0;
+        const indent = depth * 24;
+        const collapsed = depth > 0; // Collapse depth > 0 by default
+        const chevron = hasChildren
+            ? `<span class="du-toggle" style="cursor:pointer;display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;transition:transform 0.15s;${collapsed ? '' : 'transform:rotate(90deg);'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></span>`
+            : `<span style="display:inline-block;width:18px;"></span>`;
+
+        const childrenHTML = hasChildren ? renderTreeHTML(node.children, depth + 1, sortMode) : '';
+
+        return `
+            <div class="du-node" data-depth="${depth}">
+                <div class="du-row" style="display:flex;align-items:center;padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--border-primary);gap:var(--space-1);cursor:${hasChildren ? 'pointer' : 'default'};" data-has-children="${hasChildren}">
+                    <span style="display:inline-block;width:${indent}px;flex-shrink:0;"></span>
+                    ${chevron}
+                    <span class="nav-icon" style="width:16px;height:16px;flex-shrink:0;color:var(--text-tertiary);">${icons.folder}</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(node.name)}</span>
+                    <span class="mono" style="flex-shrink:0;color:var(--text-secondary);font-size:var(--font-size-xs);">${escapeHtml(node.size_str)}</span>
+                </div>
+                <div class="du-children" style="${collapsed ? 'display:none;' : ''}">${childrenHTML}</div>
+            </div>`;
+    }).join('');
+}
+
+function bindTreeToggles(container) {
+    container.querySelectorAll('.du-row[data-has-children="true"]').forEach(row => {
+        row.addEventListener('click', () => {
+            const node = row.closest('.du-node');
+            const children = node.querySelector(':scope > .du-children');
+            const toggle = row.querySelector('.du-toggle');
+            if (children) {
+                const isHidden = children.style.display === 'none';
+                children.style.display = isHidden ? '' : 'none';
+                if (toggle) toggle.style.transform = isHidden ? 'rotate(90deg)' : '';
+            }
+        });
+    });
 }

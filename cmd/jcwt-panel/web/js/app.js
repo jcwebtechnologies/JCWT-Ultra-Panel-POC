@@ -369,6 +369,10 @@ function renderLayout(pageName) {
                     <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
                         <span class="nav-icon">${icons.key}</span> Users
                     </a>` : ''}
+                    ${currentRole === 'admin' ? `
+                    <a href="#/disk-usage" class="nav-item ${pageName === 'disk-usage' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.database}</span> Site Disk Usage
+                    </a>` : ''}
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-title">System</div>
@@ -381,11 +385,11 @@ function renderLayout(pageName) {
                     </a>` : ''}
                     ${currentRole === 'admin' || currentRole === 'manager' ? `
                     <div class="nav-item-group">
-                        <a href="javascript:void(0)" class="nav-item ${['branding-appearance','login-security','backup-config','smtp-settings'].includes(pageName) ? 'active' : ''}" data-has-submenu="true">
+                        <a href="javascript:void(0)" class="nav-item ${['branding-appearance','login-security','backup-config','smtp-settings','email-notifications'].includes(pageName) ? 'active' : ''}" data-has-submenu="true">
                             <span class="nav-icon">${icons.settings}</span> Settings
-                            <svg class="submenu-arrow ${['branding-appearance','login-security','backup-config','smtp-settings'].includes(pageName) ? 'open' : ''}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                            <svg class="submenu-arrow ${['branding-appearance','login-security','backup-config','smtp-settings','email-notifications'].includes(pageName) ? 'open' : ''}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                         </a>
-                        <div class="nav-submenu ${['branding-appearance','login-security','backup-config','smtp-settings'].includes(pageName) ? 'open' : ''}" id="settings-submenu">
+                        <div class="nav-submenu ${['branding-appearance','login-security','backup-config','smtp-settings','email-notifications'].includes(pageName) ? 'open' : ''}" id="settings-submenu">
                             <a href="#/branding-appearance" class="nav-item nav-subitem ${pageName === 'branding-appearance' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Branding & Appearance
                             </a>
@@ -397,6 +401,9 @@ function renderLayout(pageName) {
                             </a>
                             <a href="#/smtp-settings" class="nav-item nav-subitem ${pageName === 'smtp-settings' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> SMTP
+                            </a>
+                            <a href="#/email-notifications" class="nav-item nav-subitem ${pageName === 'email-notifications' ? 'active' : ''}">
+                                <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Email Notifications
                             </a>
                         </div>
                     </div>` : ''}

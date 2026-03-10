@@ -15,6 +15,7 @@ import (
 
 	"github.com/jcwt/ultra-panel/internal/config"
 	"github.com/jcwt/ultra-panel/internal/db"
+	"github.com/jcwt/ultra-panel/internal/email"
 	"github.com/jcwt/ultra-panel/internal/nginx"
 	"github.com/jcwt/ultra-panel/internal/php"
 	"github.com/jcwt/ultra-panel/internal/system"
@@ -280,7 +281,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 
 		poolData := php.PoolData{
 			User: req.SystemUser, PHPVersion: req.PHPVersion, WebRoot: webRoot,
-			HomeDir: filepath.Dir(webRoot),
+			HomeDir:     filepath.Dir(webRoot),
 			MemoryLimit: memoryLimit, MaxExecutionTime: 30, MaxInputTime: 30,
 			MaxInputVars: 1000, PostMaxSize: postMaxSize, UploadMaxFilesize: uploadMaxFilesize,
 		}
@@ -341,6 +342,23 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		log.Printf("Auto SSL for %s failed (site still created): %v", req.Domain, sslErr)
+	}
+
+	// Send WordPress creation email notification
+	if req.SiteType == "wordpress" && req.WPAdminEmail != "" {
+		go func() {
+			sender := &email.Sender{DB: h.DB}
+			vars := map[string]string{
+				"Domain":      req.Domain,
+				"SystemUser":  req.SystemUser,
+				"PHPVersion":  req.PHPVersion,
+				"WPAdminUser": req.WPAdminUser,
+				"SiteTitle":   req.WPSiteTitle,
+			}
+			if err := sender.SendTemplatedEmail("wordpress_site_created", req.WPAdminEmail, vars); err != nil {
+				log.Printf("WordPress creation email to %s failed (non-fatal): %v", req.WPAdminEmail, err)
+			}
+		}()
 	}
 
 	jsonSuccess(w, map[string]interface{}{"id": id, "domain": req.Domain, "web_root": webRoot})
@@ -613,7 +631,7 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	// Create/Update FPM pool if it's currently a PHP/WordPress site
 	if phpTypes[req.SiteType] && (!phpTypes[oldSiteType] || req.PHPVersion != site["php_version"].(string)) {
 		phpSettings, _ := h.DB.GetPHPSettings(req.ID)
-		
+
 		// If getting settings failed (e.g. was html before and didn't have settings), create defaults
 		if phpSettings == nil {
 			h.DB.UpsertPHPSettings(req.ID, "256M", 30, 60, 1000, "64M", "64M", "")
@@ -622,14 +640,14 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 
 		poolData := php.PoolData{
 			User: sysUser, PHPVersion: req.PHPVersion, WebRoot: site["web_root"].(string),
-			HomeDir: filepath.Dir(site["web_root"].(string)),
-			MemoryLimit: phpSettings["memory_limit"].(string),
-			MaxExecutionTime: phpSettings["max_execution_time"].(int),
-			MaxInputTime: phpSettings["max_input_time"].(int),
-			MaxInputVars: phpSettings["max_input_vars"].(int),
-			PostMaxSize: phpSettings["post_max_size"].(string),
+			HomeDir:           filepath.Dir(site["web_root"].(string)),
+			MemoryLimit:       phpSettings["memory_limit"].(string),
+			MaxExecutionTime:  phpSettings["max_execution_time"].(int),
+			MaxInputTime:      phpSettings["max_input_time"].(int),
+			MaxInputVars:      phpSettings["max_input_vars"].(int),
+			PostMaxSize:       phpSettings["post_max_size"].(string),
 			UploadMaxFilesize: phpSettings["upload_max_filesize"].(string),
-			CustomDirectives: phpSettings["custom_directives"].(string),
+			CustomDirectives:  phpSettings["custom_directives"].(string),
 		}
 		php.WritePool(h.Cfg.PHPFPMBaseDir, req.PHPVersion, sysUser, poolData)
 		php.RestartFPM(req.PHPVersion)
@@ -639,11 +657,11 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	accessLog, errorLog := siteLogFlags(site)
 	vhostData := nginx.VHostData{
 		Domain: req.Domain, Aliases: req.Aliases, User: sysUser,
-		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL, 
+		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL,
 		WebRoot: webRoot,
 		SSLType: req.SSLType, SSLCertPath: site["ssl_cert_path"].(string),
 		SSLKeyPath: site["ssl_key_path"].(string),
-		AccessLog: accessLog, ErrorLog: errorLog,
+		AccessLog:  accessLog, ErrorLog: errorLog,
 	}
 
 	// Remove old config if domain changed
@@ -776,10 +794,10 @@ func siteLogFlags(site map[string]interface{}) (accessLog, errorLog bool) {
 
 func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SiteID            int64                    `json:"site_id"`
-		BasicAuthEnabled  bool                     `json:"basic_auth_enabled"`
-		BasicAuthUsers    []map[string]interface{} `json:"basic_auth_users"`
-		DeleteProtection  *bool                    `json:"delete_protection,omitempty"`
+		SiteID           int64                    `json:"site_id"`
+		BasicAuthEnabled bool                     `json:"basic_auth_enabled"`
+		BasicAuthUsers   []map[string]interface{} `json:"basic_auth_users"`
+		DeleteProtection *bool                    `json:"delete_protection,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)

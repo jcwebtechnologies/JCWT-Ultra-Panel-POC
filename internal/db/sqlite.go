@@ -99,6 +99,26 @@ func Open(dataDir string) (*DB, error) {
 		}
 	}
 
+	// Email templates table migration
+	conn.Exec(`CREATE TABLE IF NOT EXISTS email_templates (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		slug TEXT UNIQUE NOT NULL,
+		name TEXT NOT NULL,
+		description TEXT DEFAULT '',
+		subject TEXT NOT NULL DEFAULT '',
+		body_content TEXT NOT NULL DEFAULT '',
+		enabled INTEGER DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+
+	// Seed default email templates
+	conn.Exec(`INSERT OR IGNORE INTO email_templates (slug, name, description, subject, body_content) VALUES
+		('wordpress_site_created', 'WordPress Site Created', 'Sent to the WordPress admin email when a new WordPress site is created.',
+		 'Your WordPress site {{.Domain}} is ready!',
+		 '<h2 style="color:#333;">Your WordPress Site is Ready!</h2><p>Hello,</p><p>Your new WordPress site <strong>{{.Domain}}</strong> has been successfully created and configured.</p><table style="width:100%%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;width:140px;">Site URL</td><td style="padding:8px 12px;border:1px solid #e5e7eb;"><a href="https://{{.Domain}}" style="color:#6366f1;">https://{{.Domain}}</a></td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">WP Admin</td><td style="padding:8px 12px;border:1px solid #e5e7eb;"><a href="https://{{.Domain}}/wp-admin" style="color:#6366f1;">https://{{.Domain}}/wp-admin</a></td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">Admin User</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{.WPAdminUser}}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">System User</td><td style="padding:8px 12px;border:1px solid #e5e7eb;"><code>{{.SystemUser}}</code></td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">PHP Version</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{.PHPVersion}}</td></tr></table><p style="color:#6b7280;font-size:14px;">You can manage your site from the panel at any time.</p>')
+	`)
+
 	return &DB{Conn: conn}, nil
 }
 
@@ -229,7 +249,7 @@ func (d *DB) GetSite(id int64) (map[string]interface{}, error) {
 		"ssl_type": sslType, "ssl_cert_path": certPath, "ssl_key_path": keyPath, "created_at": createdAt,
 		"basic_auth_enabled": basicAuthEnabled, "basic_auth_users": basicAuthUsers,
 		"delete_protection": deleteProtection,
-		"access_log": accessLog, "error_log": errorLog,
+		"access_log":        accessLog, "error_log": errorLog,
 	}, nil
 }
 
@@ -881,5 +901,75 @@ func (d *DB) UpdateFirewallRule(id int64, direction, action, protocol, port, sou
 
 func (d *DB) DeleteFirewallRule(id int64) error {
 	_, err := d.Conn.Exec("DELETE FROM firewall_rules WHERE id = ?", id)
+	return err
+}
+
+// --- Email Template queries ---
+
+func (d *DB) ListEmailTemplates() ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query("SELECT id, slug, name, description, subject, body_content, enabled, created_at, updated_at FROM email_templates ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var templates []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var enabled int
+		var slug, name, description, subject, bodyContent, created, updated string
+		if err := rows.Scan(&id, &slug, &name, &description, &subject, &bodyContent, &enabled, &created, &updated); err != nil {
+			return nil, err
+		}
+		templates = append(templates, map[string]interface{}{
+			"id": id, "slug": slug, "name": name, "description": description,
+			"subject": subject, "body_content": bodyContent, "enabled": enabled == 1,
+			"created_at": created, "updated_at": updated,
+		})
+	}
+	return templates, nil
+}
+
+func (d *DB) GetEmailTemplate(id int64) (map[string]interface{}, error) {
+	var slug, name, description, subject, bodyContent, created, updated string
+	var enabled int
+	err := d.Conn.QueryRow(
+		"SELECT slug, name, description, subject, body_content, enabled, created_at, updated_at FROM email_templates WHERE id = ?", id,
+	).Scan(&slug, &name, &description, &subject, &bodyContent, &enabled, &created, &updated)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"id": id, "slug": slug, "name": name, "description": description,
+		"subject": subject, "body_content": bodyContent, "enabled": enabled == 1,
+		"created_at": created, "updated_at": updated,
+	}, nil
+}
+
+func (d *DB) GetEmailTemplateBySlug(slug string) (map[string]interface{}, error) {
+	var id int64
+	var name, description, subject, bodyContent, created, updated string
+	var enabled int
+	err := d.Conn.QueryRow(
+		"SELECT id, name, description, subject, body_content, enabled, created_at, updated_at FROM email_templates WHERE slug = ?", slug,
+	).Scan(&id, &name, &description, &subject, &bodyContent, &enabled, &created, &updated)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"id": id, "slug": slug, "name": name, "description": description,
+		"subject": subject, "body_content": bodyContent, "enabled": enabled == 1,
+		"created_at": created, "updated_at": updated,
+	}, nil
+}
+
+func (d *DB) UpdateEmailTemplate(id int64, subject, bodyContent string, enabled bool) error {
+	en := 0
+	if enabled {
+		en = 1
+	}
+	_, err := d.Conn.Exec(
+		"UPDATE email_templates SET subject=?, body_content=?, enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+		subject, bodyContent, en, id,
+	)
 	return err
 }

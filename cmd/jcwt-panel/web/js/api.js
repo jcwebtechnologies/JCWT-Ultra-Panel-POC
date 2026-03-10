@@ -210,3 +210,17 @@ export const firewall = {
     delete: (id) => request(`/api/firewall?id=${id}`, { method: 'DELETE' }),
     toggle: (enable) => request('/api/firewall?action=toggle', { method: 'POST', body: JSON.stringify({ enable }) }),
 };
+
+// Email Templates
+export const emailTemplates = {
+    list: () => request('/api/email-templates'),
+    get: (id) => request(`/api/email-templates?id=${id}`),
+    update: (data) => request('/api/email-templates', { method: 'PUT', body: JSON.stringify(data) }),
+};
+
+// Disk Usage
+export const diskUsage = {
+    allSites: () => request('/api/disk-usage'),
+    siteTree: (siteId) => request(`/api/disk-usage?action=site-tree&site_id=${siteId}`),
+    cleanupTmp: (siteId) => request('/api/disk-usage?action=cleanup-tmp', { method: 'POST', body: JSON.stringify({ site_id: siteId }) }),
+};

@@ -606,17 +606,23 @@ configure_nginx() {
     fi
 
     # On re-install: strip duplicate SSL directives from existing vhost files
+    # Clean both sites-available and sites-enabled (in case of non-symlink copies)
     log_info "Cleaning SSL/include directives from existing vhost files..."
-    for VHOST in /etc/nginx/sites-available/*.conf; do
-        [ -f "$VHOST" ] || continue
-        [ "$(basename $VHOST)" = "000-default.conf" ] && continue
-        # Remove per-server SSL directives (now in jcwt-optimization.conf at http{} level)
-        sed -i '/^[[:space:]]*ssl_protocols/d' "$VHOST"
-        sed -i '/^[[:space:]]*ssl_ciphers/d' "$VHOST"
-        sed -i '/^[[:space:]]*ssl_prefer_server_ciphers/d' "$VHOST"
-        sed -i '/^[[:space:]]*ssl_session_cache/d' "$VHOST"
-        # Migrate old phpMyAdmin include to new common snippet
-        sed -i 's|include /etc/nginx/snippets/phpmyadmin\.conf;|include /etc/nginx/snippets/jcwt-server-common.conf;|g' "$VHOST"
+    for VHOST_DIR in /etc/nginx/sites-available /etc/nginx/sites-enabled; do
+        for VHOST in "$VHOST_DIR"/*.conf; do
+            [ -f "$VHOST" ] || continue
+            [ "$(basename "$VHOST")" = "000-default.conf" ] && continue
+            # Remove per-server SSL directives (now in jcwt-optimization.conf at http{} level)
+            sed -i '/^[[:space:]]*ssl_protocols/d' "$VHOST"
+            sed -i '/^[[:space:]]*ssl_ciphers[[:space:]]/d' "$VHOST"
+            sed -i '/^[[:space:]]*ssl_prefer_server_ciphers/d' "$VHOST"
+            sed -i '/^[[:space:]]*ssl_session_cache/d' "$VHOST"
+            sed -i '/^[[:space:]]*ssl_session_timeout/d' "$VHOST"
+            sed -i '/^[[:space:]]*ssl_stapling/d' "$VHOST"
+            sed -i '/^[[:space:]]*ssl_stapling_verify/d' "$VHOST"
+            # Migrate old phpMyAdmin include to new common snippet
+            sed -i 's|include /etc/nginx/snippets/phpmyadmin\.conf;|include /etc/nginx/snippets/jcwt-server-common.conf;|g' "$VHOST"
+        done
     done
     log_ok "Existing vhosts cleaned up"
 
