@@ -12,7 +12,10 @@ export async function render(container) {
 
     const panelName = branding.panel_name || 'JCWT Ultra Panel';
     const panelTagline = branding.panel_tagline || 'IPv6-Native Hosting Control Panel';
-    const logoUrl = branding.logo_url || '';
+    const logoLight = branding.logo_url || '';
+    const logoDark = branding.logo_url_dark || '';
+    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const logoUrl = theme === 'dark' ? (logoDark || logoLight) : (logoLight || logoDark);
     const recaptchaSiteKey = branding.recaptcha_site_key || '';
 
     container.innerHTML = `

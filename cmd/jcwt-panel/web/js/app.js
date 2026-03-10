@@ -345,13 +345,19 @@ function renderLayout(pageName) {
     const theme = document.documentElement.getAttribute('data-theme') || 'dark';
     const brandName = panelSettings?.panel_name || 'JCWT Ultra Panel';
     const tagline = panelSettings?.panel_tagline || 'IPv6-Native Hosting';
+    const logoLight = panelSettings?.logo_url || '';
+    const logoDark = panelSettings?.logo_url_dark || '';
+    const logoUrl = theme === 'dark' ? (logoDark || logoLight) : (logoLight || logoDark);
 
     return `
     <div class="app-layout">
         <div class="sidebar-overlay" id="sidebar-overlay"></div>
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo">J</div>
+                ${logoUrl
+                    ? `<img src="${escapeHtml(logoUrl)}" alt="" class="sidebar-logo-img">`
+                    : `<div class="sidebar-logo">${escapeHtml(brandName.charAt(0))}</div>`
+                }
                 <div class="sidebar-brand">
                     <span class="sidebar-brand-name">${escapeHtml(brandName)}</span>
                     <span class="sidebar-brand-tagline">${escapeHtml(tagline)}</span>

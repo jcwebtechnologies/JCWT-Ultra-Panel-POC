@@ -136,6 +136,7 @@ export const settings = {
     getPublic: () => request('/api/settings/public'),
     update: (data) => request('/api/settings', { method: 'PUT', body: JSON.stringify(data) }),
     uploadLogo: (formData) => request('/api/settings?action=upload-logo', { method: 'POST', body: formData }),
+    uploadLogoDark: (formData) => request('/api/settings?action=upload-logo-dark', { method: 'POST', body: formData }),
     uploadFavicon: (formData) => request('/api/settings?action=upload-favicon', { method: 'POST', body: formData }),
 };
 

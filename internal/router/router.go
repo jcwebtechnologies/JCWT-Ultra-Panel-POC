@@ -128,6 +128,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 			"panel_name":         settings["panel_name"],
 			"panel_tagline":      settings["panel_tagline"],
 			"logo_url":           settings["logo_url"],
+			"logo_url_dark":      settings["logo_url_dark"],
 			"favicon_url":        settings["favicon_url"],
 			"primary_color":      settings["primary_color"],
 			"accent_color":       settings["accent_color"],

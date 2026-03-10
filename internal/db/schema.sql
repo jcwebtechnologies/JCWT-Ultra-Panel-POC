@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS panel_settings (
     panel_name TEXT DEFAULT 'JCWT Ultra Panel',
     panel_tagline TEXT DEFAULT 'Lightweight IPv6-Native Hosting Panel',
     logo_url TEXT DEFAULT '',
+    logo_url_dark TEXT DEFAULT '',
     favicon_url TEXT DEFAULT '',
     primary_color TEXT DEFAULT '#6366f1',
     accent_color TEXT DEFAULT '#818cf8',

@@ -116,6 +116,9 @@ func Open(dataDir string) (*DB, error) {
 	conn.Exec("ALTER TABLE panel_settings ADD COLUMN email_header_html TEXT DEFAULT ''")
 	conn.Exec("ALTER TABLE panel_settings ADD COLUMN email_footer_html TEXT DEFAULT ''")
 
+	// Dark mode logo
+	conn.Exec("ALTER TABLE panel_settings ADD COLUMN logo_url_dark TEXT DEFAULT ''")
+
 	// Seed default email templates
 	conn.Exec(`INSERT OR IGNORE INTO email_templates (slug, name, description, subject, body_content) VALUES
 		('wordpress_site_created', 'WordPress Site Created', 'Sent to the WordPress admin email when a new WordPress site is created.',
@@ -557,30 +560,31 @@ func (d *DB) DeleteCronJob(id int64) error {
 // --- Panel Settings queries ---
 
 func (d *DB) GetPanelSettings() (map[string]interface{}, error) {
-	var name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText string
+	var name, tagline, logoURL, logoURLDark, faviconURL, primaryColor, accentColor, footerText string
 	var recaptchaSiteKey, recaptchaSecretKey, timezone string
 	var sessionTimeout int
 	err := d.Conn.QueryRow(
-		"SELECT panel_name, panel_tagline, logo_url, favicon_url, primary_color, accent_color, footer_text, session_timeout, COALESCE(recaptcha_site_key,''), COALESCE(recaptcha_secret_key,''), COALESCE(timezone,'UTC') FROM panel_settings WHERE id = 1",
-	).Scan(&name, &tagline, &logoURL, &faviconURL, &primaryColor, &accentColor, &footerText, &sessionTimeout, &recaptchaSiteKey, &recaptchaSecretKey, &timezone)
+		"SELECT panel_name, panel_tagline, logo_url, COALESCE(logo_url_dark,''), favicon_url, primary_color, accent_color, footer_text, session_timeout, COALESCE(recaptcha_site_key,''), COALESCE(recaptcha_secret_key,''), COALESCE(timezone,'UTC') FROM panel_settings WHERE id = 1",
+	).Scan(&name, &tagline, &logoURL, &logoURLDark, &faviconURL, &primaryColor, &accentColor, &footerText, &sessionTimeout, &recaptchaSiteKey, &recaptchaSecretKey, &timezone)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]interface{}{
 		"panel_name": name, "panel_tagline": tagline, "logo_url": logoURL,
-		"favicon_url": faviconURL, "primary_color": primaryColor, "accent_color": accentColor,
+		"logo_url_dark": logoURLDark,
+		"favicon_url":   faviconURL, "primary_color": primaryColor, "accent_color": accentColor,
 		"footer_text": footerText, "session_timeout": sessionTimeout,
 		"recaptcha_site_key": recaptchaSiteKey, "recaptcha_secret_key": recaptchaSecretKey,
 		"timezone": timezone,
 	}, nil
 }
 
-func (d *DB) UpdatePanelSettings(name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText string, sessionTimeout int, recaptchaSiteKey, recaptchaSecretKey, timezone string) error {
+func (d *DB) UpdatePanelSettings(name, tagline, logoURL, logoURLDark, faviconURL, primaryColor, accentColor, footerText string, sessionTimeout int, recaptchaSiteKey, recaptchaSecretKey, timezone string) error {
 	_, err := d.Conn.Exec(`UPDATE panel_settings SET
-		panel_name=?, panel_tagline=?, logo_url=?, favicon_url=?,
+		panel_name=?, panel_tagline=?, logo_url=?, logo_url_dark=?, favicon_url=?,
 		primary_color=?, accent_color=?, footer_text=?,
 		session_timeout=?, recaptcha_site_key=?, recaptcha_secret_key=?, timezone=? WHERE id = 1`,
-		name, tagline, logoURL, faviconURL, primaryColor, accentColor, footerText, sessionTimeout, recaptchaSiteKey, recaptchaSecretKey, timezone,
+		name, tagline, logoURL, logoURLDark, faviconURL, primaryColor, accentColor, footerText, sessionTimeout, recaptchaSiteKey, recaptchaSecretKey, timezone,
 	)
 	return err
 }

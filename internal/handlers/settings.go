@@ -36,6 +36,8 @@ func (h *SettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		action := r.URL.Query().Get("action")
 		if action == "upload-logo" {
 			h.uploadLogo(w, r)
+		} else if action == "upload-logo-dark" {
+			h.uploadLogoDark(w, r)
 		} else if action == "upload-favicon" {
 			h.uploadFavicon(w, r)
 		} else {
@@ -61,6 +63,7 @@ func (h *SettingsHandler) update(w http.ResponseWriter, r *http.Request) {
 		PanelName          string `json:"panel_name"`
 		PanelTagline       string `json:"panel_tagline"`
 		LogoURL            string `json:"logo_url"`
+		LogoURLDark        string `json:"logo_url_dark"`
 		FaviconURL         string `json:"favicon_url"`
 		PrimaryColor       string `json:"primary_color"`
 		AccentColor        string `json:"accent_color"`
@@ -114,7 +117,7 @@ func (h *SettingsHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.DB.UpdatePanelSettings(
-		req.PanelName, req.PanelTagline, req.LogoURL, req.FaviconURL,
+		req.PanelName, req.PanelTagline, req.LogoURL, req.LogoURLDark, req.FaviconURL,
 		req.PrimaryColor, req.AccentColor, req.FooterText,
 		req.SessionTimeout,
 		req.RecaptchaSiteKey, req.RecaptchaSecretKey,
@@ -138,6 +141,15 @@ func (h *SettingsHandler) update(w http.ResponseWriter, r *http.Request) {
 
 func (h *SettingsHandler) uploadLogo(w http.ResponseWriter, r *http.Request) {
 	url, err := h.handleFileUpload(r, "logo")
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	jsonSuccess(w, map[string]interface{}{"url": url})
+}
+
+func (h *SettingsHandler) uploadLogoDark(w http.ResponseWriter, r *http.Request) {
+	url, err := h.handleFileUpload(r, "logo-dark")
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return

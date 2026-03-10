@@ -39,6 +39,30 @@ export async function render(container, siteToken, section) {
             </div>
 
             ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-primary back-nav-btn" title="Back to Site Overview"><span class="nav-icon" style="width:16px;height:16px;">${icons.chevronLeft}</span> Site Overview</a></div>` : `
+            <div class="site-info-strip">
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">Type</span>
+                    <span class="site-info-strip-value"><span class="badge badge-info">${escapeHtml(site.site_type)}</span></span>
+                </div>
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">SSL</span>
+                    <span class="site-info-strip-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${escapeHtml(site.ssl_type)}</span></span>
+                </div>
+                ${(site.site_type === 'php' || site.site_type === 'wordpress') ? `
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">PHP</span>
+                    <span class="site-info-strip-value mono">${escapeHtml(site.php_version || 'N/A')}</span>
+                </div>` : ''}
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">Disk</span>
+                    <span class="site-info-strip-value" id="strip-disk-usage"><span style="color:var(--text-tertiary);font-size:var(--font-size-xs);">...</span></span>
+                </div>
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">Created</span>
+                    <span class="site-info-strip-value">${new Date(site.created_at).toLocaleDateString()}</span>
+                </div>
+            </div>
+
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Configuration</div>
                 <div class="site-cards-grid">
@@ -149,22 +173,22 @@ export async function render(container, siteToken, section) {
                     siteDbs = (allDbs || []).filter(db => String(db.site_id) === String(siteId));
                 } catch {}
                 const dbList = siteDbs.length > 0
-                    ? \`<div style="margin-top: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"><div style="font-weight: 600; margin-bottom: var(--space-1); font-size: var(--font-size-sm);">Databases that will also be deleted:</div>\${siteDbs.map(db => \`<div style="font-size: var(--font-size-xs); color: var(--text-secondary);">• <span class="mono">\${escapeHtml(db.db_name)}</span></div>\`).join('')}</div>\`
+                    ? `<div style="margin-top: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"><div style="font-weight: 600; margin-bottom: var(--space-1); font-size: var(--font-size-sm);">Databases that will also be deleted:</div>${siteDbs.map(db => `<div style="font-size: var(--font-size-xs); color: var(--text-secondary);">&bull; <span class="mono">${escapeHtml(db.db_name)}</span></div>`).join('')}</div>`
                     : '';
-                showModal('Delete Site', \`
+                showModal('Delete Site', `
                     <div style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); margin-bottom: var(--space-3); background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);">
-                        <span style="flex-shrink:0;width:18px;height:18px;margin-top:1px;color:rgb(239,68,68);">\${icons.alertTriangle}</span>
+                        <span style="flex-shrink:0;width:18px;height:18px;margin-top:1px;color:rgb(239,68,68);">${icons.alertTriangle}</span>
                         <span><strong>This action is irreversible.</strong> The following will be permanently deleted: nginx config, PHP-FPM pool, system user &amp; home directory, all site files, all databases and database users, SSL certificates, cron jobs, backups, and logrotate config.</span>
                     </div>
-                    \${dbList}
+                    ${dbList}
                     <div style="margin-top: var(--space-3);">
-                        <label class="form-label">Type <strong>\${escapeHtml(site.domain)}</strong> to confirm:</label>
-                        <input type="text" class="form-input" id="confirm-domain-input" placeholder="\${escapeHtml(site.domain)}" autocomplete="off">
+                        <label class="form-label">Type <strong>${escapeHtml(site.domain)}</strong> to confirm:</label>
+                        <input type="text" class="form-input" id="confirm-domain-input" placeholder="${escapeHtml(site.domain)}" autocomplete="off">
                     </div>
-                \`, \`
+                `, `
                     <button class="btn btn-secondary" id="cancel-delete-site">Cancel</button>
                     <button class="btn btn-danger" id="confirm-delete-site" disabled>Delete Site</button>
-                \`, { persistent: true });
+                `, { persistent: true });
                 // Enable delete button only when domain matches
                 const confirmInput = document.getElementById('confirm-domain-input');
                 const confirmBtn = document.getElementById('confirm-delete-site');
@@ -198,6 +222,15 @@ export async function render(container, siteToken, section) {
                 card.addEventListener('click', () => {
                     window.location.hash = `#/sites/${siteToken}/${card.dataset.section}`;
                 });
+            });
+
+            // Deferred disk usage load for info strip
+            sites.diskUsage(siteId).then(data => {
+                const el = document.getElementById('strip-disk-usage');
+                if (el) el.innerHTML = `<span class="badge badge-info">${escapeHtml(data.size)}</span>`;
+            }).catch(() => {
+                const el = document.getElementById('strip-disk-usage');
+                if (el) el.textContent = 'N/A';
             });
 
             // Render active section content
@@ -271,12 +304,6 @@ function renderOverview(el, site, versions, siteId) {
                 </div>
                 <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Changing this only updates the config — the directory must already exist.</small>
             </div>
-            <div class="info-grid" style="margin-bottom: var(--space-4);">
-                <div class="info-item"><span class="info-label">System User</span><span class="info-value mono">${escapeHtml(site.system_user)}</span></div>
-                <div class="info-item"><span class="info-label">SSL</span><span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type}</span></span></div>
-                <div class="info-item"><span class="info-label">Disk Usage</span><span class="info-value" id="site-disk-usage"><span style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Loading...</span></span></div>
-                <div class="info-item"><span class="info-label">Created</span><span class="info-value">${new Date(site.created_at).toLocaleDateString()}</span></div>
-            </div>
             <button type="submit" class="btn btn-primary" style="width: auto;">Save Changes</button>
         </form>
     </div>
@@ -300,15 +327,6 @@ function renderOverview(el, site, versions, siteId) {
         document.getElementById('edit-php-group').style.display = (type === 'php' || type === 'wordpress') ? 'block' : 'none';
         document.getElementById('edit-proxy-group').style.display = type === 'proxy' ? 'block' : 'none';
         document.getElementById('edit-webroot-group').style.display = type !== 'proxy' ? 'block' : 'none';
-    });
-
-    // Deferred disk usage load
-    sites.diskUsage(siteId).then(data => {
-        const el2 = document.getElementById('site-disk-usage');
-        if (el2) el2.innerHTML = `<span class="badge badge-info">${escapeHtml(data.size)}</span>`;
-    }).catch(() => {
-        const el2 = document.getElementById('site-disk-usage');
-        if (el2) el2.textContent = 'N/A';
     });
 
     document.getElementById('update-site-form').addEventListener('submit', async (e) => {
