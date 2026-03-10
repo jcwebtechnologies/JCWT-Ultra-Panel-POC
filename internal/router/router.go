@@ -178,6 +178,9 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		middleware.RequireRole("admin")(&handlers.DiskUsageHandler{DB: database, Cfg: cfg}),
 	)))
 
+	// SSH Key Management
+	mux.Handle("/api/ssh", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SSHHandler{DB: database})))
+
 	// Serve uploaded files
 	uploadsDir := filepath.Join(cfg.DataDir, "uploads")
 	os.MkdirAll(uploadsDir, 0755)

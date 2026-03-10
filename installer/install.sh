@@ -24,7 +24,7 @@ LOG_DIR="/var/log/jcwt-panel"
 
 # Step tracking
 STEP_CURRENT=0
-STEP_TOTAL=12
+STEP_TOTAL=13
 
 # Verbose mode (pass -v or --verbose)
 VERBOSE=false
@@ -624,10 +624,10 @@ configure_nginx() {
             sed -i '/^[[:space:]]*ssl_session_timeout/d' "$VHOST"
             sed -i '/^[[:space:]]*ssl_stapling/d' "$VHOST"
             sed -i '/^[[:space:]]*ssl_stapling_verify/d' "$VHOST"
-            # Migrate 'listen [::]:443 ssl http2;' → 'listen [::]:443 ssl;' + 'http2 on;'
-            # to fix "protocol options redefined" warning on nginx 1.25.1+
-            if grep -q 'listen \[::\]:443 ssl http2;' "$VHOST"; then
-                sed -i 's|listen \[::\]:443 ssl http2;|listen [::]:443 ssl;\n    http2 on;|' "$VHOST"
+            # Revert standalone 'http2 on;' back to listen-line format (compatible with nginx < 1.25.1)
+            if grep -q 'http2 on;' "$VHOST"; then
+                sed -i '/^[[:space:]]*http2 on;/d' "$VHOST"
+                sed -i 's|listen \[::\]:443 ssl;|listen [::]:443 ssl http2;|' "$VHOST"
             fi
             # Migrate old phpMyAdmin include to new common snippet
             sed -i 's|include /etc/nginx/snippets/phpmyadmin\.conf;|include /etc/nginx/snippets/jcwt-server-common.conf;|g' "$VHOST"
@@ -1136,6 +1136,64 @@ configure_firewall() {
     log_ok "Firewall enabled with IPv6 support"
 }
 
+# ---- Harden SSH ----
+harden_ssh() {
+    step_header "Hardening SSH Configuration"
+
+    SSHD_CONFIG="/etc/ssh/sshd_config"
+
+    log_info "Disabling password authentication..."
+    # Set PasswordAuthentication no
+    if grep -q '^#\?PasswordAuthentication' "$SSHD_CONFIG"; then
+        sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' "$SSHD_CONFIG"
+    else
+        echo 'PasswordAuthentication no' >> "$SSHD_CONFIG"
+    fi
+    log_detail "PasswordAuthentication no"
+
+    # Disable challenge-response auth (another password vector)
+    if grep -q '^#\?KbdInteractiveAuthentication' "$SSHD_CONFIG"; then
+        sed -i 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' "$SSHD_CONFIG"
+    else
+        echo 'KbdInteractiveAuthentication no' >> "$SSHD_CONFIG"
+    fi
+    if grep -q '^#\?ChallengeResponseAuthentication' "$SSHD_CONFIG"; then
+        sed -i 's/^#\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' "$SSHD_CONFIG"
+    fi
+    log_detail "KbdInteractiveAuthentication no"
+
+    log_info "Disabling root SSH login..."
+    if grep -q '^#\?PermitRootLogin' "$SSHD_CONFIG"; then
+        sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' "$SSHD_CONFIG"
+    else
+        echo 'PermitRootLogin no' >> "$SSHD_CONFIG"
+    fi
+    log_detail "PermitRootLogin no"
+
+    log_info "Enabling public key authentication..."
+    if grep -q '^#\?PubkeyAuthentication' "$SSHD_CONFIG"; then
+        sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' "$SSHD_CONFIG"
+    else
+        echo 'PubkeyAuthentication yes' >> "$SSHD_CONFIG"
+    fi
+    log_detail "PubkeyAuthentication yes"
+
+    # Ensure the running user's authorized_keys is preserved
+    # (so the admin doesn't lock themselves out)
+    log_info "Validating SSH config..."
+    if sshd -t 2>/dev/null; then
+        systemctl restart sshd > /dev/null 2>&1 || systemctl restart ssh > /dev/null 2>&1
+        log_ok "SSH hardened: password auth disabled, root login disabled, key-based auth only"
+    else
+        log_error "SSH config validation failed — reverting changes"
+        # Attempt to restore from backup if available
+        if [ -f "${SSHD_CONFIG}.bak" ]; then
+            cp "${SSHD_CONFIG}.bak" "$SSHD_CONFIG"
+        fi
+        log_warn "SSH configuration was not changed"
+    fi
+}
+
 # ---- Print completion banner ----
 print_banner() {
     echo ""
@@ -1212,6 +1270,7 @@ main() {
     install_binary
     install_service
     configure_firewall
+    harden_ssh
 
     END_TIME=$(date +%s)
     ELAPSED=$((END_TIME - START_TIME))

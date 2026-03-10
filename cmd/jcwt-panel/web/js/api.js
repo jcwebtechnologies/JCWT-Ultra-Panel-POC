@@ -226,3 +226,15 @@ export const diskUsage = {
     siteTree: (siteId) => request(`/api/disk-usage?action=site-tree&site_id=${siteId}`),
     cleanupTmp: (siteId) => request('/api/disk-usage?action=cleanup-tmp', { method: 'POST', body: JSON.stringify({ site_id: siteId }) }),
 };
+
+// SSH Keys
+export const sshKeys = {
+    status: (siteId) => request(`/api/ssh?action=status&site_id=${siteId}`),
+    list: (siteId) => request(`/api/ssh?site_id=${siteId}`),
+    toggle: (siteId, enabled) => request('/api/ssh?action=toggle', { method: 'POST', body: JSON.stringify({ site_id: siteId, enabled }) }),
+    generate: (data) => request('/api/ssh?action=generate', { method: 'POST', body: JSON.stringify(data) }),
+    upload: (data) => request('/api/ssh?action=upload', { method: 'POST', body: JSON.stringify(data) }),
+    viewKey: (id, type) => request(`/api/ssh?action=view-key&id=${id}&type=${type}`),
+    authorize: (data) => request('/api/ssh?action=authorize', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id, siteId) => request(`/api/ssh?id=${id}&site_id=${siteId}`, { method: 'DELETE' }),
+};

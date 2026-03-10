@@ -138,8 +138,7 @@ server {
 }
 
 server {
-    listen [::]:443 ssl;
-    http2 on;
+    listen [::]:443 ssl http2;
     server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
 
     ssl_certificate {{.SSLCertPath}};

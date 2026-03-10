@@ -123,6 +123,20 @@ func Open(dataDir string) (*DB, error) {
 		 '<h2 style="color:#333;">Your WordPress Site is Ready!</h2><p>Hello,</p><p>Your new WordPress site <strong>{{.Domain}}</strong> has been successfully created and configured.</p><table style="width:100%%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;width:140px;">Site URL</td><td style="padding:8px 12px;border:1px solid #e5e7eb;"><a href="https://{{.Domain}}" style="color:#6366f1;">https://{{.Domain}}</a></td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">WP Admin</td><td style="padding:8px 12px;border:1px solid #e5e7eb;"><a href="https://{{.Domain}}/wp-admin" style="color:#6366f1;">https://{{.Domain}}/wp-admin</a></td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">Admin User</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{.WPAdminUser}}</td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">System User</td><td style="padding:8px 12px;border:1px solid #e5e7eb;"><code>{{.SystemUser}}</code></td></tr><tr><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:600;background:#f9fafb;">PHP Version</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{.PHPVersion}}</td></tr></table><p style="color:#6b7280;font-size:14px;">You can manage your site from the panel at any time.</p>')
 	`)
 
+	// SSH keys table migration
+	conn.Exec(`CREATE TABLE IF NOT EXISTS ssh_keys (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+		name TEXT NOT NULL,
+		key_type TEXT NOT NULL DEFAULT 'rsa',
+		bits INTEGER NOT NULL DEFAULT 4096,
+		public_key TEXT NOT NULL DEFAULT '',
+		private_key TEXT NOT NULL DEFAULT '',
+		fingerprint TEXT NOT NULL DEFAULT '',
+		authorized INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+
 	return &DB{Conn: conn}, nil
 }
 
@@ -1000,4 +1014,95 @@ func (d *DB) UpdateEmailLayout(headerHTML, footerHTML string) error {
 		headerHTML, footerHTML,
 	)
 	return err
+}
+
+// --- SSH Key queries ---
+
+func (d *DB) ListSSHKeys(siteID int64) ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query(
+		"SELECT id, site_id, name, key_type, bits, public_key, fingerprint, authorized, created_at FROM ssh_keys WHERE site_id = ? ORDER BY id DESC",
+		siteID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []map[string]interface{}
+	for rows.Next() {
+		var id, sid int64
+		var bits, auth int
+		var name, keyType, pubKey, fingerprint, created string
+		if err := rows.Scan(&id, &sid, &name, &keyType, &bits, &pubKey, &fingerprint, &auth, &created); err != nil {
+			return nil, err
+		}
+		keys = append(keys, map[string]interface{}{
+			"id": id, "site_id": sid, "name": name, "key_type": keyType,
+			"bits": bits, "public_key": pubKey, "fingerprint": fingerprint,
+			"authorized": auth == 1, "created_at": created,
+			"has_private_key": false, // will be set by handler after checking
+		})
+	}
+	return keys, nil
+}
+
+func (d *DB) GetSSHKey(id int64) (map[string]interface{}, error) {
+	var sid int64
+	var bits, auth int
+	var name, keyType, pubKey, privKey, fingerprint, created string
+	err := d.Conn.QueryRow(
+		"SELECT id, site_id, name, key_type, bits, public_key, private_key, fingerprint, authorized, created_at FROM ssh_keys WHERE id = ?", id,
+	).Scan(&id, &sid, &name, &keyType, &bits, &pubKey, &privKey, &fingerprint, &auth, &created)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"id": id, "site_id": sid, "name": name, "key_type": keyType,
+		"bits": bits, "public_key": pubKey, "private_key": privKey,
+		"fingerprint": fingerprint, "authorized": auth == 1, "created_at": created,
+	}, nil
+}
+
+func (d *DB) CreateSSHKey(siteID int64, name, keyType string, bits int, pubKey, privKey, fingerprint string) (int64, error) {
+	res, err := d.Conn.Exec(
+		"INSERT INTO ssh_keys (site_id, name, key_type, bits, public_key, private_key, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		siteID, name, keyType, bits, pubKey, privKey, fingerprint,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) UpdateSSHKeyAuthorized(id int64, authorized bool) error {
+	auth := 0
+	if authorized {
+		auth = 1
+	}
+	_, err := d.Conn.Exec("UPDATE ssh_keys SET authorized = ? WHERE id = ?", auth, id)
+	return err
+}
+
+func (d *DB) DeleteSSHKey(id int64) error {
+	_, err := d.Conn.Exec("DELETE FROM ssh_keys WHERE id = ?", id)
+	return err
+}
+
+func (d *DB) ListAuthorizedSSHKeys(siteID int64) ([]map[string]interface{}, error) {
+	rows, err := d.Conn.Query(
+		"SELECT id, public_key FROM ssh_keys WHERE site_id = ? AND authorized = 1", siteID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []map[string]interface{}
+	for rows.Next() {
+		var id int64
+		var pubKey string
+		if err := rows.Scan(&id, &pubKey); err != nil {
+			return nil, err
+		}
+		keys = append(keys, map[string]interface{}{"id": id, "public_key": pubKey})
+	}
+	return keys, nil
 }

@@ -87,6 +87,10 @@ export function showModal(title, content, footer = '', options = {}) {
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) overlay.remove();
         });
+    } else {
+        // Hide close button for persistent modals
+        const closeBtn = overlay.querySelector('.modal-close');
+        if (closeBtn) closeBtn.style.display = 'none';
     }
     document.body.appendChild(overlay);
     return overlay;

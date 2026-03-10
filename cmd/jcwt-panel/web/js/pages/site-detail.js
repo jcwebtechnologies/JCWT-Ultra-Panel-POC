@@ -1,5 +1,5 @@
 // JCWT Ultra Panel — Site Detail Page (SSL, PHP Settings, Cron, Files)
-import { sites, phpVersions, ssl, phpSettings, cron, files, databases, dbUsers, diskUsage } from '../api.js';
+import { sites, phpVersions, ssl, phpSettings, cron, files, databases, dbUsers, diskUsage, sshKeys } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes, showConfirm } from '../app.js';
 import { request } from '../api.js';
 
@@ -99,6 +99,10 @@ export async function render(container, siteToken, section) {
                         <div class="site-card-icon red"><span class="nav-icon" style="width:28px;height:28px">${icons.shield}</span></div>
                         <div class="site-card-title">Security</div>
                     </div>
+                    <div class="site-card" data-section="ssh">
+                        <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.key}</span></div>
+                        <div class="site-card-title">SSH Access</div>
+                    </div>
                 </div>
             </div>
 
@@ -115,9 +119,79 @@ export async function render(container, siteToken, section) {
                     </div>
                 </div>
             </div>
+
+            <div class="site-cards-section" style="margin-top: var(--space-5);">
+                <div class="site-cards-section-title" style="color: var(--status-error);">Danger Zone</div>
+                <div style="border: 1px solid var(--status-error); border-radius: var(--radius-lg); padding: var(--space-4); background: rgba(239,68,68,0.04);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-3);">
+                        <div>
+                            <div style="font-weight: 600; margin-bottom: var(--space-1);">Delete Site</div>
+                            <div style="font-size: var(--font-size-sm); color: var(--text-secondary);">Permanently delete this site, all files, databases, backups and system user. This cannot be undone.</div>
+                        </div>
+                        <button class="btn btn-danger" id="danger-delete-site">Delete this site</button>
+                    </div>
+                </div>
+            </div>
             `}
 
             <div id="section-content"></div>`;
+
+            // Danger Zone: Delete Site button
+            document.getElementById('danger-delete-site')?.addEventListener('click', async () => {
+                const deleteProtected = site.delete_protection === 1 || site.delete_protection === true;
+                if (deleteProtected) {
+                    showToast('Deletion protection is enabled. Disable it in the Security tab first.', 'error');
+                    return;
+                }
+                let siteDbs = [];
+                try {
+                    const allDbs = await databases.list();
+                    siteDbs = (allDbs || []).filter(db => String(db.site_id) === String(siteId));
+                } catch {}
+                const dbList = siteDbs.length > 0
+                    ? \`<div style="margin-top: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"><div style="font-weight: 600; margin-bottom: var(--space-1); font-size: var(--font-size-sm);">Databases that will also be deleted:</div>\${siteDbs.map(db => \`<div style="font-size: var(--font-size-xs); color: var(--text-secondary);">• <span class="mono">\${escapeHtml(db.db_name)}</span></div>\`).join('')}</div>\`
+                    : '';
+                showModal('Delete Site', \`
+                    <div style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); margin-bottom: var(--space-3); background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);">
+                        <span style="flex-shrink:0;width:18px;height:18px;margin-top:1px;color:rgb(239,68,68);">\${icons.alertTriangle}</span>
+                        <span><strong>This action is irreversible.</strong> The following will be permanently deleted: nginx config, PHP-FPM pool, system user &amp; home directory, all site files, all databases and database users, SSL certificates, cron jobs, backups, and logrotate config.</span>
+                    </div>
+                    \${dbList}
+                    <div style="margin-top: var(--space-3);">
+                        <label class="form-label">Type <strong>\${escapeHtml(site.domain)}</strong> to confirm:</label>
+                        <input type="text" class="form-input" id="confirm-domain-input" placeholder="\${escapeHtml(site.domain)}" autocomplete="off">
+                    </div>
+                \`, \`
+                    <button class="btn btn-secondary" id="cancel-delete-site">Cancel</button>
+                    <button class="btn btn-danger" id="confirm-delete-site" disabled>Delete Site</button>
+                \`, { persistent: true });
+                // Enable delete button only when domain matches
+                const confirmInput = document.getElementById('confirm-domain-input');
+                const confirmBtn = document.getElementById('confirm-delete-site');
+                confirmInput?.addEventListener('input', () => {
+                    confirmBtn.disabled = confirmInput.value.trim() !== site.domain;
+                });
+                document.getElementById('cancel-delete-site')?.addEventListener('click', () => closeModal());
+                confirmBtn?.addEventListener('click', async () => {
+                    if (confirmInput.value.trim() !== site.domain) return;
+                    confirmBtn.disabled = true;
+                    confirmBtn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Deleting...';
+                    document.getElementById('cancel-delete-site').disabled = true;
+                    confirmInput.disabled = true;
+                    try {
+                        await sites.delete(siteId);
+                        closeModal();
+                        showToast('Site deleted successfully', 'success');
+                        window.location.hash = '#/sites';
+                    } catch (err) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = 'Delete Site';
+                        document.getElementById('cancel-delete-site').disabled = false;
+                        confirmInput.disabled = false;
+                        showToast(err.message, 'error');
+                    }
+                });
+            });
 
             // Bind card clicks — navigate to URL-based sections
             container.querySelectorAll('.site-card').forEach(card => {
@@ -143,6 +217,7 @@ export async function render(container, siteToken, section) {
                     case 'phpmyadmin': renderPhpMyAdmin(sectionContent, siteId); break;
                     case 'logs': renderLogs(sectionContent, site, siteId); break;
                     case 'disk-usage': renderDiskUsage(sectionContent, site, siteId); break;
+                    case 'ssh': renderSSHAccess(sectionContent, site, siteId); break;
                 }
             }
         }
@@ -1306,6 +1381,376 @@ async function renderSecurity(container, site, siteId, refreshTabs) {
             Object.assign(site, updatedSite);
         } catch (err) { showToast(err.message, 'error'); }
     });
+}
+
+// ---- SSH Access ----
+async function renderSSHAccess(container, site, siteId) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+
+    try {
+        const [status, keys] = await Promise.all([
+            sshKeys.status(siteId),
+            sshKeys.list(siteId),
+        ]);
+
+        const sshEnabled = status.ssh_enabled;
+        const sysUser = status.system_user;
+
+        function renderKeyTable(keyList) {
+            if (!keyList || keyList.length === 0) {
+                return '<p style="color: var(--text-tertiary); font-size: var(--font-size-sm);">No SSH keys yet. Generate or upload a key pair to get started.</p>';
+            }
+            return `
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Fingerprint</th>
+                            <th>Authorized</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${keyList.map(k => `
+                        <tr>
+                            <td><strong>${escapeHtml(k.name)}</strong></td>
+                            <td><span class="mono" style="font-size:var(--font-size-xs);">${escapeHtml(k.key_type.toUpperCase())} ${k.bits}</span></td>
+                            <td><span class="mono" style="font-size:var(--font-size-xs); word-break:break-all;">${escapeHtml(k.fingerprint).substring(0, 47)}</span></td>
+                            <td>${k.authorized ? '<span style="color:var(--status-success);font-weight:600;">Yes</span>' : '<span style="color:var(--text-tertiary);">No</span>'}</td>
+                            <td style="text-align:right;">
+                                <div style="display:flex;gap:var(--space-1);justify-content:flex-end;flex-wrap:wrap;">
+                                    <button class="btn btn-sm btn-secondary ssh-view-pub" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="View Public Key"><span class="nav-icon" style="width:14px;height:14px;">${icons.eye}</span></button>
+                                    ${k.has_private_key ? `<button class="btn btn-sm btn-secondary ssh-view-priv" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="View Private Key"><span class="nav-icon" style="width:14px;height:14px;">${icons.key}</span></button>` : ''}
+                                    ${k.authorized
+                                        ? `<button class="btn btn-sm btn-secondary ssh-deauth" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="Deauthorize"><span class="nav-icon" style="width:14px;height:14px;">${icons.lock}</span></button>`
+                                        : `<button class="btn btn-sm btn-primary ssh-authorize" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="Authorize"><span class="nav-icon" style="width:14px;height:14px;">${icons.shield}</span></button>`
+                                    }
+                                    <button class="btn btn-sm btn-danger ssh-delete" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="Delete"><span class="nav-icon" style="width:14px;height:14px;">${icons.trash}</span></button>
+                                </div>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+
+        container.innerHTML = `
+        <div class="card" style="margin-bottom: var(--space-4);">
+            <div class="card-header">
+                <h3 class="card-title">SSH Access</h3>
+            </div>
+            <div style="padding: var(--space-4);">
+                <p style="color: var(--text-secondary); margin-bottom: var(--space-4); font-size: var(--font-size-sm);">
+                    Enable SSH access for the system user <strong class="mono">${escapeHtml(sysUser)}</strong>. Only key-based authentication is allowed — password login is disabled at the server level.
+                </p>
+                <div class="settings-row" style="margin-bottom: 0;">
+                    <div class="settings-row-label">Enable SSH<small>Allow SSH login for this site's system user</small></div>
+                    <div>
+                        <label class="toggle">
+                            <input type="checkbox" id="ssh-toggle" ${sshEnabled ? 'checked' : ''}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: var(--space-4);">
+            <div class="card-header">
+                <h3 class="card-title">SSH Keys</h3>
+                <div style="display:flex;gap:var(--space-2);">
+                    <button class="btn btn-sm btn-primary" id="ssh-generate-btn"><span class="nav-icon" style="width:14px;height:14px;">${icons.plus}</span> Generate Key Pair</button>
+                    <button class="btn btn-sm btn-secondary" id="ssh-upload-btn"><span class="nav-icon" style="width:14px;height:14px;">${icons.upload}</span> Upload Key</button>
+                </div>
+            </div>
+            <div style="padding: var(--space-4);" id="ssh-keys-container">
+                ${renderKeyTable(keys)}
+            </div>
+        </div>`;
+
+        // SSH toggle
+        document.getElementById('ssh-toggle')?.addEventListener('change', async (e) => {
+            const toggle = e.target;
+            toggle.disabled = true;
+            try {
+                await sshKeys.toggle(siteId, toggle.checked);
+                showToast(toggle.checked ? 'SSH access enabled' : 'SSH access disabled', 'success');
+            } catch (err) {
+                toggle.checked = !toggle.checked;
+                showToast(err.message, 'error');
+            } finally {
+                toggle.disabled = false;
+            }
+        });
+
+        // Generate Key button
+        document.getElementById('ssh-generate-btn')?.addEventListener('click', () => {
+            showModal('Generate SSH Key Pair', `
+                <div class="form-group">
+                    <label class="form-label">Key Name</label>
+                    <input type="text" class="form-input" id="gen-key-name" placeholder="e.g. deploy-key">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Key Type</label>
+                        <select class="form-select" id="gen-key-type">
+                            <option value="rsa">RSA</option>
+                            <option value="ecdsa">ECDSA</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Key Size (bits)</label>
+                        <select class="form-select" id="gen-key-bits">
+                            <option value="4096">4096</option>
+                            <option value="2048">2048</option>
+                        </select>
+                    </div>
+                </div>
+            `, `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" id="gen-key-submit">Generate</button>
+            `);
+            // Update bits options when type changes
+            document.getElementById('gen-key-type')?.addEventListener('change', (e) => {
+                const bitsSelect = document.getElementById('gen-key-bits');
+                if (e.target.value === 'ecdsa') {
+                    bitsSelect.innerHTML = '<option value="521">521</option><option value="384">384</option><option value="256">256</option>';
+                } else {
+                    bitsSelect.innerHTML = '<option value="4096">4096</option><option value="2048">2048</option>';
+                }
+            });
+            document.getElementById('gen-key-submit')?.addEventListener('click', async () => {
+                const name = document.getElementById('gen-key-name').value.trim();
+                if (!name) { showToast('Key name is required', 'error'); return; }
+                const btn = document.getElementById('gen-key-submit');
+                btn.disabled = true;
+                btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Generating...';
+                try {
+                    await sshKeys.generate({
+                        site_id: parseInt(siteId),
+                        name,
+                        key_type: document.getElementById('gen-key-type').value,
+                        bits: parseInt(document.getElementById('gen-key-bits').value),
+                    });
+                    closeModal();
+                    showToast('Key pair generated', 'success');
+                    renderSSHAccess(container, site, siteId);
+                } catch (err) {
+                    btn.disabled = false;
+                    btn.textContent = 'Generate';
+                    showToast(err.message, 'error');
+                }
+            });
+        });
+
+        // Upload Key button
+        document.getElementById('ssh-upload-btn')?.addEventListener('click', () => {
+            showModal('Upload SSH Key', `
+                <div class="form-group">
+                    <label class="form-label">Key Name</label>
+                    <input type="text" class="form-input" id="upl-key-name" placeholder="e.g. my-laptop">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Key Type</label>
+                        <select class="form-select" id="upl-key-type">
+                            <option value="rsa">RSA</option>
+                            <option value="ecdsa">ECDSA</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Key Size (bits)</label>
+                        <select class="form-select" id="upl-key-bits">
+                            <option value="4096">4096</option>
+                            <option value="2048">2048</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Public Key <span style="color:var(--status-error);">*</span></label>
+                    <textarea class="form-textarea mono" id="upl-pub-key" rows="4" placeholder="ssh-rsa AAAA... or paste contents of .pub file" style="font-size:var(--font-size-xs);"></textarea>
+                    <label class="btn btn-sm btn-secondary" style="margin-top: var(--space-2); cursor: pointer;">
+                        <span class="nav-icon" style="width:14px;height:14px;">${icons.upload}</span> Upload .pub file
+                        <input type="file" id="upl-pub-file" accept=".pub,.pem,.txt" style="display:none;">
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Private Key <span style="color:var(--text-tertiary);">(optional)</span></label>
+                    <textarea class="form-textarea mono" id="upl-priv-key" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY----- or paste contents" style="font-size:var(--font-size-xs);"></textarea>
+                    <label class="btn btn-sm btn-secondary" style="margin-top: var(--space-2); cursor: pointer;">
+                        <span class="nav-icon" style="width:14px;height:14px;">${icons.upload}</span> Upload private key file
+                        <input type="file" id="upl-priv-file" accept=".pem,.key,.txt,*" style="display:none;">
+                    </label>
+                </div>
+            `, `
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" id="upl-key-submit">Upload</button>
+            `);
+            // Update bits options when type changes
+            document.getElementById('upl-key-type')?.addEventListener('change', (e) => {
+                const bitsSelect = document.getElementById('upl-key-bits');
+                if (e.target.value === 'ecdsa') {
+                    bitsSelect.innerHTML = '<option value="521">521</option><option value="384">384</option><option value="256">256</option>';
+                } else {
+                    bitsSelect.innerHTML = '<option value="4096">4096</option><option value="2048">2048</option>';
+                }
+            });
+            // File upload handlers
+            document.getElementById('upl-pub-file')?.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => { document.getElementById('upl-pub-key').value = reader.result; };
+                    reader.readAsText(file);
+                }
+            });
+            document.getElementById('upl-priv-file')?.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => { document.getElementById('upl-priv-key').value = reader.result; };
+                    reader.readAsText(file);
+                }
+            });
+            document.getElementById('upl-key-submit')?.addEventListener('click', async () => {
+                const name = document.getElementById('upl-key-name').value.trim();
+                const pubKey = document.getElementById('upl-pub-key').value.trim();
+                if (!name) { showToast('Key name is required', 'error'); return; }
+                if (!pubKey) { showToast('Public key is required', 'error'); return; }
+                const btn = document.getElementById('upl-key-submit');
+                btn.disabled = true;
+                btn.textContent = 'Uploading...';
+                try {
+                    await sshKeys.upload({
+                        site_id: parseInt(siteId),
+                        name,
+                        key_type: document.getElementById('upl-key-type').value,
+                        bits: parseInt(document.getElementById('upl-key-bits').value),
+                        public_key: pubKey,
+                        private_key: document.getElementById('upl-priv-key').value.trim(),
+                    });
+                    closeModal();
+                    showToast('Key uploaded', 'success');
+                    renderSSHAccess(container, site, siteId);
+                } catch (err) {
+                    btn.disabled = false;
+                    btn.textContent = 'Upload';
+                    showToast(err.message, 'error');
+                }
+            });
+        });
+
+        // Bind key action buttons
+        function bindKeyActions() {
+            // View public key
+            container.querySelectorAll('.ssh-view-pub').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    try {
+                        const data = await sshKeys.viewKey(btn.dataset.id, 'public');
+                        showModal('Public Key — ' + escapeHtml(btn.dataset.name), `
+                            <textarea class="form-textarea mono" readonly style="min-height:120px;font-size:var(--font-size-xs);word-break:break-all;">${escapeHtml(data.content)}</textarea>
+                        `, `
+                            <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Close</button>
+                            <button class="btn btn-primary ssh-copy-key">Copy</button>
+                            <a class="btn btn-secondary ssh-dl-key" download="${escapeHtml(data.name)}.pub">Download</a>
+                        `);
+                        const blob = new Blob([data.content], { type: 'text/plain' });
+                        document.querySelector('.ssh-dl-key').href = URL.createObjectURL(blob);
+                        document.querySelector('.ssh-copy-key')?.addEventListener('click', () => {
+                            navigator.clipboard.writeText(data.content).then(() => showToast('Copied', 'success'));
+                        });
+                    } catch (err) { showToast(err.message, 'error'); }
+                });
+            });
+
+            // View private key
+            container.querySelectorAll('.ssh-view-priv').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    try {
+                        const data = await sshKeys.viewKey(btn.dataset.id, 'private');
+                        showModal('Private Key — ' + escapeHtml(btn.dataset.name), `
+                            <div style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); margin-bottom: var(--space-3); background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3); border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);">
+                                <span style="flex-shrink:0;width:18px;height:18px;margin-top:1px;color:rgb(234,179,8);">${icons.alertTriangle}</span>
+                                <span>Keep this private key secure. Never share it publicly.</span>
+                            </div>
+                            <textarea class="form-textarea mono" readonly style="min-height:180px;font-size:var(--font-size-xs);">${escapeHtml(data.content)}</textarea>
+                        `, `
+                            <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Close</button>
+                            <button class="btn btn-primary ssh-copy-key">Copy</button>
+                            <a class="btn btn-secondary ssh-dl-key" download="${escapeHtml(data.name)}">Download</a>
+                        `);
+                        const blob = new Blob([data.content], { type: 'text/plain' });
+                        document.querySelector('.ssh-dl-key').href = URL.createObjectURL(blob);
+                        document.querySelector('.ssh-copy-key')?.addEventListener('click', () => {
+                            navigator.clipboard.writeText(data.content).then(() => showToast('Copied', 'success'));
+                        });
+                    } catch (err) { showToast(err.message, 'error'); }
+                });
+            });
+
+            // Authorize
+            container.querySelectorAll('.ssh-authorize').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    showModal('Authorize Public Key', `
+                        <div style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); margin-bottom: var(--space-3); background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3); border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);">
+                            <span style="flex-shrink:0;width:18px;height:18px;margin-top:1px;color:rgb(234,179,8);">${icons.alertTriangle}</span>
+                            <span>This will add the public key "<strong>${escapeHtml(btn.dataset.name)}</strong>" to the user's <code>~/.ssh/authorized_keys</code> file. Anyone with the corresponding private key will be able to SSH into this server as <strong>${escapeHtml(sysUser)}</strong>.</span>
+                        </div>
+                    `, `
+                        <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                        <button class="btn btn-primary" id="confirm-auth-key">Authorize</button>
+                    `);
+                    document.getElementById('confirm-auth-key')?.addEventListener('click', async () => {
+                        const confirmBtn = document.getElementById('confirm-auth-key');
+                        confirmBtn.disabled = true;
+                        confirmBtn.textContent = 'Authorizing...';
+                        try {
+                            await sshKeys.authorize({ id: parseInt(btn.dataset.id), site_id: parseInt(siteId), authorized: true });
+                            closeModal();
+                            showToast('Key authorized', 'success');
+                            renderSSHAccess(container, site, siteId);
+                        } catch (err) {
+                            confirmBtn.disabled = false;
+                            confirmBtn.textContent = 'Authorize';
+                            showToast(err.message, 'error');
+                        }
+                    });
+                });
+            });
+
+            // Deauthorize
+            container.querySelectorAll('.ssh-deauth').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const ok = await showConfirm('Deauthorize Key', `Remove "${btn.dataset.name}" from authorized_keys? This will revoke SSH access for this key.`);
+                    if (!ok) return;
+                    try {
+                        await sshKeys.authorize({ id: parseInt(btn.dataset.id), site_id: parseInt(siteId), authorized: false });
+                        showToast('Key deauthorized', 'success');
+                        renderSSHAccess(container, site, siteId);
+                    } catch (err) { showToast(err.message, 'error'); }
+                });
+            });
+
+            // Delete
+            container.querySelectorAll('.ssh-delete').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const ok = await showConfirm('Delete SSH Key', `Delete key "${btn.dataset.name}"? If this key is authorized, it will be removed from authorized_keys as well.`);
+                    if (!ok) return;
+                    try {
+                        await sshKeys.delete(btn.dataset.id, siteId);
+                        showToast('Key deleted', 'success');
+                        renderSSHAccess(container, site, siteId);
+                    } catch (err) { showToast(err.message, 'error'); }
+                });
+            });
+        }
+        bindKeyActions();
+
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+    }
 }
 
 // ---- Vhost Editor ----

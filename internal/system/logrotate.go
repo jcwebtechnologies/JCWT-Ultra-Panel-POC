@@ -22,6 +22,7 @@ func WriteLogrotateConfig(webRootBase, systemUser, domain string) error {
 
 	config := fmt.Sprintf(`%s/%s-access.log
 %s/%s-error.log {
+    su %s %s
     daily
     rotate 7
     compress
@@ -34,7 +35,7 @@ func WriteLogrotateConfig(webRootBase, systemUser, domain string) error {
         [ -f /run/nginx.pid ] && kill -USR1 $(cat /run/nginx.pid) 2>/dev/null || true
     endscript
 }
-`, logsDir, domain, logsDir, domain, systemUser, systemUser)
+`, logsDir, domain, logsDir, domain, systemUser, systemUser, systemUser, systemUser)
 
 	cmd := exec.Command("sudo", "tee", confPath)
 	cmd.Stdin = strings.NewReader(config)
