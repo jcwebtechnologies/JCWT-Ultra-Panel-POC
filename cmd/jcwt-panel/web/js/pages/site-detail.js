@@ -398,7 +398,7 @@ function renderSSL(el, site, siteId) {
                 <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4);">
                     ${!hasSelfSigned ? `<button class="btn btn-primary" id="ssl-self-signed">${icons.lock} Generate Self-Signed</button>` : ''}
                     <button class="btn btn-secondary" id="ssl-custom">${icons.upload} Upload Certificate</button>
-                    <button class="btn btn-success" id="ssl-letsencrypt">${icons.shield} Issue Let's Encrypt</button>
+                    <button class="btn btn-success" id="ssl-letsencrypt"><span class="nav-icon" style="width:16px;height:16px;">${icons.shield}</span> Issue Let's Encrypt</button>
                 </div>
             </div>
         </div>
@@ -528,7 +528,7 @@ function renderSSL(el, site, siteId) {
                 if (checked.length === 0) { showToast('Select at least one domain', 'error'); return; }
                 const btn = modal.querySelector('#le-issue-btn');
                 btn.disabled = true;
-                btn.innerHTML = `${icons.shield} Issuing...`;
+                btn.innerHTML = `<span class="nav-icon" style="width:16px;height:16px;">${icons.shield}</span> Issuing...`;
                 try {
                     await ssl.letsEncrypt(siteId, checked);
                     closeModal();
@@ -1391,6 +1391,7 @@ async function renderBackups(container, site, siteId) {
         <div class="card" style="margin-bottom: var(--space-4);">
             <div class="card-header">
                 <h3 class="card-title">Backup Schedule</h3>
+                <button class="btn btn-primary btn-sm" id="save-backup-schedule">Save Schedule</button>
             </div>
             <div style="padding: var(--space-4);">
                 <div class="form-row">
@@ -1418,13 +1419,12 @@ async function renderBackups(container, site, siteId) {
                         </select>
                     </div>
                 </div>
-                <button class="btn btn-primary btn-sm" id="save-backup-schedule">Save Schedule</button>
             </div>
         </div>
 
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Backups</h3>
+                <h3 class="card-title">Backup & Restore</h3>
                 <div style="display: flex; gap: var(--space-2);">
                     <button class="btn btn-sm btn-ghost" id="refresh-backups"><span class="nav-icon" style="width:14px;height:14px;">${icons.refresh}</span> Refresh</button>
                     <button class="btn btn-primary btn-sm" id="create-backup-btn">${icons.plus} Create Backup Now</button>

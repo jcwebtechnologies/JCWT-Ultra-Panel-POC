@@ -457,7 +457,7 @@ function renderLayout(pageName) {
             <div class="main-body" id="page-content">
                 <div class="loading-screen"><div class="loading-spinner"></div></div>
             </div>
-            ${`<footer class="panel-footer">&copy; ${new Date().getFullYear()} JCWT Ultra Panel${panelSettings?.version ? ` &mdash; v${escapeHtml(panelSettings.version)}` : ''}</footer>`}
+            ${`<footer class="panel-footer">${panelSettings?.footer_text ? escapeHtml(panelSettings.footer_text).replace('{year}', new Date().getFullYear()) : `&copy; ${new Date().getFullYear()} ${escapeHtml(panelSettings?.panel_name || 'JCWT Ultra Panel')}`}${panelSettings?.version ? ` &mdash; v${escapeHtml(panelSettings.version)}` : ''}</footer>`}
         </main>
     </div>`;
 }

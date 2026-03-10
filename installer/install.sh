@@ -624,6 +624,11 @@ configure_nginx() {
             sed -i '/^[[:space:]]*ssl_session_timeout/d' "$VHOST"
             sed -i '/^[[:space:]]*ssl_stapling/d' "$VHOST"
             sed -i '/^[[:space:]]*ssl_stapling_verify/d' "$VHOST"
+            # Migrate 'listen [::]:443 ssl http2;' → 'listen [::]:443 ssl;' + 'http2 on;'
+            # to fix "protocol options redefined" warning on nginx 1.25.1+
+            if grep -q 'listen \[::\]:443 ssl http2;' "$VHOST"; then
+                sed -i 's|listen \[::\]:443 ssl http2;|listen [::]:443 ssl;\n    http2 on;|' "$VHOST"
+            fi
             # Migrate old phpMyAdmin include to new common snippet
             sed -i 's|include /etc/nginx/snippets/phpmyadmin\.conf;|include /etc/nginx/snippets/jcwt-server-common.conf;|g' "$VHOST"
         done
