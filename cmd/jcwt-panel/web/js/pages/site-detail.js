@@ -890,7 +890,7 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
                         ${siteDbs.map(db => {
             const dbUsers = (allUsers || []).filter(u => u.database_id === db.id);
             return `<tr>
-                                <td data-label="Database"><span class="mono">${escapeHtml(db.db_name)}</span></td>
+                                <td data-label="Database"><span class="mono">${escapeHtml(db.db_name)}</span> <span class="copy-name" data-name="${escapeHtml(db.db_name)}" style="cursor:pointer;display:inline-flex;align-items:center;vertical-align:middle;opacity:0.5;" title="Copy to clipboard"><span class="nav-icon" style="width:16px;height:16px;">${icons.copy}</span></span></td>
                                 <td data-label="Users">${dbUsers.length > 0 ? dbUsers.map(u => `<span class="badge badge-info">${escapeHtml(u.username)}</span>`).join(' ') : '<span style="color: var(--text-tertiary);">None</span>'}</td>
                                 <td data-label="Created">${db.created_at ? new Date(db.created_at).toLocaleDateString() : 'N/A'}</td>
                                 <td>
@@ -951,6 +951,13 @@ async function renderDatabases(container, siteId, site, refreshTabs) {
             });
         });
 
+        // Copy-to-clipboard handlers
+        container.querySelectorAll('.copy-name').forEach(el => {
+            el.addEventListener('click', () => {
+                navigator.clipboard.writeText(el.dataset.name).then(() => showToast('Copied to clipboard', 'success'));
+            });
+        });
+
     } catch (err) {
         container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
     }
@@ -994,8 +1001,8 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
                     <thead><tr><th>Username</th><th>Database</th><th>Privileges</th><th>Created</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${siteUsers.map(u => `<tr>
-                                <td data-label="Username">${escapeHtml(u.username)}</td>
-                                <td data-label="Database"><span class="badge badge-info">${escapeHtml(u.db_name)}</span></td>
+                                <td data-label="Username">${escapeHtml(u.username)} <span class="copy-name" data-name="${escapeHtml(u.username)}" style="cursor:pointer;display:inline-flex;align-items:center;vertical-align:middle;opacity:0.5;" title="Copy to clipboard"><span class="nav-icon" style="width:16px;height:16px;">${icons.copy}</span></span></td>
+                                <td data-label="Database"><span class="badge badge-info">${escapeHtml(u.db_name)}</span> <span class="copy-name" data-name="${escapeHtml(u.db_name)}" style="cursor:pointer;display:inline-flex;align-items:center;vertical-align:middle;opacity:0.5;" title="Copy to clipboard"><span class="nav-icon" style="width:16px;height:16px;">${icons.copy}</span></span></td>
                                 <td data-label="Privileges">
                                     <select class="form-select form-select-sm change-privilege" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="width: auto; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
                                         ${Object.entries(privilegeLabels).map(([val, label]) => `<option value="${val}" ${u.privilege_level === val ? 'selected' : ''}>${label}</option>`).join('')}
@@ -1138,6 +1145,13 @@ async function renderDBUsers(container, siteId, site, refreshTabs) {
                     showToast(`User ${username} deleted`, 'success');
                     renderDBUsers(container, siteId, site, refreshTabs);
                 } catch (err) { showToast(err.message, 'error'); }
+            });
+        });
+
+        // Copy-to-clipboard handlers
+        container.querySelectorAll('.copy-name').forEach(el => {
+            el.addEventListener('click', () => {
+                navigator.clipboard.writeText(el.dataset.name).then(() => showToast('Copied to clipboard', 'success'));
             });
         });
     } catch (err) {
@@ -1394,6 +1408,7 @@ async function renderBackups(container, site, siteId) {
                         <select class="form-select" id="backup-retention">
                             ${[3,5,7,10,14,30].map(n => `<option value="${n}" ${(schedule.retention || 7) === n ? 'selected' : ''}>${n} backups</option>`).join('')}
                         </select>
+                        <small style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Older backups beyond this count are automatically deleted after each new backup.</small>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Backup Method</label>

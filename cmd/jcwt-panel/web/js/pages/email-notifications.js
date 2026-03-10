@@ -2,6 +2,9 @@
 import { emailTemplates } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml } from '../app.js';
 
+const DEFAULT_HEADER_HTML = `<td style="background:#6366f1;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;"><h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">JCWT Ultra Panel</h1></td>`;
+const DEFAULT_FOOTER_HTML = `<td style="background:#f9fafb;padding:20px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;text-align:center;"><p style="margin:0;color:#9ca3af;font-size:12px;">&copy; ${new Date().getFullYear()} JCWT Ultra Panel &mdash; This is an automated message.</p></td>`;
+
 export async function render(container) {
     document.getElementById('page-title').textContent = 'Email Notifications';
     container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
@@ -30,7 +33,7 @@ export async function render(container) {
         ` : `
             <div class="card">
                 <div class="table-wrapper">
-                    <table class="data-table">
+                    <table class="data-table responsive-cards">
                         <thead>
                             <tr>
                                 <th>Template</th>
@@ -42,15 +45,15 @@ export async function render(container) {
                         <tbody>
                             ${list.map(t => `
                             <tr>
-                                <td>
+                                <td data-label="Template">
                                     <div style="font-weight:600;">${escapeHtml(t.name)}</div>
                                     <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:2px;">${escapeHtml(t.description)}</div>
                                 </td>
-                                <td><code style="font-size:var(--font-size-xs);">${escapeHtml(t.subject)}</code></td>
-                                <td>
+                                <td data-label="Subject"><code style="font-size:var(--font-size-xs);">${escapeHtml(t.subject)}</code></td>
+                                <td data-label="Status">
                                     <span class="badge ${t.enabled ? 'badge-success' : 'badge-warning'}">${t.enabled ? 'Enabled' : 'Disabled'}</span>
                                 </td>
-                                <td style="text-align:right;">
+                                <td data-label="Actions" style="text-align:right;">
                                     <button class="btn btn-sm btn-secondary edit-template-btn" data-id="${t.id}" title="Edit template">
                                         <span class="nav-icon" style="width:14px;height:14px">${icons.edit}</span>
                                     </button>
@@ -70,15 +73,18 @@ export async function render(container) {
                 <form id="layout-form">
                     <div class="form-group">
                         <label class="form-label">Header HTML</label>
-                        <textarea class="form-input mono" id="layout-header" rows="8" style="font-size:var(--font-size-xs);line-height:1.5;" placeholder="Leave empty for default header (panel name on purple bar)">${escapeHtml(layout.email_header_html || '')}</textarea>
+                        <textarea class="form-input mono" id="layout-header" rows="8" style="font-size:var(--font-size-xs);line-height:1.5;" placeholder="Leave empty for default header (panel name on purple bar)">${escapeHtml(layout.email_header_html || DEFAULT_HEADER_HTML)}</textarea>
                         <small style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Inline-styled HTML that appears above the email body inside the email table layout.</small>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Footer HTML</label>
-                        <textarea class="form-input mono" id="layout-footer" rows="6" style="font-size:var(--font-size-xs);line-height:1.5;" placeholder="Leave empty for default footer (© year panel name)">${escapeHtml(layout.email_footer_html || '')}</textarea>
+                        <textarea class="form-input mono" id="layout-footer" rows="6" style="font-size:var(--font-size-xs);line-height:1.5;" placeholder="Leave empty for default footer (© year panel name)">${escapeHtml(layout.email_footer_html || DEFAULT_FOOTER_HTML)}</textarea>
                         <small style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Inline-styled HTML that appears below the email body. Use inline styles only — email clients strip &lt;style&gt; blocks.</small>
                     </div>
-                    <button type="submit" class="btn btn-primary" id="save-layout-btn">Save Layout</button>
+                    <div style="display:flex;gap:var(--space-2);align-items:center;">
+                        <button type="submit" class="btn btn-primary" id="save-layout-btn">Save Layout</button>
+                        <button type="button" class="btn btn-secondary" id="reset-layout-btn">Reset to Default</button>
+                    </div>
                 </form>
             </div>
         </div>`;
@@ -107,6 +113,13 @@ export async function render(container) {
             }
             btn.disabled = false;
             btn.textContent = 'Save Layout';
+        });
+
+        // Reset to Default button
+        container.querySelector('#reset-layout-btn')?.addEventListener('click', () => {
+            container.querySelector('#layout-header').value = DEFAULT_HEADER_HTML;
+            container.querySelector('#layout-footer').value = DEFAULT_FOOTER_HTML;
+            showToast('Defaults restored — click Save Layout to apply', 'info');
         });
 
     } catch (err) {

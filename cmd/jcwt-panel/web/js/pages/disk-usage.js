@@ -33,7 +33,7 @@ export async function render(container) {
             ` : `
                 <div class="card">
                     <div class="table-wrapper">
-                        <table class="data-table">
+                        <table class="data-table responsive-cards">
                             <thead>
                                 <tr>
                                     <th>Site</th>
@@ -49,16 +49,16 @@ export async function render(container) {
                             <tbody>
                                 ${list.map(s => `
                                 <tr>
-                                    <td>
+                                    <td data-label="Site">
                                         <a href="#/sites/${encodeURIComponent(s.token)}" style="color:var(--accent-primary);text-decoration:none;font-weight:600;">${escapeHtml(s.domain)}</a>
                                     </td>
-                                    <td><code style="font-size:var(--font-size-xs);">${escapeHtml(s.system_user)}</code></td>
-                                    <td style="text-align:right;font-weight:600;" class="mono">${escapeHtml(s.total)}</td>
-                                    <td style="text-align:right;" class="mono">${escapeHtml(s.htdocs)}</td>
-                                    <td style="text-align:right;" class="mono">${escapeHtml(s.logs)}</td>
-                                    <td style="text-align:right;" class="mono">${escapeHtml(s.tmp)}</td>
-                                    <td style="text-align:right;" class="mono">${escapeHtml(s.backups)}</td>
-                                    <td style="text-align:right;">
+                                    <td data-label="System User"><code style="font-size:var(--font-size-xs);">${escapeHtml(s.system_user)}</code></td>
+                                    <td data-label="Total" style="text-align:right;font-weight:600;" class="mono">${escapeHtml(s.total)}</td>
+                                    <td data-label="htdocs" style="text-align:right;" class="mono">${escapeHtml(s.htdocs)}</td>
+                                    <td data-label="logs" style="text-align:right;" class="mono">${escapeHtml(s.logs)}</td>
+                                    <td data-label="tmp" style="text-align:right;" class="mono">${escapeHtml(s.tmp)}</td>
+                                    <td data-label="backups" style="text-align:right;" class="mono">${escapeHtml(s.backups)}</td>
+                                    <td data-label="Actions" style="text-align:right;">
                                         <button class="btn btn-sm btn-secondary cleanup-tmp-btn" data-id="${s.id}" data-domain="${escapeHtml(s.domain)}" title="Clean up tmp directory">
                                             <span class="nav-icon" style="width:14px;height:14px">${icons.trash}</span> Clean Tmp
                                         </button>

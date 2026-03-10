@@ -142,7 +142,7 @@ export async function render(container) {
                                 ${userList.map(u => `
                                 <tr>
                                     <td data-label="Username" class="mono"><strong>${escapeHtml(u.username)}</strong> <span class="copy-name" data-name="${escapeHtml(u.username)}" style="cursor:pointer;display:inline-flex;align-items:center;vertical-align:middle;opacity:0.5;" title="Copy to clipboard"><span class="nav-icon" style="width:16px;height:16px;">${icons.copy}</span></span></td>
-                                    <td data-label="Database" class="mono">${escapeHtml(u.db_name)}</td>
+                                    <td data-label="Database" class="mono">${escapeHtml(u.db_name)} <span class="copy-name" data-name="${escapeHtml(u.db_name)}" style="cursor:pointer;display:inline-flex;align-items:center;vertical-align:middle;opacity:0.5;" title="Copy to clipboard"><span class="nav-icon" style="width:16px;height:16px;">${icons.copy}</span></span></td>
                                     <td data-label="Created" style="color:var(--text-tertiary);font-size:var(--font-size-xs);">${new Date(u.created_at).toLocaleDateString()}</td>
                                     <td>
                                         <div class="table-actions">

@@ -287,7 +287,6 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"--port", strconv.Itoa(port),
 		"--baseURL", fmt.Sprintf("/fb/%d", siteID),
 		"--database", dbPath,
-		"--auth.method", "noauth",
 	)
 
 	// Capture stderr for debugging
