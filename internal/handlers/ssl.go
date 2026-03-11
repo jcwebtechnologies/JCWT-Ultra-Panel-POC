@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"strconv"
 
 	"github.com/jcwt/ultra-panel/internal/config"
@@ -124,5 +125,20 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		jsonError(w, "invalid action: use self-signed, custom, or disable", http.StatusBadRequest)
+	}
+}
+
+// wpUpdateURLScheme uses WP-CLI to update siteurl and home options so that
+// WordPress links use the correct scheme (http or https) after an SSL change.
+func wpUpdateURLScheme(sysUser, phpVersion, webRoot, scheme, domain string) {
+	phpBin := "/usr/bin/php" + phpVersion
+	wpCLI := "/usr/local/bin/wp"
+	newURL := scheme + "://" + domain
+	for _, opt := range []string{"siteurl", "home"} {
+		exec.Command("sudo", "-u", sysUser, phpBin, wpCLI,
+			"option", "update", opt, newURL,
+			"--path="+webRoot,
+			"--allow-root",
+		).Run()
 	}
 }

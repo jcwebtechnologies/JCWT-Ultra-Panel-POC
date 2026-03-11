@@ -2,123 +2,83 @@ package system
 
 import (
 	"fmt"
-	"io"
-	"net/http"
-	"strconv"
-
-	"github.com/jcwt/ultra-panel/internal/config"
-	"github.com/jcwt/ultra-panel/internal/db"
-	"github.com/jcwt/ultra-panel/internal/nginx"
-	"github.com/jcwt/ultra-panel/internal/system"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
-type SSLHandler struct {
-	DB  *db.DB
-	Cfg *config.Config
+// GenerateSelfSignedCert creates a self-signed TLS certificate for domain,
+// storing it under sslBaseDir/{domain}/. Returns the cert and key paths.
+func GenerateSelfSignedCert(sslBaseDir, domain string) (certPath, keyPath string, err error) {
+	dir := filepath.Join(sslBaseDir, domain)
+	if err = os.MkdirAll(dir, 0755); err != nil {
+		return "", "", fmt.Errorf("create ssl dir: %w", err)
+	}
+	certPath = filepath.Join(dir, "cert.pem")
+	keyPath = filepath.Join(dir, "key.pem")
+
+	out, cmdErr := exec.Command("sudo", "openssl", "req", "-x509", "-nodes",
+		"-days", "3650",
+		"-newkey", "rsa:2048",
+		"-keyout", keyPath,
+		"-out", certPath,
+		"-subj", fmt.Sprintf("/CN=%s", domain),
+	).CombinedOutput()
+	if cmdErr != nil {
+		return "", "", fmt.Errorf("openssl: %s", strings.TrimSpace(string(out)))
+	}
+	return certPath, keyPath, nil
 }
 
-func (h *SSLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	switch r.Method {
-	case "POST":
-		h.manage(w, r)
-	default:
-		http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+// SaveCustomCert writes user-supplied certificate and private key bytes under
+// sslBaseDir/{domain}/. Returns the file paths.
+func SaveCustomCert(sslBaseDir, domain string, certData, keyData []byte) (certPath, keyPath string, err error) {
+	dir := filepath.Join(sslBaseDir, domain)
+	if err = os.MkdirAll(dir, 0755); err != nil {
+		return "", "", fmt.Errorf("create ssl dir: %w", err)
 	}
+	certPath = filepath.Join(dir, "cert.pem")
+	keyPath = filepath.Join(dir, "key.pem")
+
+	if err = os.WriteFile(certPath, certData, 0644); err != nil {
+		return "", "", fmt.Errorf("write cert: %w", err)
+	}
+	if err = os.WriteFile(keyPath, keyData, 0600); err != nil {
+		return "", "", fmt.Errorf("write key: %w", err)
+	}
+	return certPath, keyPath, nil
 }
 
-func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
-	action := r.URL.Query().Get("action")
-	idStr := r.URL.Query().Get("site_id")
-	siteID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		jsonError(w, "invalid site_id", http.StatusBadRequest)
-		return
+// ObtainLetsEncryptCert runs certbot to obtain a Let's Encrypt certificate
+// for the given domains using the webroot HTTP-01 challenge.
+// Returns the fullchain and privkey paths under /etc/letsencrypt/live/.
+func ObtainLetsEncryptCert(sslBaseDir, webRoot string, domains []string) (certPath, keyPath string, err error) {
+	if len(domains) == 0 {
+		return "", "", fmt.Errorf("no domains specified")
 	}
 
-	site, err := h.DB.GetSite(siteID)
-	if err != nil {
-		jsonError(w, "site not found", http.StatusNotFound)
-		return
+	args := []string{
+		"certbot", "certonly", "--webroot",
+		"-w", webRoot,
+		"--agree-tos", "--non-interactive", "--quiet",
+		"--email", "admin@" + domains[0],
+	}
+	for _, d := range domains {
+		args = append(args, "-d", d)
 	}
 
-	domain := site["domain"].(string)
-	sysUser := site["system_user"].(string)
-	siteType := site["site_type"].(string)
-	phpVersion := site["php_version"].(string)
-	proxyURL := site["proxy_url"].(string)
-	webRoot := site["web_root"].(string)
-
-	switch action {
-	case "self-signed":
-		certPath, keyPath, err := system.GenerateSelfSignedCert(h.Cfg.SSLBaseDir, domain)
-		if err != nil {
-			jsonError(w, fmt.Sprintf("failed to generate cert: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		h.DB.UpdateSite(siteID, domain, site["aliases"].(string), siteType, phpVersion, proxyURL, "self-signed", certPath, keyPath)
-
-		vhostData := nginx.VHostData{
-			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
-			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
-			SSLType: "self-signed", SSLCertPath: certPath, SSLKeyPath: keyPath,
-			AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
-			ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
-		}
-		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
-		nginx.TestAndReload()
-
-		jsonSuccess(w, map[string]interface{}{"ssl_type": "self-signed", "cert_path": certPath})
-
-	case "custom":
-		// Multipart form with cert and key files
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
-			jsonError(w, "invalid form data", http.StatusBadRequest)
-			return
-		}
-
-		certFile, _, err := r.FormFile("certificate")
-		if err != nil {
-			jsonError(w, "certificate file required", http.StatusBadRequest)
-			return
-		}
-		defer certFile.Close()
-
-		keyFile, _, err := r.FormFile("private_key")
-		if err != nil {
-			jsonError(w, "private key file required", http.StatusBadRequest)
-			return
-		}
-		defer keyFile.Close()
-
-		certData, _ := io.ReadAll(certFile)
-		keyData, _ := io.ReadAll(keyFile)
-
-		certPath, keyPath, err := system.SaveCustomCert(h.Cfg.SSLBaseDir, domain, certData, keyData)
-		if err != nil {
-			jsonError(w, fmt.Sprintf("failed to save cert: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		h.DB.UpdateSite(siteID, domain, site["aliases"].(string), siteType, phpVersion, proxyURL, "custom", certPath, keyPath)
-
-		vhostData := nginx.VHostData{
-			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
-			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
-			SSLType: "custom", SSLCertPath: certPath, SSLKeyPath: keyPath,
-			AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
-			ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
-		}
-		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
-		nginx.TestAndReload()
-
-		jsonSuccess(w, map[string]interface{}{"ssl_type": "custom", "cert_path": certPath})
-
-	case "disable":
-		jsonError(w, "SSL cannot be disabled — at least one certificate must always be active", http.StatusBadRequest)
-
-	default:
-		jsonError(w, "invalid action: use self-signed, custom, or disable", http.StatusBadRequest)
+	out, cmdErr := exec.Command("sudo", args...).CombinedOutput()
+	if cmdErr != nil {
+		return "", "", fmt.Errorf("certbot: %s", strings.TrimSpace(string(out)))
 	}
+
+	// Certbot places certs at /etc/letsencrypt/live/{primaryDomain}/
+	lePath := filepath.Join("/etc/letsencrypt/live", domains[0])
+	return filepath.Join(lePath, "fullchain.pem"), filepath.Join(lePath, "privkey.pem"), nil
+}
+
+// RemoveCert deletes the SSL certificate directory for domain under sslBaseDir.
+func RemoveCert(sslBaseDir, domain string) {
+	os.RemoveAll(filepath.Join(sslBaseDir, domain))
 }
