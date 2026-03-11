@@ -24,6 +24,19 @@ type SSLCertsHandler struct {
 	Cfg *config.Config
 }
 
+// wpUpdateURLScheme updates the WordPress siteurl and home options in the DB
+// to the given scheme (http or https). Called after a valid cert is activated
+// so WP generates correct https:// links without needing wp-config constants.
+func wpUpdateURLScheme(sysUser, phpVersion, webRoot, scheme, domain string) {
+	wpCLI := "/usr/local/bin/wp"
+	phpBin := fmt.Sprintf("php%s", phpVersion)
+	url := scheme + "://" + domain
+	for _, opt := range []string{"siteurl", "home"} {
+		exec.Command("sudo", "-u", sysUser, phpBin, wpCLI,
+			"option", "update", opt, url, "--path="+webRoot).Run()
+	}
+}
+
 func (h *SSLCertsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.Method {
@@ -207,6 +220,12 @@ func (h *SSLCertsHandler) create(w http.ResponseWriter, r *http.Request) {
 	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 	nginx.TestAndReload()
 
+	// For valid certs (LE/custom), update WordPress siteurl/home to https://
+	// so internal loopback calls, REST API, and admin use the canonical HTTPS URL.
+	if siteType == "wordpress" && certType != "self-signed" {
+		wpUpdateURLScheme(sysUser, phpVersion, webRoot, "https", domain)
+	}
+
 	jsonSuccess(w, map[string]interface{}{
 		"id": id, "type": certType, "label": label, "cert_path": certPath,
 	})
@@ -263,6 +282,11 @@ func (h *SSLCertsHandler) activate(w http.ResponseWriter, r *http.Request) {
 	}
 	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 	nginx.TestAndReload()
+
+	// For valid certs (LE/custom), update WordPress siteurl/home to https://
+	if siteType == "wordpress" && certType != "self-signed" {
+		wpUpdateURLScheme(sysUser, phpVersion, webRoot, "https", domain)
+	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "certificate activated"})
 }

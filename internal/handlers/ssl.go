@@ -113,6 +113,10 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 		nginx.TestAndReload()
 
+		if siteType == "wordpress" {
+			wpUpdateURLScheme(sysUser, phpVersion, webRoot, "https", domain)
+		}
+
 		jsonSuccess(w, map[string]interface{}{"ssl_type": "custom", "cert_path": certPath})
 
 	case "disable":

@@ -23,14 +23,9 @@ func VerifyCertFiles(certPath, keyPath string) bool {
 	return true
 }
 
-const vhostTemplate = `# JCWT Ultra Panel - Managed vhost for {{.Domain}}
-# DO NOT EDIT MANUALLY - managed by JCWT Panel
-
-{{- if eq .SSLType "none"}}
-server {
-    listen [::]:80;
-    server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
-
+// siteContent is a named template containing the shared inner server-block content
+// (auth, logging, locations). Reused for port-80 and port-443 blocks to avoid duplication.
+const vhostTemplate = `{{define "siteContent"}}
 {{- if .BasicAuthEnabled}}
     auth_basic "Restricted Area";
     auth_basic_user_file /etc/nginx/htpasswd/{{.Domain}}.htpasswd;
@@ -129,8 +124,36 @@ server {
 
     # Common server-level includes (phpMyAdmin, etc.)
     include /etc/nginx/snippets/jcwt-server-common.conf;
+{{- end}}
+# JCWT Ultra Panel - Managed vhost for {{.Domain}}
+# DO NOT EDIT MANUALLY - managed by JCWT Panel
+
+{{- if eq .SSLType "none"}}
+server {
+    listen [::]:80;
+    server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
+{{template "siteContent" .}}
+}
+{{- else if eq .SSLType "self-signed"}}
+{{/* Self-signed: serve on both port 80 and 443 — no forced redirect.
+     WordPress loopback requests use http:// and reach port 80 directly.
+     Forced redirect only applies to valid (LE/custom) certificates. */}}
+server {
+    listen [::]:80;
+    server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
+{{template "siteContent" .}}
+}
+
+server {
+    listen [::]:443 ssl http2;
+    server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
+
+    ssl_certificate {{.SSLCertPath}};
+    ssl_certificate_key {{.SSLKeyPath}};
+{{template "siteContent" .}}
 }
 {{- else}}
+{{/* Valid certificate (letsencrypt / custom): enforce HTTPS. */}}
 server {
     listen [::]:80;
     server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
@@ -143,105 +166,7 @@ server {
 
     ssl_certificate {{.SSLCertPath}};
     ssl_certificate_key {{.SSLKeyPath}};
-
-{{- if .BasicAuthEnabled}}
-    auth_basic "Restricted Area";
-    auth_basic_user_file /etc/nginx/htpasswd/{{.Domain}}.htpasswd;
-{{- end}}
-
-{{- if eq .SiteType "proxy"}}
-{{- if .AccessLog}}
-    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
-{{- else}}
-    access_log off;
-{{- end}}
-{{- if .ErrorLog}}
-    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
-{{- else}}
-    error_log /dev/null;
-{{- end}}
-
-    location / {
-        proxy_pass {{.ProxyURL}};
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-{{- else}}
-    root {{.WebRoot}};
-    index index.php index.html index.htm;
-
-{{- if .AccessLog}}
-    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
-{{- else}}
-    access_log off;
-{{- end}}
-{{- if .ErrorLog}}
-    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
-{{- else}}
-    error_log /dev/null;
-{{- end}}
-
-{{- if eq .SiteType "wordpress"}}
-    client_max_body_size 64m;
-
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    location ~ \.php$ {
-        fastcgi_pass unix:/run/php/php{{.PHPVersion}}-fpm-{{.User}}.sock;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_intercept_errors on;
-        fastcgi_buffers 16 16k;
-        fastcgi_buffer_size 32k;
-    }
-
-    # WordPress security: block access to sensitive files
-    location ~ /wp-config\.php$ { deny all; }
-    location ~ /xmlrpc\.php$ { deny all; }
-    location ~ /wp-content/debug\.log$ { deny all; }
-    location ~* /wp-content/uploads/.*\.php$ { deny all; }
-    location ~* /wp-includes/.*\.php$ {
-        deny all;
-    }
-
-    # Static assets caching
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|webp|woff|woff2|ttf|eot)$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-    }
-{{- else}}
-    location / {
-{{- if eq .SiteType "html"}}
-        try_files $uri $uri/ =404;
-{{- else}}
-        try_files $uri $uri/ /index.php?$query_string;
-{{- end}}
-    }
-
-{{- if eq .SiteType "php"}}
-    location ~ \.php$ {
-        fastcgi_pass unix:/run/php/php{{.PHPVersion}}-fpm-{{.User}}.sock;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-{{- end}}
-{{- end}}
-
-    location ~ /\.(ht|git|svn) {
-        deny all;
-    }
-{{- end}}
-
-    # Common server-level includes (phpMyAdmin, etc.)
-    include /etc/nginx/snippets/jcwt-server-common.conf;
+{{template "siteContent" .}}
 }
 {{- end}}
 `
@@ -270,6 +195,8 @@ func GenerateConfig(data VHostData) (string, error) {
 		return "", fmt.Errorf("parse template: %w", err)
 	}
 
+	// The vhostTemplate defines "siteContent" as an associated template.
+	// Execute the outer "vhost" template (the main body, not the define block).
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("execute template: %w", err)

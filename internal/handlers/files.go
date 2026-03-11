@@ -529,19 +529,27 @@ func getFreePort() (int, error) {
 }
 
 // themeInjectionScript is a small script injected into filebrowser HTML responses.
-// It reads the panel's theme cookie and forces filebrowser to match (dark/light theme + editor theme).
+// It reads the panel's theme from localStorage (same origin) and forces filebrowser
+// to match. Listens for storage events so live theme toggling in the panel is
+// immediately reflected in the filebrowser iframe.
 const themeInjectionScript = `<script>
 (function(){
-  var m=document.cookie.match(/(?:^|;\s*)jcwt_theme=([^;]*)/),t=m?m[1]:'light',d=t==='dark';
-  // Force filebrowser body theme class
-  function applyTheme(){var b=document.body;if(!b)return;
+  function getTheme(){
+    var ls=null;try{ls=localStorage.getItem('jcwt-theme');}catch(e){}
+    if(ls)return ls;
+    var m=document.cookie.match(/(?:^|;\s*)jcwt_theme=([^;]*)/);
+    return m?m[1]:'light';
+  }
+  function applyTheme(){
+    var b=document.body;if(!b)return;
+    var d=getTheme()==='dark';
     b.classList.toggle('dark',d);b.classList.toggle('light',!d);
-    // Set CSS custom properties for theme override
     document.documentElement.style.setProperty('color-scheme',d?'dark':'light');
   }
-  // Apply immediately and on DOM ready
   if(document.body)applyTheme();else document.addEventListener('DOMContentLoaded',applyTheme);
-  // Override Vue store theme after filebrowser SPA mounts
+  // Live update when the panel theme toggle fires (storage event fires in same-origin iframes)
+  window.addEventListener('storage',function(e){if(e.key==='jcwt-theme')applyTheme();});
+  // Re-apply after Vue SPA re-renders overwrite body class
   var obs=new MutationObserver(function(){applyTheme();});
   obs.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
   setTimeout(function(){obs.disconnect();},10000);
