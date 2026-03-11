@@ -908,7 +908,7 @@ async function renderFiles(el, siteId, siteToken) {
         <div id="fb-container" style="min-height: 500px; display: flex; align-items: center; justify-content: center;">
             <div class="empty-state">
                 <div class="loading-spinner" style="margin: 0 auto var(--space-3);"></div>
-                <div class="empty-state-title">Starting File Browser...</div>
+                <div class="empty-state-title">Starting File Manager...</div>
                 <div class="empty-state-text">Please wait while the file manager initializes.</div>
             </div>
         </div>

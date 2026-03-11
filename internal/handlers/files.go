@@ -296,7 +296,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			"/usr/local/bin/filebrowser", "users", "add", "admin", "admin-noauth-panel",
 			"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
-			"--perm.download", "--perm.execute", "--perm.share",
+			"--perm.download", "--perm.execute",
 			"--lockPassword",
 			"--hideDotfiles",
 			"--database", dbPath,
@@ -311,8 +311,13 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"/usr/local/bin/filebrowser", "config", "set",
 		"--database", dbPath,
 		"--auth.method", "noauth",
+		"--aceEditorTheme", "chrome",
 		"--branding.theme", "light",
+		"--branding.name", "Neo File Manager",
 		"--branding.disableExternal",
+		"--branding.disableUsedPercentage",
+		"--viewMode", "mosaic",
+		"--commands", "zip, unzip, tar",
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
 	}
