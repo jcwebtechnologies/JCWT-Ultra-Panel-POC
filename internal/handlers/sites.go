@@ -442,7 +442,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 		"--dbhost=localhost",
 		"--dbcharset=utf8mb4",
 		"--dbprefix="+wpTablePrefix,
-		"--extra-php=define( 'DISABLE_WP_CRON', true );\n",
+		"--extra-php=define( 'DISABLE_WP_CRON', true );",
 		"--force",
 	)
 	if output, err := configCmd.CombinedOutput(); err != nil {
@@ -451,13 +451,10 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	}
 
 	// Run WordPress core install via WP-CLI
-	// Use http:// so loopback requests work on the self-signed-cert port-80 block.
-	// WP_SITEURL / WP_HOME are NOT set in wp-config so the DB options are authoritative.
-	// The panel updates them to https:// automatically when a valid cert is activated.
 	installCmd := exec.Command("sudo", "-u", sysUser,
 		phpBinPath, wpCLI, "core", "install",
 		"--path="+webRoot,
-		"--url=http://"+domain,
+		"--url="+domain,
 		"--title="+wpSiteTitle,
 		"--admin_user="+wpAdminUser,
 		"--admin_email="+wpAdminEmail,

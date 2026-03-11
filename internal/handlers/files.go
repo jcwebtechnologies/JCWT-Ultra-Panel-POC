@@ -291,11 +291,13 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 			return 0, fmt.Errorf("filebrowser config init failed: %s", strings.TrimSpace(string(out)))
 		}
 
-		// Always enforce noauth and hide branding link. Theme is injected dynamically by the proxy.
+		// Always enforce noauth, light theme (ace "chrome"), and hide branding link.
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			"/usr/local/bin/filebrowser", "config", "set",
 			"--database", dbPath,
 			"--auth.method", "noauth",
+			"--aceEditorTheme", "chrome",
+			"--branding.theme", "light",
 			"--branding.name", "Neo File Manager",
 			"--branding.disableExternal",
 			"--branding.disableUsedPercentage",
@@ -528,34 +530,6 @@ func getFreePort() (int, error) {
 	return port, nil
 }
 
-// themeInjectionScript is a small script injected into filebrowser HTML responses.
-// It reads the panel's theme from localStorage (same origin) and forces filebrowser
-// to match. Listens for storage events so live theme toggling in the panel is
-// immediately reflected in the filebrowser iframe.
-const themeInjectionScript = `<script>
-(function(){
-  function getTheme(){
-    var ls=null;try{ls=localStorage.getItem('jcwt-theme');}catch(e){}
-    if(ls)return ls;
-    var m=document.cookie.match(/(?:^|;\s*)jcwt_theme=([^;]*)/);
-    return m?m[1]:'light';
-  }
-  function applyTheme(){
-    var b=document.body;if(!b)return;
-    var d=getTheme()==='dark';
-    b.classList.toggle('dark',d);b.classList.toggle('light',!d);
-    document.documentElement.style.setProperty('color-scheme',d?'dark':'light');
-  }
-  if(document.body)applyTheme();else document.addEventListener('DOMContentLoaded',applyTheme);
-  // Live update when the panel theme toggle fires (storage event fires in same-origin iframes)
-  window.addEventListener('storage',function(e){if(e.key==='jcwt-theme')applyTheme();});
-  // Re-apply after Vue SPA re-renders overwrite body class
-  var obs=new MutationObserver(function(){applyTheme();});
-  obs.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
-  setTimeout(function(){obs.disconnect();},10000);
-})();
-</script>`
-
 // reverseProxy is a minimal HTTP reverse proxy
 type reverseProxy struct {
 	target string
@@ -598,37 +572,7 @@ func (p *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// For HTML responses, inject theme script
-	ct := resp.Header.Get("Content-Type")
-	if strings.Contains(ct, "text/html") {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			http.Error(w, "proxy read error", http.StatusBadGateway)
-			return
-		}
-
-		// Inject theme script before </head>
-		html := string(body)
-		if idx := strings.Index(html, "</head>"); idx != -1 {
-			html = html[:idx] + themeInjectionScript + html[idx:]
-		}
-
-		// Write response with updated content length
-		for key, values := range resp.Header {
-			if strings.EqualFold(key, "Content-Length") {
-				continue // will be recalculated
-			}
-			for _, val := range values {
-				w.Header().Add(key, val)
-			}
-		}
-		w.Header().Set("Content-Length", strconv.Itoa(len(html)))
-		w.WriteHeader(resp.StatusCode)
-		w.Write([]byte(html))
-		return
-	}
-
-	// Non-HTML: stream response as-is
+	// Copy response headers
 	for key, values := range resp.Header {
 		for _, val := range values {
 			w.Header().Add(key, val)
@@ -636,6 +580,7 @@ func (p *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(resp.StatusCode)
 
+	// Stream response body
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := resp.Body.Read(buf)
