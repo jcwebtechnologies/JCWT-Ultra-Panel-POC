@@ -291,14 +291,30 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 			return 0, fmt.Errorf("filebrowser config init failed: %s", strings.TrimSpace(string(out)))
 		}
 
+		// Always enforce noauth, light theme (ace "chrome"), and hide branding link.
+		if out, err := exec.Command("sudo", "-u", sysUser,
+			"/usr/local/bin/filebrowser", "config", "set",
+			"--database", dbPath,
+			"--auth.method", "noauth",
+			"--aceEditorTheme", "chrome",
+			"--branding.theme", "light",
+			"--branding.name", "Neo File Manager",
+			"--branding.disableExternal",
+			"--branding.disableUsedPercentage",
+			"--lockPassword",
+			"--hideDotfiles",
+			"--viewMode", "mosaic",
+			"--commands", "zip, unzip, tar",
+		).CombinedOutput(); err != nil {
+			log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
+		}
+
 		// noauth requires at least one user record (ID 1) to auto-login as.
 		// Non-admin with all file-operation permissions (archive/extract needs create+modify).
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			"/usr/local/bin/filebrowser", "users", "add", "admin", "admin-noauth-panel",
 			"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
 			"--perm.download", "--perm.execute",
-			"--lockPassword",
-			"--hideDotfiles",
 			"--database", dbPath,
 		).CombinedOutput(); err != nil {
 			log.Printf("File Browser users add failed for site %d: %v: %s", siteID, err, string(out))
@@ -306,35 +322,21 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		}
 	}
 
-	// Always enforce noauth, light theme (ace "chrome"), and hide branding link.
-	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "config", "set",
-		"--database", dbPath,
-		"--auth.method", "noauth",
-		"--aceEditorTheme", "chrome",
-		"--branding.theme", "light",
-		"--branding.name", "Neo File Manager",
-		"--branding.disableExternal",
-		"--branding.disableUsedPercentage",
-		"--viewMode", "mosaic",
-		"--commands", "zip, unzip, tar",
-	).CombinedOutput(); err != nil {
-		log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
-	}
-
 	// Always enforce non-admin permissions with all file ops, hide dotfiles, lock password.
 	// Migrates old DBs (admin or limited perms) to the desired consistent state.
-	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "users", "update", "1",
-		"--perm.admin=false",
-		"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
-		"--perm.download", "--perm.execute", "--perm.share",
-		"--lockPassword",
-		"--hideDotfiles",
-		"--database", dbPath,
-	).CombinedOutput(); err != nil {
-		log.Printf("File Browser users update failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
-	}
+	// if out, err := exec.Command("sudo", "-u", sysUser,
+	// 	"/usr/local/bin/filebrowser", "users", "update", "1",
+	// 	"--perm.admin=false",
+	// 	"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
+	// 	"--perm.download", "--perm.execute", "--perm.share",
+	// 	"--viewMode", "mosaic",
+	// 	"--aceEditorTheme", "chrome",
+	// 	"--lockPassword",
+	// 	"--hideDotfiles",
+	// 	"--database", dbPath,
+	// ).CombinedOutput(); err != nil {
+	// 	log.Printf("File Browser users update failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
+	// }
 
 	cmd := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser",
