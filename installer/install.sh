@@ -859,8 +859,7 @@ configure_php() {
                     sed -i 's/^;session\.cookie_samesite.*/session.cookie_samesite = Lax/' "$PHPINI"
                     # Hide PHP version
                     sed -i 's/^expose_php.*/expose_php = Off/' "$PHPINI"
-                    # Disable dangerous URL functions
-                    sed -i 's/^allow_url_fopen.*/allow_url_fopen = Off/' "$PHPINI"
+                    # Disable dangerous URL include (allow_url_fopen left enabled for WordPress remote calls)
                     sed -i 's/^allow_url_include.*/allow_url_include = Off/' "$PHPINI"
                     # Limit request data
                     sed -i 's/^max_input_vars.*/max_input_vars = 5000/' "$PHPINI"

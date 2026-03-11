@@ -34,13 +34,23 @@ export async function render(container) {
                     <div><input type="text" class="form-input" id="s-footer" value="${escapeHtml(cfg.footer_text || '')}"></div>
                 </div>
                 <div class="settings-row">
-                    <div class="settings-row-label">Logo URL<small>Custom logo image URL</small></div>
+                    <div class="settings-row-label">☀️ Logo URL (Light Mode)<small>Displayed when light theme is active</small></div>
                     <div>
                         <div style="display: flex; gap: var(--space-2); align-items: center;">
                             <input type="text" class="form-input" id="s-logo" value="${escapeHtml(cfg.logo_url || '')}" placeholder="/api/uploads/logo.png">
                             <button type="button" class="btn btn-sm btn-secondary" id="upload-logo-btn"><span class="nav-icon">${icons.upload}</span></button>
                         </div>
-                        ${cfg.logo_url ? `<img src="${escapeHtml(cfg.logo_url)}" style="max-height: 40px; margin-top: var(--space-2); border-radius: var(--radius-sm);">` : ''}
+                        ${cfg.logo_url ? `<img src="${escapeHtml(cfg.logo_url)}" style="max-height: 40px; margin-top: var(--space-2); border-radius: var(--radius-sm); background: #f8f8f8; padding: 4px;">` : ''}
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-row-label">🌙 Logo URL (Dark Mode)<small>Displayed when dark theme is active</small></div>
+                    <div>
+                        <div style="display: flex; gap: var(--space-2); align-items: center;">
+                            <input type="text" class="form-input" id="s-logo-dark" value="${escapeHtml(cfg.logo_url_dark || '')}" placeholder="/api/uploads/logo-dark.png">
+                            <button type="button" class="btn btn-sm btn-secondary" id="upload-logo-dark-btn"><span class="nav-icon">${icons.upload}</span></button>
+                        </div>
+                        ${cfg.logo_url_dark ? `<img src="${escapeHtml(cfg.logo_url_dark)}" style="max-height: 40px; margin-top: var(--space-2); border-radius: var(--radius-sm); background: #1a1a2e; padding: 4px;">` : ''}
                     </div>
                 </div>
                 <div class="settings-row">
@@ -114,6 +124,24 @@ export async function render(container) {
             } catch (err) { showToast(err.message, 'error'); }
         });
 
+        // Dark logo upload
+        const logoDarkInput = document.createElement('input');
+        logoDarkInput.type = 'file';
+        logoDarkInput.accept = 'image/*';
+        logoDarkInput.style.display = 'none';
+        container.appendChild(logoDarkInput);
+        document.getElementById('upload-logo-dark-btn')?.addEventListener('click', () => logoDarkInput.click());
+        logoDarkInput.addEventListener('change', async () => {
+            if (!logoDarkInput.files[0]) return;
+            const fd = new FormData();
+            fd.append('file', logoDarkInput.files[0]);
+            try {
+                const result = await settings.uploadLogoDark(fd);
+                document.getElementById('s-logo-dark').value = result.url;
+                showToast('Dark logo uploaded!', 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
         // Favicon upload
         const favInput = document.createElement('input');
         favInput.type = 'file';
@@ -142,6 +170,7 @@ export async function render(container) {
                     panel_name: document.getElementById('s-panel-name').value,
                     panel_tagline: document.getElementById('s-tagline').value,
                     logo_url: document.getElementById('s-logo').value,
+                    logo_url_dark: document.getElementById('s-logo-dark').value,
                     favicon_url: document.getElementById('s-favicon').value,
                     primary_color: document.getElementById('s-primary-hex').value,
                     accent_color: document.getElementById('s-accent-hex').value,

@@ -72,11 +72,28 @@ func (h *SMTPHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate
+	// Validate required fields
 	req.Host = strings.TrimSpace(req.Host)
 	req.Username = strings.TrimSpace(req.Username)
 	req.FromEmail = strings.TrimSpace(req.FromEmail)
 	req.FromName = strings.TrimSpace(req.FromName)
+
+	if req.Host == "" {
+		jsonError(w, "SMTP host is required", http.StatusBadRequest)
+		return
+	}
+	if req.FromEmail == "" {
+		jsonError(w, "From email is required", http.StatusBadRequest)
+		return
+	}
+	if req.FromName == "" {
+		jsonError(w, "From name is required", http.StatusBadRequest)
+		return
+	}
+	if req.AuthEnabled && (req.Username == "" || req.Password == "") {
+		jsonError(w, "Username and password are required when authentication is enabled", http.StatusBadRequest)
+		return
+	}
 
 	if len(req.Host) > 255 || len(req.Username) > 255 || len(req.FromEmail) > 255 || len(req.FromName) > 100 {
 		jsonError(w, "field values too long", http.StatusBadRequest)
@@ -110,16 +127,14 @@ func (h *SMTPHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Test SMTP connectivity before saving
-	if req.Host != "" {
-		addr := fmt.Sprintf("%s:%d", req.Host, req.Port)
-		var auth_ smtp.Auth
-		if req.AuthEnabled && req.Username != "" && req.Password != "" {
-			auth_ = smtp.PlainAuth("", req.Username, req.Password, req.Host)
-		}
-		if err := testSMTPConnection(addr, req.Host, req.Encryption, auth_); err != nil {
-			jsonError(w, fmt.Sprintf("SMTP connectivity test failed: %v", err), http.StatusBadRequest)
-			return
-		}
+	addr := fmt.Sprintf("%s:%d", req.Host, req.Port)
+	var auth_ smtp.Auth
+	if req.AuthEnabled && req.Username != "" && req.Password != "" {
+		auth_ = smtp.PlainAuth("", req.Username, req.Password, req.Host)
+	}
+	if err := testSMTPConnection(addr, req.Host, req.Encryption, auth_); err != nil {
+		jsonError(w, fmt.Sprintf("SMTP connectivity test failed: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	if err := h.DB.UpdateSMTPSettings(

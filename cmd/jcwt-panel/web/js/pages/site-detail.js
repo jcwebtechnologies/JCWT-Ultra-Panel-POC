@@ -207,7 +207,7 @@ export async function render(container, siteToken, section) {
                         return;
                     }
                     confirmBtn.disabled = true;
-                    confirmBtn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Deleting...';
+                    confirmBtn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Deleting...';
                     document.getElementById('cancel-delete-site').disabled = true;
                     confirmInput.disabled = true;
                     try {
@@ -545,12 +545,19 @@ function renderSSL(el, site, siteId) {
 
         // Generate self-signed
         document.getElementById('ssl-self-signed')?.addEventListener('click', async () => {
+            const btn = document.getElementById('ssl-self-signed');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Generating...';
             try {
                 await ssl.selfSigned(siteId);
                 showToast('Self-signed certificate generated!', 'success');
                 const mod = await import('./site-detail.js');
                 mod.render(document.getElementById('page-content'), site.token, 'ssl');
-            } catch (err) { showToast(err.message, 'error'); }
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = `${icons.lock} Generate Self-Signed`;
+                showToast(err.message, 'error');
+            }
         });
 
         // Upload custom cert
@@ -629,7 +636,7 @@ function renderSSL(el, site, siteId) {
                 if (checked.length === 0) { showToast('Select at least one domain', 'error'); return; }
                 const btn = modal.querySelector('#le-issue-btn');
                 btn.disabled = true;
-                btn.innerHTML = `<span class="nav-icon" style="width:16px;height:16px;">${icons.shield}</span> Issuing...`;
+                btn.innerHTML = `<span class="loading-spinner btn-spinner"></span> Issuing...`;
                 try {
                     await ssl.letsEncrypt(siteId, checked);
                     closeModal();
@@ -688,12 +695,19 @@ function renderSSL(el, site, siteId) {
         </div>`;
 
         document.getElementById('ssl-self-signed')?.addEventListener('click', async () => {
+            const btn = document.getElementById('ssl-self-signed');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Generating...';
             try {
                 await ssl.selfSigned(siteId);
                 showToast('Self-signed certificate generated!', 'success');
                 const mod = await import('./site-detail.js');
                 mod.render(document.getElementById('page-content'), site.token, 'ssl');
-            } catch (err) { showToast(err.message, 'error'); }
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = `${icons.lock} Generate Self-Signed`;
+                showToast(err.message, 'error');
+            }
         });
 
         document.getElementById('ssl-custom')?.addEventListener('click', () => {
@@ -1572,7 +1586,7 @@ async function renderSSHAccess(container, site, siteId) {
                 const keyType = document.getElementById('gen-key-type').value;
                 const btn = document.getElementById('gen-key-submit');
                 btn.disabled = true;
-                btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Generating...';
+                btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Generating...';
                 try {
                     const data = {
                         site_id: parseInt(siteId),
@@ -1998,7 +2012,7 @@ async function renderBackups(container, site, siteId) {
             if (!await showConfirm('Create Backup', `Create a backup of ${escapeHtml(site.domain)} now? This may take a moment for large sites.`, 'Create Backup', 'btn-primary')) return;
             const btn = document.getElementById('create-backup-btn');
             btn.disabled = true;
-            btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Creating...';
+            btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Creating...';
             try {
                 const result = await request('/api/backups', {
                     method: 'POST',
@@ -2259,8 +2273,8 @@ async function renderLogs(container, site, siteId) {
                     <h3 class="card-title">Site Logs</h3>
                     <div style="display: flex; gap: var(--space-2); align-items: center;">
                         <select class="form-select" id="log-type" style="width: auto; min-width: 140px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
-                            <option value="access" ${activeLog === 'access' ? 'selected' : ''}>Nginx Access Log</option>
-                            <option value="error" ${activeLog === 'error' ? 'selected' : ''}>Nginx Error Log</option>
+                            <option value="access" ${activeLog === 'access' ? 'selected' : ''}>Access Log</option>
+                            <option value="error" ${activeLog === 'error' ? 'selected' : ''}>Error Log</option>
                             ${(site.site_type === 'php' || site.site_type === 'wordpress') ? `<option value="php-error" ${activeLog === 'php-error' ? 'selected' : ''}>PHP Error Log</option>` : ''}
                         </select>
                         <select class="form-select" id="log-lines" style="width: auto; min-width: 80px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">

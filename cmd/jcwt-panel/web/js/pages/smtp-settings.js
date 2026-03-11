@@ -103,19 +103,38 @@ async function loadForm() {
         // Save
         document.getElementById('smtp-form')?.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const host = document.getElementById('smtp-host').value.trim();
+            const port = parseInt(document.getElementById('smtp-port').value);
+            const fromEmail = document.getElementById('smtp-from-email').value.trim();
+            const fromName = document.getElementById('smtp-from-name').value.trim();
+            const authEnabled = document.getElementById('smtp-auth').checked;
+            const username = document.getElementById('smtp-username').value.trim();
+            const password = document.getElementById('smtp-password').value;
+
+            // Required field validations
+            if (!host) { showToast('SMTP Host is required', 'error'); document.getElementById('smtp-host').focus(); return; }
+            if (!port || port < 1 || port > 65535) { showToast('Valid port (1-65535) is required', 'error'); document.getElementById('smtp-port').focus(); return; }
+            if (!fromEmail) { showToast('From Email is required', 'error'); document.getElementById('smtp-from-email').focus(); return; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromEmail)) { showToast('From Email is not a valid email address', 'error'); document.getElementById('smtp-from-email').focus(); return; }
+            if (!fromName) { showToast('From Name is required', 'error'); document.getElementById('smtp-from-name').focus(); return; }
+            if (authEnabled) {
+                if (!username) { showToast('Username is required when authentication is enabled', 'error'); document.getElementById('smtp-username').focus(); return; }
+                if (!password) { showToast('Password is required when authentication is enabled', 'error'); document.getElementById('smtp-password').focus(); return; }
+            }
+
             const btn = document.getElementById('smtp-save-btn');
             btn.disabled = true;
             btn.textContent = 'Testing & Saving...';
             try {
                 await smtpSettings.update({
-                    host: document.getElementById('smtp-host').value.trim(),
-                    port: parseInt(document.getElementById('smtp-port').value) || 587,
+                    host,
+                    port,
                     encryption: document.getElementById('smtp-encryption').value,
-                    auth_enabled: document.getElementById('smtp-auth').checked,
-                    username: document.getElementById('smtp-username').value.trim(),
-                    password: document.getElementById('smtp-password').value,
-                    from_email: document.getElementById('smtp-from-email').value.trim(),
-                    from_name: document.getElementById('smtp-from-name').value.trim(),
+                    auth_enabled: authEnabled,
+                    username,
+                    password,
+                    from_email: fromEmail,
+                    from_name: fromName,
                 });
                 showToast('SMTP connection verified and settings saved', 'success');
                 loadForm();

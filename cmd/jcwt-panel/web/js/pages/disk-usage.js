@@ -94,7 +94,7 @@ export async function render(container) {
                     if (!confirmed) return;
 
                     btn.disabled = true;
-                    btn.innerHTML = '<span class="loading-spinner" style="width:14px;height:14px"></span>';
+                    btn.innerHTML = '<span class="loading-spinner btn-spinner" style="margin-right:0"></span>';
 
                     try {
                         await diskUsage.cleanupTmp(siteId);
