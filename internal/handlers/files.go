@@ -275,41 +275,40 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	dbPath := filepath.Join(panelDir, fmt.Sprintf("filebrowser-%d.db", siteID))
 
-	// Always start with a clean File Browser database.
-	// Stale DBs may retain password auth from previous broken init sequences.
-	exec.Command("sudo", "rm", "-f", dbPath).Run()
+	// Only initialize the DB if it doesn't already exist.
+	// Persisting the DB preserves user preferences, editor settings, and avoids
+	// unnecessary re-initialization on every file browser start.
+	dbExists := exec.Command("sudo", "test", "-f", dbPath).Run() == nil
 
-	// Initialize fresh database WITH noauth in a single step.
-	// Setting --auth.method at init time avoids a separate config set that could silently fail.
-	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "config", "init",
-		"--database", dbPath,
-		"--auth.method", "noauth",
-	).CombinedOutput(); err != nil {
-		log.Printf("File Browser config init failed for site %d: %v: %s", siteID, err, string(out))
-		return 0, fmt.Errorf("filebrowser config init failed: %s", strings.TrimSpace(string(out)))
+	if !dbExists {
+		// Initialize fresh database WITH noauth in a single step.
+		if out, err := exec.Command("sudo", "-u", sysUser,
+			"/usr/local/bin/filebrowser", "config", "init",
+			"--database", dbPath,
+			"--auth.method", "noauth",
+		).CombinedOutput(); err != nil {
+			log.Printf("File Browser config init failed for site %d: %v: %s", siteID, err, string(out))
+			return 0, fmt.Errorf("filebrowser config init failed: %s", strings.TrimSpace(string(out)))
+		}
+
+		// noauth requires at least one user record (ID 1) to auto-login as.
+		if out, err := exec.Command("sudo", "-u", sysUser,
+			"/usr/local/bin/filebrowser", "users", "add", "admin", "admin-noauth-panel",
+			"--perm.admin",
+			"--database", dbPath,
+		).CombinedOutput(); err != nil {
+			log.Printf("File Browser users add failed for site %d: %v: %s", siteID, err, string(out))
+			return 0, fmt.Errorf("filebrowser users add failed: %s", strings.TrimSpace(string(out)))
+		}
 	}
 
-	// noauth requires at least one user record (ID 1) to auto-login as.
-	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "users", "add", "fbuser", "fbuser-noauth-panel",
-		"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify", "--perm.download",
-		"--database", dbPath,
-	).CombinedOutput(); err != nil {
-		log.Printf("File Browser users add failed for site %d: %v: %s", siteID, err, string(out))
-		return 0, fmt.Errorf("filebrowser users add failed: %s", strings.TrimSpace(string(out)))
-	}
-
-	// Belt-and-suspenders: explicitly set noauth again via config set.
-	// This covers filebrowser versions where config init may ignore --auth.method.
+	// Ensure noauth is always set (covers upgrades or config drift).
 	if out, err := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser", "config", "set",
 		"--database", dbPath,
 		"--auth.method", "noauth",
-		"--commands", "",
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser config set noauth failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
-		// Non-fatal: config init already set noauth above; log but continue.
 	}
 
 	cmd := exec.Command("sudo", "-u", sysUser,
