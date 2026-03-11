@@ -331,6 +331,8 @@ async function show2FAModal() {
 function initTheme() {
     const saved = localStorage.getItem('jcwt-theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
+    // Sync theme to cookie for filebrowser integration
+    document.cookie = `jcwt_theme=${saved};path=/;SameSite=Lax`;
 }
 
 function toggleTheme() {
@@ -338,6 +340,8 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('jcwt-theme', next);
+    // Sync theme to cookie so the backend can pass it to filebrowser
+    document.cookie = `jcwt_theme=${next};path=/;SameSite=Lax`;
 }
 
 // ---- Sidebar / Layout ----

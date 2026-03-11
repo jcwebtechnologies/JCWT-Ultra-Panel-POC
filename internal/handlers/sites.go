@@ -442,7 +442,14 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 		"--dbhost=localhost",
 		"--dbcharset=utf8mb4",
 		"--dbprefix="+wpTablePrefix,
-		"--extra-php=define( 'DISABLE_WP_CRON', true );",
+		"--extra-php=define( 'DISABLE_WP_CRON', true );\n"+
+			"define( 'WP_HOME', 'https://"+domain+"' );\n"+
+			"define( 'WP_SITEURL', 'https://"+domain+"' );\n"+
+			"// During CLI setup only, relax verification for loopback/self-signed certs\n"+
+			"if ( defined('WP_CLI') || php_sapi_name() === 'cli' ) {\n"+
+			"  add_filter( 'https_ssl_verify', '__return_false' );\n"+
+			"  add_filter( 'https_local_ssl_verify', '__return_false' );\n"+
+			"}\n",
 		"--force",
 	)
 	if output, err := configCmd.CombinedOutput(); err != nil {
@@ -454,7 +461,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	installCmd := exec.Command("sudo", "-u", sysUser,
 		phpBinPath, wpCLI, "core", "install",
 		"--path="+webRoot,
-		"--url="+domain,
+		"--url=https://"+domain,
 		"--title="+wpSiteTitle,
 		"--admin_user="+wpAdminUser,
 		"--admin_email="+wpAdminEmail,

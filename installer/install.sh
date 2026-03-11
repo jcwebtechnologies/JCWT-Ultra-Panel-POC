@@ -345,7 +345,7 @@ PMANGINX
 
     step_header "Installing PHP Versions"
 
-    PHP_EXTENSIONS="fpm cli mysql curl gd mbstring xml zip intl bcmath opcache readline redis sqlite3"
+    PHP_EXTENSIONS="fpm cli mysql curl gd mbstring xml zip intl bcmath opcache readline redis sqlite3 imagick igbinary soap exif"
 
     for VER in 8.2 8.3 8.4; do
         log_info "Installing PHP ${BOLD}$VER${NC} Core..."
@@ -410,7 +410,7 @@ PMANGINX
 
     # ---- Utilities ----
     log_info "Installing utilities (openssl, ufw, curl, wget, jq, gcc, certbot)..."
-    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils certbot zip unzip"
+    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils certbot zip unzip imagemagick ghostscript"
     apt_run apt-get install -y $UTIL_PKGS
     log_ok "Utilities installed"
 

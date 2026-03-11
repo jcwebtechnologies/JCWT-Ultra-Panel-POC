@@ -291,13 +291,11 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 			return 0, fmt.Errorf("filebrowser config init failed: %s", strings.TrimSpace(string(out)))
 		}
 
-		// Always enforce noauth, light theme (ace "chrome"), and hide branding link.
+		// Always enforce noauth and hide branding link. Theme is injected dynamically by the proxy.
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			"/usr/local/bin/filebrowser", "config", "set",
 			"--database", dbPath,
 			"--auth.method", "noauth",
-			"--aceEditorTheme", "chrome",
-			"--branding.theme", "light",
 			"--branding.name", "Neo File Manager",
 			"--branding.disableExternal",
 			"--branding.disableUsedPercentage",
@@ -312,7 +310,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		// noauth requires at least one user record (ID 1) to auto-login as.
 		// Non-admin with all file-operation permissions (archive/extract needs create+modify).
 		if out, err := exec.Command("sudo", "-u", sysUser,
-			"/usr/local/bin/filebrowser", "users", "add", "admin", "admin-noauth-panel",
+			"/usr/local/bin/filebrowser", "users", "add", "fbuser", "admin-noauth-panel",
 			"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
 			"--perm.download", "--perm.execute",
 			"--database", dbPath,
@@ -530,6 +528,26 @@ func getFreePort() (int, error) {
 	return port, nil
 }
 
+// themeInjectionScript is a small script injected into filebrowser HTML responses.
+// It reads the panel's theme cookie and forces filebrowser to match (dark/light theme + editor theme).
+const themeInjectionScript = `<script>
+(function(){
+  var m=document.cookie.match(/(?:^|;\s*)jcwt_theme=([^;]*)/),t=m?m[1]:'light',d=t==='dark';
+  // Force filebrowser body theme class
+  function applyTheme(){var b=document.body;if(!b)return;
+    b.classList.toggle('dark',d);b.classList.toggle('light',!d);
+    // Set CSS custom properties for theme override
+    document.documentElement.style.setProperty('color-scheme',d?'dark':'light');
+  }
+  // Apply immediately and on DOM ready
+  if(document.body)applyTheme();else document.addEventListener('DOMContentLoaded',applyTheme);
+  // Override Vue store theme after filebrowser SPA mounts
+  var obs=new MutationObserver(function(){applyTheme();});
+  obs.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  setTimeout(function(){obs.disconnect();},10000);
+})();
+</script>`
+
 // reverseProxy is a minimal HTTP reverse proxy
 type reverseProxy struct {
 	target string
@@ -572,7 +590,37 @@ func (p *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Copy response headers
+	// For HTML responses, inject theme script
+	ct := resp.Header.Get("Content-Type")
+	if strings.Contains(ct, "text/html") {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			http.Error(w, "proxy read error", http.StatusBadGateway)
+			return
+		}
+
+		// Inject theme script before </head>
+		html := string(body)
+		if idx := strings.Index(html, "</head>"); idx != -1 {
+			html = html[:idx] + themeInjectionScript + html[idx:]
+		}
+
+		// Write response with updated content length
+		for key, values := range resp.Header {
+			if strings.EqualFold(key, "Content-Length") {
+				continue // will be recalculated
+			}
+			for _, val := range values {
+				w.Header().Add(key, val)
+			}
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(html)))
+		w.WriteHeader(resp.StatusCode)
+		w.Write([]byte(html))
+		return
+	}
+
+	// Non-HTML: stream response as-is
 	for key, values := range resp.Header {
 		for _, val := range values {
 			w.Header().Add(key, val)
@@ -580,7 +628,6 @@ func (p *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(resp.StatusCode)
 
-	// Stream response body
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := resp.Body.Read(buf)
