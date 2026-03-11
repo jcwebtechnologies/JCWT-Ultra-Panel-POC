@@ -49,7 +49,7 @@ func IsSSHEnabled(username string) bool {
 }
 
 // GenerateSSHKeyPair generates an SSH key pair and returns (publicKey, privateKey, fingerprint, error)
-func GenerateSSHKeyPair(keyType string, bits int) (string, string, string, error) {
+func GenerateSSHKeyPair(keyType string, bits int, passphrase string) (string, string, string, error) {
 	tmpDir, err := exec.Command("mktemp", "-d").Output()
 	if err != nil {
 		return "", "", "", fmt.Errorf("create temp dir: %v", err)
@@ -62,9 +62,9 @@ func GenerateSSHKeyPair(keyType string, bits int) (string, string, string, error
 	var args []string
 	switch keyType {
 	case "rsa":
-		args = []string{"-t", "rsa", "-b", fmt.Sprintf("%d", bits), "-f", keyPath, "-N", "", "-C", "jcwt-panel-generated"}
-	case "ecdsa":
-		args = []string{"-t", "ecdsa", "-b", fmt.Sprintf("%d", bits), "-f", keyPath, "-N", "", "-C", "jcwt-panel-generated"}
+		args = []string{"-t", "rsa", "-b", fmt.Sprintf("%d", bits), "-f", keyPath, "-N", passphrase, "-C", "jcwt-panel-generated"}
+	case "ed25519":
+		args = []string{"-t", "ed25519", "-f", keyPath, "-N", passphrase, "-C", "jcwt-panel-generated"}
 	default:
 		return "", "", "", fmt.Errorf("unsupported key type: %s", keyType)
 	}

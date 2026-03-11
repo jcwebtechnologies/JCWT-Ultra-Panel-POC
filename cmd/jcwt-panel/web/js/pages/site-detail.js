@@ -252,7 +252,7 @@ export async function render(container, siteToken, section) {
                     case 'ssl': renderSSL(sectionContent, site, siteId); break;
                     case 'cron': renderCron(sectionContent, siteId); break;
                     case 'security': renderSecurity(sectionContent, site, siteId, renderPage); break;
-                    case 'files': renderFiles(sectionContent, siteId); break;
+                    case 'files': renderFiles(sectionContent, siteId, siteToken); break;
                     case 'vhost': renderVhost(sectionContent, site, siteId); break;
                     case 'backups': renderBackups(sectionContent, site, siteId); break;
                     case 'phpmyadmin': renderPhpMyAdmin(sectionContent, siteId); break;
@@ -882,7 +882,7 @@ async function renderCron(el, siteId) {
     } catch (err) { el.innerHTML = `<p>Error: ${err.message}</p>`; }
 }
 
-async function renderFiles(el, siteId) {
+async function renderFiles(el, siteId, siteToken) {
     el.innerHTML = `
     <div class="card" style="padding: var(--space-4);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
@@ -902,7 +902,7 @@ async function renderFiles(el, siteId) {
 
     try {
         const data = await files.list(siteId);
-        const fbUrl = data.url || `/fb/${siteId}/`;
+        const fbUrl = data.url || `/fb/${siteToken}/`;
 
         // Load iframe with retry logic
         let retries = 0;
@@ -1523,16 +1523,29 @@ async function renderSSHAccess(container, site, siteId) {
                         <label class="form-label">Key Type</label>
                         <select class="form-select" id="gen-key-type">
                             <option value="rsa">RSA</option>
-                            <option value="ecdsa">ECDSA</option>
+                            <option value="ed25519">Ed25519</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="gen-bits-group">
                         <label class="form-label">Key Size (bits)</label>
                         <select class="form-select" id="gen-key-bits">
+                            <option value="2048" selected>2048</option>
                             <option value="4096">4096</option>
-                            <option value="2048">2048</option>
                         </select>
                     </div>
+                </div>
+                <div class="form-group" style="margin-top: var(--space-2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-3);">
+                        <label class="toggle">
+                            <input type="checkbox" id="gen-passphrase-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="form-label" style="margin: 0;">Set Passphrase</span>
+                    </div>
+                </div>
+                <div class="form-group" id="gen-passphrase-group" style="display:none;">
+                    <label class="form-label">Passphrase</label>
+                    <input type="password" class="form-input" id="gen-passphrase" placeholder="Enter passphrase for the private key">
                 </div>
             `, `
                 <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
@@ -1540,26 +1553,36 @@ async function renderSSHAccess(container, site, siteId) {
             `);
             // Update bits options when type changes
             document.getElementById('gen-key-type')?.addEventListener('change', (e) => {
-                const bitsSelect = document.getElementById('gen-key-bits');
-                if (e.target.value === 'ecdsa') {
-                    bitsSelect.innerHTML = '<option value="521">521</option><option value="384">384</option><option value="256">256</option>';
+                const bitsGroup = document.getElementById('gen-bits-group');
+                if (e.target.value === 'ed25519') {
+                    bitsGroup.style.display = 'none';
                 } else {
-                    bitsSelect.innerHTML = '<option value="4096">4096</option><option value="2048">2048</option>';
+                    bitsGroup.style.display = '';
+                    document.getElementById('gen-key-bits').innerHTML = '<option value="2048" selected>2048</option><option value="4096">4096</option>';
                 }
+            });
+            // Passphrase toggle
+            document.getElementById('gen-passphrase-toggle')?.addEventListener('change', (e) => {
+                document.getElementById('gen-passphrase-group').style.display = e.target.checked ? '' : 'none';
+                if (!e.target.checked) document.getElementById('gen-passphrase').value = '';
             });
             document.getElementById('gen-key-submit')?.addEventListener('click', async () => {
                 const name = document.getElementById('gen-key-name').value.trim();
                 if (!name) { showToast('Key name is required', 'error'); return; }
+                const keyType = document.getElementById('gen-key-type').value;
                 const btn = document.getElementById('gen-key-submit');
                 btn.disabled = true;
                 btn.innerHTML = '<div class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></div> Generating...';
                 try {
-                    await sshKeys.generate({
+                    const data = {
                         site_id: parseInt(siteId),
                         name,
-                        key_type: document.getElementById('gen-key-type').value,
-                        bits: parseInt(document.getElementById('gen-key-bits').value),
-                    });
+                        key_type: keyType,
+                        bits: keyType === 'ed25519' ? 256 : parseInt(document.getElementById('gen-key-bits').value),
+                    };
+                    const passphrase = document.getElementById('gen-passphrase')?.value || '';
+                    if (passphrase) data.passphrase = passphrase;
+                    await sshKeys.generate(data);
                     closeModal();
                     showToast('Key pair generated', 'success');
                     renderSSHAccess(container, site, siteId);
@@ -1583,14 +1606,14 @@ async function renderSSHAccess(container, site, siteId) {
                         <label class="form-label">Key Type</label>
                         <select class="form-select" id="upl-key-type">
                             <option value="rsa">RSA</option>
-                            <option value="ecdsa">ECDSA</option>
+                            <option value="ed25519">Ed25519</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="upl-bits-group">
                         <label class="form-label">Key Size (bits)</label>
                         <select class="form-select" id="upl-key-bits">
+                            <option value="2048" selected>2048</option>
                             <option value="4096">4096</option>
-                            <option value="2048">2048</option>
                         </select>
                     </div>
                 </div>
@@ -1616,11 +1639,12 @@ async function renderSSHAccess(container, site, siteId) {
             `);
             // Update bits options when type changes
             document.getElementById('upl-key-type')?.addEventListener('change', (e) => {
-                const bitsSelect = document.getElementById('upl-key-bits');
-                if (e.target.value === 'ecdsa') {
-                    bitsSelect.innerHTML = '<option value="521">521</option><option value="384">384</option><option value="256">256</option>';
+                const bitsGroup = document.getElementById('upl-bits-group');
+                if (e.target.value === 'ed25519') {
+                    bitsGroup.style.display = 'none';
                 } else {
-                    bitsSelect.innerHTML = '<option value="4096">4096</option><option value="2048">2048</option>';
+                    bitsGroup.style.display = '';
+                    document.getElementById('upl-key-bits').innerHTML = '<option value="2048" selected>2048</option><option value="4096">4096</option>';
                 }
             });
             // File upload handlers
@@ -2235,9 +2259,9 @@ async function renderLogs(container, site, siteId) {
                     <h3 class="card-title">Site Logs</h3>
                     <div style="display: flex; gap: var(--space-2); align-items: center;">
                         <select class="form-select" id="log-type" style="width: auto; min-width: 140px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
-                            <option value="access" ${activeLog === 'access' ? 'selected' : ''}>Access Log</option>
-                            <option value="error" ${activeLog === 'error' ? 'selected' : ''}>Error Log</option>
-                            ${(site.site_type === 'php' || site.site_type === 'wordpress') ? `<option value="php-fpm" ${activeLog === 'php-fpm' ? 'selected' : ''}>PHP-FPM Error</option>` : ''}
+                            <option value="access" ${activeLog === 'access' ? 'selected' : ''}>Nginx Access Log</option>
+                            <option value="error" ${activeLog === 'error' ? 'selected' : ''}>Nginx Error Log</option>
+                            ${(site.site_type === 'php' || site.site_type === 'wordpress') ? `<option value="php-error" ${activeLog === 'php-error' ? 'selected' : ''}>PHP Error Log</option>` : ''}
                         </select>
                         <select class="form-select" id="log-lines" style="width: auto; min-width: 80px; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs);">
                             ${[25,50,100,200,500].map(n => `<option value="${n}" ${logLines === n ? 'selected' : ''}>${n} lines</option>`).join('')}

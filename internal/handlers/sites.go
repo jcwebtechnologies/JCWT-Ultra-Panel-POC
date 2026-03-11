@@ -469,8 +469,8 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Set correct permissions
 	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
-	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type d -exec chmod 755 {} \\;", webRoot)).Run()
-	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type f -exec chmod 644 {} \\;", webRoot)).Run()
+	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type d -exec chmod 750 {} \\;", webRoot)).Run()
+	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type f -exec chmod 640 {} \\;", webRoot)).Run()
 
 	// Create system cron job for wp-cron.php (direct PHP call, every 30 minutes)
 	cronLogDir := filepath.Join(homeDir, "logs", "custom-cron")

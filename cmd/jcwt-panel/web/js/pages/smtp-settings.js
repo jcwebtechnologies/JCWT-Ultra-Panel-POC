@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — SMTP Settings Page
 import { smtpSettings } from '../api.js';
-import { showToast, showModal, closeModal, icons, escapeHtml } from '../app.js';
+import { showToast, showModal, closeModal, showConfirm, icons, escapeHtml } from '../app.js';
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'SMTP Settings';
@@ -75,12 +75,13 @@ async function loadForm() {
                 </div>
                 <div style="display: flex; gap: var(--space-3); margin-top: var(--space-4);">
                     <button type="submit" class="btn btn-primary" id="smtp-save-btn">
-                        Save Settings
+                        Save & Test Connection
                     </button>
                     <button type="button" class="btn btn-secondary" id="smtp-test-btn">
                         <span class="nav-icon">${icons.mail}</span> Send Test Email
                     </button>
                 </div>
+                ${data.smtp_configured ? `<div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-primary);"><button type="button" class="btn btn-sm btn-danger" id="smtp-delete-btn"><span class="nav-icon" style="width:14px;height:14px;">${icons.trash}</span> Delete SMTP Configuration</button></div>` : ''}
             </form>`;
 
         // Toggle auth fields
@@ -104,7 +105,7 @@ async function loadForm() {
             e.preventDefault();
             const btn = document.getElementById('smtp-save-btn');
             btn.disabled = true;
-            btn.textContent = 'Saving...';
+            btn.textContent = 'Testing & Saving...';
             try {
                 await smtpSettings.update({
                     host: document.getElementById('smtp-host').value.trim(),
@@ -116,12 +117,13 @@ async function loadForm() {
                     from_email: document.getElementById('smtp-from-email').value.trim(),
                     from_name: document.getElementById('smtp-from-name').value.trim(),
                 });
-                showToast('SMTP settings saved', 'success');
+                showToast('SMTP connection verified and settings saved', 'success');
+                loadForm();
             } catch (err) {
                 showToast(err.message || 'Failed to save', 'error');
             }
             btn.disabled = false;
-            btn.textContent = 'Save Settings';
+            btn.textContent = 'Save & Test Connection';
         });
 
         // Test email
@@ -166,6 +168,18 @@ async function loadForm() {
                     btn.innerHTML = `<span class="nav-icon">${icons.mail}</span> Send`;
                 }
             });
+        });
+
+        // Delete SMTP config
+        document.getElementById('smtp-delete-btn')?.addEventListener('click', async () => {
+            if (!await showConfirm('Delete SMTP Configuration', 'Are you sure you want to delete all SMTP settings? This will disable email notifications.', 'Delete', 'btn-danger')) return;
+            try {
+                await smtpSettings.delete();
+                showToast('SMTP configuration deleted', 'success');
+                loadForm();
+            } catch (err) {
+                showToast(err.message || 'Failed to delete', 'error');
+            }
         });
 
     } catch (err) {

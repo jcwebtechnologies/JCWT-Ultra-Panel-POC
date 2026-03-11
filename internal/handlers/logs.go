@@ -54,23 +54,14 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		logPath = fmt.Sprintf("/home/%s/logs/%s-access.log", sysUser, domain)
 	case "error":
 		logPath = fmt.Sprintf("/home/%s/logs/%s-error.log", sysUser, domain)
-	case "php-fpm":
-		phpVersion := site["php_version"].(string)
-		logPath = fmt.Sprintf("/var/log/php%s-fpm.log", phpVersion)
+	case "php-error":
+		logPath = fmt.Sprintf("/home/%s/logs/php/%s-error.log", sysUser, sysUser)
 	default:
-		jsonError(w, "invalid log type: use access, error, or php-fpm", http.StatusBadRequest)
+		jsonError(w, "invalid log type: use access, error, or php-error", http.StatusBadRequest)
 		return
 	}
 
-	var cmd *exec.Cmd
-	if logType == "php-fpm" {
-		// For PHP-FPM logs, filter out NOTICE lines to show only errors/warnings
-		// Read more lines then filter and limit to requested count
-		shellCmd := fmt.Sprintf("sudo tail -n %d %s | grep -v '] NOTICE:' | tail -n %d; exit 0", lines*10, logPath, lines)
-		cmd = exec.Command("bash", "-c", shellCmd)
-	} else {
-		cmd = exec.Command("sudo", "tail", "-n", strconv.Itoa(lines), logPath)
-	}
+	cmd := exec.Command("sudo", "tail", "-n", strconv.Itoa(lines), logPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Check if the file exists to give a meaningful message

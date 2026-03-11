@@ -69,9 +69,10 @@ func (h *FilesHandler) getOrStart(w http.ResponseWriter, r *http.Request) {
 	// Check if instance already running
 	port, running := h.GetInstance(siteID)
 	if running {
+		token, _ := site["token"].(string)
 		jsonSuccess(w, map[string]interface{}{
 			"port": port,
-			"url":  fmt.Sprintf("/fb/%d/", siteID),
+			"url":  fmt.Sprintf("/fb/%s/", token),
 		})
 		return
 	}
@@ -92,9 +93,10 @@ func (h *FilesHandler) getOrStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token, _ := site["token"].(string)
 	jsonSuccess(w, map[string]interface{}{
 		"port": newPort,
-		"url":  fmt.Sprintf("/fb/%d/", siteID),
+		"url":  fmt.Sprintf("/fb/%s/", token),
 	})
 }
 
@@ -177,41 +179,45 @@ func gracefulStop(cmd *exec.Cmd) {
 	}
 }
 
-// ProxyToFileBrowser creates an HTTP handler that reverse-proxies /fb/{siteId}/ to the instance.
+// ProxyToFileBrowser creates an HTTP handler that reverse-proxies /fb/{siteToken}/ to the instance.
 // If no instance is running, it auto-starts one.
 func (h *FilesHandler) ProxyHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Parse /fb/{siteId}/...
+		// Parse /fb/{siteToken}/...
 		path := r.URL.Path
 		if len(path) < 5 {
 			http.NotFound(w, r)
 			return
 		}
 
-		// Extract site ID from path: /fb/123/...
+		// Extract site token from path: /fb/{token}/...
 		parts := splitPath(path)
 		if len(parts) < 2 {
 			http.NotFound(w, r)
 			return
 		}
 
-		siteID, err := strconv.ParseInt(parts[1], 10, 64)
+		siteToken := parts[1]
+		// Look up site by token
+		site, err := h.DB.GetSiteByToken(siteToken)
 		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-
-		port, ok := h.GetInstance(siteID)
-		if !ok {
-			// Auto-start: look up site and start File Browser
-			site, err := h.DB.GetSite(siteID)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusNotFound)
-				w.Write([]byte(`{"success":false,"error":"site not found"}`))
+			// Fall back to parsing as ID for backwards compatibility
+			siteID, parseErr := strconv.ParseInt(siteToken, 10, 64)
+			if parseErr != nil {
+				http.NotFound(w, r)
 				return
 			}
+			site, err = h.DB.GetSite(siteID)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+		}
 
+		siteID := site["id"].(int64)
+		port, ok := h.GetInstance(siteID)
+		if !ok {
+			// Auto-start: start File Browser for the site
 			sysUser, _ := site["system_user"].(string)
 			if sysUser == "" {
 				w.Header().Set("Content-Type", "application/json")
@@ -240,6 +246,16 @@ func (h *FilesHandler) ProxyHandler() http.HandlerFunc {
 
 // startInstance starts a File Browser process for a site and returns the port.
 func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int, error) {
+	// Look up site token for baseURL
+	site, err := h.DB.GetSite(siteID)
+	var siteToken string
+	if err == nil {
+		siteToken, _ = site["token"].(string)
+	}
+	if siteToken == "" {
+		siteToken = strconv.FormatInt(siteID, 10)
+	}
+
 	port, err := getFreePort()
 	if err != nil {
 		return 0, fmt.Errorf("allocate port: %w", err)
@@ -252,6 +268,9 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	}
 	if out, err := exec.Command("sudo", "chown", sysUser+":"+sysUser, panelDir).CombinedOutput(); err != nil {
 		return 0, fmt.Errorf("chown .panel dir: %s: %w", string(out), err)
+	}
+	if out, err := exec.Command("sudo", "chmod", "700", panelDir).CombinedOutput(); err != nil {
+		return 0, fmt.Errorf("chmod .panel dir: %s: %w", string(out), err)
 	}
 
 	dbPath := filepath.Join(panelDir, fmt.Sprintf("filebrowser-%d.db", siteID))
@@ -273,8 +292,8 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	// noauth requires at least one user record (ID 1) to auto-login as.
 	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "users", "add", "admin", "admin-noauth-panel",
-		"--perm.admin",
+		"/usr/local/bin/filebrowser", "users", "add", "fbuser", "fbuser-noauth-panel",
+		"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify", "--perm.download",
 		"--database", dbPath,
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser users add failed for site %d: %v: %s", siteID, err, string(out))
@@ -287,6 +306,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"/usr/local/bin/filebrowser", "config", "set",
 		"--database", dbPath,
 		"--auth.method", "noauth",
+		"--commands", "",
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser config set noauth failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
 		// Non-fatal: config init already set noauth above; log but continue.
@@ -297,7 +317,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"--root", webRoot,
 		"--address", "127.0.0.1",
 		"--port", strconv.Itoa(port),
-		"--baseURL", fmt.Sprintf("/fb/%d", siteID),
+		"--baseURL", fmt.Sprintf("/fb/%s", siteToken),
 		"--database", dbPath,
 	)
 

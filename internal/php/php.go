@@ -40,9 +40,10 @@ php_admin_value[max_input_time] = {{.MaxInputTime}}
 php_admin_value[max_input_vars] = {{.MaxInputVars}}
 php_admin_value[post_max_size] = {{.PostMaxSize}}
 php_admin_value[upload_max_filesize] = {{.UploadMaxFilesize}}
-php_admin_value[open_basedir] = {{.WebRoot}}:{{.HomeDir}}/tmp:/tmp
+php_admin_value[open_basedir] = {{.WebRoot}}:{{.HomeDir}}/tmp:{{.HomeDir}}/logs/php:/tmp:/usr/share/ca-certificates:/etc/ssl/certs
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen
-php_admin_value[error_log] = /var/log/php/{{.User}}-error.log
+php_admin_value[allow_url_fopen] = On
+php_admin_value[error_log] = {{.HomeDir}}/logs/php/{{.User}}-error.log
 {{.CustomDirectives}}
 `
 

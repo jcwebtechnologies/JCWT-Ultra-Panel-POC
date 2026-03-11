@@ -49,6 +49,13 @@ func CreateSystemUser(username, webRootBase string) error {
 		return fmt.Errorf("create logs dir: %s", string(output))
 	}
 
+	// Create PHP logs subdirectory
+	phpLogsDir := filepath.Join(logsDir, "php")
+	cmd = exec.Command("sudo", "mkdir", "-p", phpLogsDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("create php logs dir: %s", string(output))
+	}
+
 	// Create tmp directory (for filebrowser DB, session files, etc.)
 	tmpDir := filepath.Join(homeDir, "tmp")
 	cmd = exec.Command("sudo", "mkdir", "-p", tmpDir)

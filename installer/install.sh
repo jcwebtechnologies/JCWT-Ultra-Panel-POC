@@ -410,7 +410,7 @@ PMANGINX
 
     # ---- Utilities ----
     log_info "Installing utilities (openssl, ufw, curl, wget, jq, gcc, certbot)..."
-    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils certbot"
+    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils certbot zip unzip"
     apt_run apt-get install -y $UTIL_PKGS
     log_ok "Utilities installed"
 

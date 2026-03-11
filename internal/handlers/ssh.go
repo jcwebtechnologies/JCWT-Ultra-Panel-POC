@@ -155,10 +155,11 @@ func (h *SSHHandler) viewKey(w http.ResponseWriter, r *http.Request) {
 
 func (h *SSHHandler) generateKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SiteID  int64  `json:"site_id"`
-		Name    string `json:"name"`
-		KeyType string `json:"key_type"`
-		Bits    int    `json:"bits"`
+		SiteID     int64  `json:"site_id"`
+		Name       string `json:"name"`
+		KeyType    string `json:"key_type"`
+		Bits       int    `json:"bits"`
+		Passphrase string `json:"passphrase"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request", http.StatusBadRequest)
@@ -177,13 +178,11 @@ func (h *SSHHandler) generateKey(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "RSA bits must be 2048 or 4096", http.StatusBadRequest)
 			return
 		}
-	case "ecdsa":
-		if req.Bits != 256 && req.Bits != 384 && req.Bits != 521 {
-			jsonError(w, "ECDSA bits must be 256, 384, or 521", http.StatusBadRequest)
-			return
-		}
+	case "ed25519":
+		// ed25519 has a fixed key size, no bits parameter needed
+		req.Bits = 256
 	default:
-		jsonError(w, "key type must be rsa or ecdsa", http.StatusBadRequest)
+		jsonError(w, "key type must be rsa or ed25519", http.StatusBadRequest)
 		return
 	}
 
@@ -194,7 +193,7 @@ func (h *SSHHandler) generateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pubKey, privKey, fingerprint, err := system.GenerateSSHKeyPair(req.KeyType, req.Bits)
+	pubKey, privKey, fingerprint, err := system.GenerateSSHKeyPair(req.KeyType, req.Bits, req.Passphrase)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("key generation failed: %v", err), http.StatusInternalServerError)
 		return

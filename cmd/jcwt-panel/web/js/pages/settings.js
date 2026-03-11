@@ -35,7 +35,7 @@ export async function render(container) {
                     <div><input type="text" class="form-input" id="s-footer" value="${escapeHtml(cfg.footer_text || '')}"></div>
                 </div>
                 <div class="settings-row">
-                    <div class="settings-row-label">Logo URL (Light Mode)<small>Logo for light theme</small></div>
+                    <div class="settings-row-label">☀️ Logo URL (Light Mode)<small>Displayed when light theme is active</small></div>
                     <div>
                         <div style="display: flex; gap: var(--space-2); align-items: center;">
                             <input type="text" class="form-input" id="s-logo" value="${escapeHtml(cfg.logo_url || '')}" placeholder="/api/uploads/logo.png">
@@ -45,7 +45,7 @@ export async function render(container) {
                     </div>
                 </div>
                 <div class="settings-row">
-                    <div class="settings-row-label">Logo URL (Dark Mode)<small>Logo for dark theme</small></div>
+                    <div class="settings-row-label">🌙 Logo URL (Dark Mode)<small>Displayed when dark theme is active</small></div>
                     <div>
                         <div style="display: flex; gap: var(--space-2); align-items: center;">
                             <input type="text" class="form-input" id="s-logo-dark" value="${escapeHtml(cfg.logo_url_dark || '')}" placeholder="/api/uploads/logo-dark.png">

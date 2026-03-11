@@ -153,6 +153,7 @@ export const services = {
 export const smtpSettings = {
     get: () => request('/api/smtp'),
     update: (data) => request('/api/smtp', { method: 'PUT', body: JSON.stringify(data) }),
+    delete: () => request('/api/smtp', { method: 'DELETE' }),
     testEmail: (to, contentType = 'plain') => request('/api/smtp?action=test', { method: 'POST', body: JSON.stringify({ to, content_type: contentType }) }),
 };
 

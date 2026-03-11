@@ -20,8 +20,14 @@ func WriteLogrotateConfig(webRootBase, systemUser, domain string) error {
 	confName := fmt.Sprintf("jcwt-%s", domain)
 	confPath := fmt.Sprintf("/etc/logrotate.d/%s", confName)
 
+	// Ensure PHP log directory exists
+	phpLogsDir := fmt.Sprintf("%s/php", logsDir)
+	exec.Command("sudo", "mkdir", "-p", phpLogsDir).Run()
+	exec.Command("sudo", "chown", systemUser+":"+systemUser, phpLogsDir).Run()
+
 	config := fmt.Sprintf(`%s/%s-access.log
-%s/%s-error.log {
+%s/%s-error.log
+%s/php/%s-error.log {
     su %s %s
     daily
     rotate 7
@@ -35,7 +41,7 @@ func WriteLogrotateConfig(webRootBase, systemUser, domain string) error {
         [ -f /run/nginx.pid ] && kill -USR1 $(cat /run/nginx.pid) 2>/dev/null || true
     endscript
 }
-`, logsDir, domain, logsDir, domain, systemUser, systemUser, systemUser, systemUser)
+`, logsDir, domain, logsDir, domain, logsDir, systemUser, systemUser, systemUser, systemUser, systemUser)
 
 	cmd := exec.Command("sudo", "tee", confPath)
 	cmd.Stdin = strings.NewReader(config)

@@ -234,7 +234,7 @@ export async function render(container) {
                 const cancelBtn = document.getElementById('cancel-site-btn');
                 const origText = submitBtn.textContent;
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>' + (siteType === 'wordpress' ? 'Installing WordPress...' : 'Creating Site...');
+                submitBtn.innerHTML = '<span class="loading-spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;border-color:rgba(255,255,255,0.3);border-top-color:#fff;"></span>' + (siteType === 'wordpress' ? 'Installing WordPress...' : 'Creating Site...');
                 cancelBtn.disabled = true;
                 cancelBtn.style.opacity = '0.5';
                 cancelBtn.style.pointerEvents = 'none';

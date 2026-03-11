@@ -33,6 +33,8 @@ func (h *SMTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			jsonError(w, "invalid action", http.StatusBadRequest)
 		}
+	case "DELETE":
+		h.delete(w, r)
 	default:
 		http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	}
@@ -48,6 +50,9 @@ func (h *SMTPHandler) get(w http.ResponseWriter, r *http.Request) {
 	if settings["password"] != "" {
 		settings["password"] = "••••••••"
 	}
+	// Determine if SMTP is configured (host is set)
+	host, _ := settings["host"].(string)
+	settings["smtp_configured"] = host != ""
 	jsonSuccess(w, settings)
 }
 
@@ -101,6 +106,19 @@ func (h *SMTPHandler) update(w http.ResponseWriter, r *http.Request) {
 			if pw, ok := existing["password"].(string); ok {
 				req.Password = pw
 			}
+		}
+	}
+
+	// Test SMTP connectivity before saving
+	if req.Host != "" {
+		addr := fmt.Sprintf("%s:%d", req.Host, req.Port)
+		var auth_ smtp.Auth
+		if req.AuthEnabled && req.Username != "" && req.Password != "" {
+			auth_ = smtp.PlainAuth("", req.Username, req.Password, req.Host)
+		}
+		if err := testSMTPConnection(addr, req.Host, req.Encryption, auth_); err != nil {
+			jsonError(w, fmt.Sprintf("SMTP connectivity test failed: %v", err), http.StatusBadRequest)
+			return
 		}
 	}
 
@@ -278,4 +296,80 @@ func sendMail(addr, host, encryption string, auth smtp.Auth, from, to string, ms
 		// No encryption
 		return smtp.SendMail(addr, auth, from, []string{to}, msg)
 	}
+}
+
+// testSMTPConnection tests connectivity to an SMTP server without sending an email.
+func testSMTPConnection(addr, host, encryption string, auth smtp.Auth) error {
+	tlsConf := &tls.Config{ServerName: host}
+
+	switch encryption {
+	case "ssl":
+		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr, tlsConf)
+		if err != nil {
+			return fmt.Errorf("TLS connection failed: %w", err)
+		}
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("SMTP client failed: %w", err)
+		}
+		if auth != nil {
+			if err := c.Auth(auth); err != nil {
+				c.Close()
+				return fmt.Errorf("authentication failed: %w", err)
+			}
+		}
+		c.Quit()
+		return nil
+
+	case "tls":
+		conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+		if err != nil {
+			return fmt.Errorf("connection failed: %w", err)
+		}
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("SMTP client failed: %w", err)
+		}
+		if err := c.StartTLS(tlsConf); err != nil {
+			c.Close()
+			return fmt.Errorf("STARTTLS failed: %w", err)
+		}
+		if auth != nil {
+			if err := c.Auth(auth); err != nil {
+				c.Close()
+				return fmt.Errorf("authentication failed: %w", err)
+			}
+		}
+		c.Quit()
+		return nil
+
+	default:
+		conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+		if err != nil {
+			return fmt.Errorf("connection failed: %w", err)
+		}
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			conn.Close()
+			return fmt.Errorf("SMTP client failed: %w", err)
+		}
+		if auth != nil {
+			if err := c.Auth(auth); err != nil {
+				c.Close()
+				return fmt.Errorf("authentication failed: %w", err)
+			}
+		}
+		c.Quit()
+		return nil
+	}
+}
+
+func (h *SMTPHandler) delete(w http.ResponseWriter, r *http.Request) {
+	if err := h.DB.UpdateSMTPSettings("", 587, "tls", false, "", "", "", ""); err != nil {
+		jsonError(w, "failed to delete SMTP settings", http.StatusInternalServerError)
+		return
+	}
+	jsonSuccess(w, map[string]interface{}{"deleted": true})
 }
