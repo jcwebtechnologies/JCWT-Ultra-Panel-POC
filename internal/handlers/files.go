@@ -291,24 +291,6 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 			return 0, fmt.Errorf("filebrowser config init failed: %s", strings.TrimSpace(string(out)))
 		}
 
-		// Always enforce noauth, light theme (ace "chrome"), and hide branding link.
-		if out, err := exec.Command("sudo", "-u", sysUser,
-			"/usr/local/bin/filebrowser", "config", "set",
-			"--database", dbPath,
-			"--auth.method", "noauth",
-			"--aceEditorTheme", "chrome",
-			"--branding.theme", "light",
-			"--branding.name", "Neo File Manager",
-			"--branding.disableExternal",
-			"--branding.disableUsedPercentage",
-			"--lockPassword",
-			"--hideDotfiles",
-			"--viewMode", "mosaic",
-			"--commands", "zip, unzip, tar",
-		).CombinedOutput(); err != nil {
-			log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
-		}
-
 		// noauth requires at least one user record (ID 1) to auto-login as.
 		// Non-admin with all file-operation permissions (archive/extract needs create+modify).
 		if out, err := exec.Command("sudo", "-u", sysUser,
@@ -322,13 +304,37 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		}
 	}
 
-	// Always enforce non-admin permissions with all file ops, hide dotfiles, lock password.
-	// Migrates old DBs (admin or limited perms) to the desired consistent state.
+	// Always apply config — runs for BOTH new and existing DBs.
+	// This ensures --commands and other settings are correct even when the DB was
+	// created before these settings were added or when they need to be updated.
+	// NOTE: --commands must be comma-separated WITHOUT spaces; File Browser parses
+	// it as a StringSlice CSV and leading spaces become part of the command name,
+	// causing "unzip" to not match " unzip" and silently blocking the feature.
+	if out, err := exec.Command("sudo", "-u", sysUser,
+		"/usr/local/bin/filebrowser", "config", "set",
+		"--database", dbPath,
+		"--auth.method", "noauth",
+		"--aceEditorTheme", "chrome",
+		"--branding.theme", "light",
+		"--branding.name", "Neo File Manager",
+		"--branding.disableExternal",
+		"--branding.disableUsedPercentage",
+		"--lockPassword",
+		"--hideDotfiles",
+		"--viewMode", "mosaic",
+		"--commands", "zip,unzip,tar",
+	).CombinedOutput(); err != nil {
+		log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
+	}
+
+	// Always update user permissions — migrates old DBs (wrong perms, missing flags)
+	// and keeps new DBs in the canonical state. Non-fatal: a failure here won't
+	// prevent the instance from starting, but may limit available features.
 	// if out, err := exec.Command("sudo", "-u", sysUser,
 	// 	"/usr/local/bin/filebrowser", "users", "update", "1",
 	// 	"--perm.admin=false",
 	// 	"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
-	// 	"--perm.download", "--perm.execute", "--perm.share",
+	// 	"--perm.download", "--perm.execute",
 	// 	"--viewMode", "mosaic",
 	// 	"--aceEditorTheme", "chrome",
 	// 	"--lockPassword",
