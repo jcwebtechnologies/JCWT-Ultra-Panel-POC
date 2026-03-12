@@ -59,7 +59,7 @@ func (h *WordPressHandler) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state := loadWPToolsState(sysUser)
+	state := loadWPToolsState(h.Cfg.DataDir, sysUser)
 	jsonSuccess(w, map[string]interface{}{
 		"allow_xmlrpc":      state.AllowXMLRPC,
 		"disable_wp_cron":   state.DisableWPCron,
@@ -95,12 +95,12 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 	phpBin := fmt.Sprintf("php%s", phpVersion)
 	wpCLI := "/usr/local/bin/wp"
 
-	state := loadWPToolsState(sysUser)
+	state := loadWPToolsState(h.Cfg.DataDir, sysUser)
 
 	switch req.Action {
 	case "toggle-xmlrpc":
 		state.AllowXMLRPC = !state.AllowXMLRPC
-		if err := saveWPToolsState(sysUser, state); err != nil {
+		if err := saveWPToolsState(h.Cfg.DataDir, sysUser, state); err != nil {
 			jsonError(w, "failed to save state", http.StatusInternalServerError)
 			return
 		}
@@ -110,7 +110,7 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 
 	case "toggle-wp-cron":
 		state.DisableWPCron = !state.DisableWPCron
-		if err := saveWPToolsState(sysUser, state); err != nil {
+		if err := saveWPToolsState(h.Cfg.DataDir, sysUser, state); err != nil {
 			jsonError(w, "failed to save state", http.StatusInternalServerError)
 			return
 		}
@@ -130,7 +130,7 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 
 	case "toggle-disable-file-edit":
 		state.DisableFileEdit = !state.DisableFileEdit
-		if err := saveWPToolsState(sysUser, state); err != nil {
+		if err := saveWPToolsState(h.Cfg.DataDir, sysUser, state); err != nil {
 			jsonError(w, "failed to save state", http.StatusInternalServerError)
 			return
 		}
@@ -244,29 +244,41 @@ func (h *WordPressHandler) regenVHost(site map[string]interface{}, sysUser, webR
 	accessLog, _ := site["access_log"].(int)
 	errorLog, _ := site["error_log"].(int)
 
-	vhostData := nginx.VHostData{
-		Domain:      domain,
-		Aliases:     aliases,
-		User:        sysUser,
-		SiteType:    siteType,
-		PHPVersion:  phpVersion,
-		ProxyURL:    proxyURL,
-		WebRoot:     webRoot,
-		SSLType:     sslType,
-		SSLCertPath: sslCertPath,
-		SSLKeyPath:  sslKeyPath,
-		AccessLog:   accessLog == 1,
-		ErrorLog:    errorLog == 1,
-		AllowXMLRPC: state.AllowXMLRPC,
+	wpSecurity := ""
+	if siteType == "wordpress" {
+		wpSecurity = nginx.BuildWPSecurityRules(state.AllowXMLRPC)
 	}
-	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
+
+	vhostData := nginx.VHostData{
+		Domain:                 domain,
+		Aliases:                aliases,
+		User:                   sysUser,
+		SiteType:               siteType,
+		PHPVersion:             phpVersion,
+		ProxyURL:               proxyURL,
+		WebRoot:                webRoot,
+		SSLType:                sslType,
+		SSLCertPath:            sslCertPath,
+		SSLKeyPath:             sslKeyPath,
+		AccessLog:              accessLog == 1,
+		ErrorLog:               errorLog == 1,
+		WordPressSecurityRules: wpSecurity,
+	}
+
+	// Use template-based update if template exists, else full regen
+	if tpl, err := loadVHostTemplate(h.Cfg.DataDir, domain); err == nil {
+		expanded := nginx.ExpandVHostTemplate(tpl, vhostData)
+		nginx.WriteConfigString(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, expanded)
+	} else {
+		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
+	}
 	nginx.TestAndReload()
 }
 
-// loadWPToolsState reads per-site state from ~/.panel/wp-tools.json
-func loadWPToolsState(sysUser string) WPToolsState {
+// loadWPToolsState reads per-site state from DataDir/wp-tools/{sysUser}.json
+func loadWPToolsState(dataDir, sysUser string) WPToolsState {
 	var state WPToolsState
-	path := wpToolsPath(sysUser)
+	path := wpToolsPath(dataDir, sysUser)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return state
@@ -275,9 +287,9 @@ func loadWPToolsState(sysUser string) WPToolsState {
 	return state
 }
 
-// saveWPToolsState persists per-site state to ~/.panel/wp-tools.json
-func saveWPToolsState(sysUser string, state WPToolsState) error {
-	path := wpToolsPath(sysUser)
+// saveWPToolsState persists per-site state to DataDir/wp-tools/{sysUser}.json
+func saveWPToolsState(dataDir, sysUser string, state WPToolsState) error {
+	path := wpToolsPath(dataDir, sysUser)
 	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return err
 	}
@@ -288,8 +300,8 @@ func saveWPToolsState(sysUser string, state WPToolsState) error {
 	return os.WriteFile(path, data, 0640)
 }
 
-func wpToolsPath(sysUser string) string {
-	return filepath.Join("/home", sysUser, ".panel", "wp-tools.json")
+func wpToolsPath(dataDir, sysUser string) string {
+	return filepath.Join(dataDir, "wp-tools", sysUser+".json")
 }
 
 // updateWPConfigSnippet inserts or removes a define() inside JCWT markers in wp-config.php.

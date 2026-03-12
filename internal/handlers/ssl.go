@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 
@@ -60,12 +61,23 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 
 		h.DB.UpdateSite(siteID, domain, site["aliases"].(string), siteType, phpVersion, proxyURL, "self-signed", certPath, keyPath)
 
+		wpSecurity := ""
+		if siteType == "wordpress" {
+			wpState := loadWPToolsState(h.Cfg.DataDir, sysUser)
+			wpSecurity = nginx.BuildWPSecurityRules(wpState.AllowXMLRPC)
+		}
+		os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
 		vhostData := nginx.VHostData{
 			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
 			SSLType: "self-signed", SSLCertPath: certPath, SSLKeyPath: keyPath,
-			AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
-			ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
+			AccessLog:              func() bool { a, _ := siteLogFlags(site); return a }(),
+			ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
+			WordPressSecurityRules: wpSecurity,
+		}
+		newTpl, tplErr := nginx.GenerateVHostTemplate(vhostData)
+		if tplErr == nil {
+			saveVHostTemplate(h.Cfg.DataDir, domain, newTpl)
 		}
 		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 		nginx.TestAndReload()
@@ -104,12 +116,23 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 
 		h.DB.UpdateSite(siteID, domain, site["aliases"].(string), siteType, phpVersion, proxyURL, "custom", certPath, keyPath)
 
+		wpSecurity2 := ""
+		if siteType == "wordpress" {
+			wpState2 := loadWPToolsState(h.Cfg.DataDir, sysUser)
+			wpSecurity2 = nginx.BuildWPSecurityRules(wpState2.AllowXMLRPC)
+		}
+		os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
 		vhostData := nginx.VHostData{
 			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
 			SSLType: "custom", SSLCertPath: certPath, SSLKeyPath: keyPath,
-			AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
-			ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
+			AccessLog:              func() bool { a, _ := siteLogFlags(site); return a }(),
+			ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
+			WordPressSecurityRules: wpSecurity2,
+		}
+		newTpl2, tplErr2 := nginx.GenerateVHostTemplate(vhostData)
+		if tplErr2 == nil {
+			saveVHostTemplate(h.Cfg.DataDir, domain, newTpl2)
 		}
 		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 		nginx.TestAndReload()

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -36,6 +37,8 @@ func (h *SitesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "GET":
 		if r.URL.Query().Get("action") == "disk-usage" {
 			h.diskUsage(w, r)
+		} else if r.URL.Query().Get("action") == "resource-usage" {
+			h.resourceUsage(w, r)
 		} else {
 			h.list(w, r)
 		}
@@ -138,6 +141,74 @@ func (h *SitesHandler) diskUsage(w http.ResponseWriter, r *http.Request) {
 		size = fields[0]
 	}
 	jsonSuccess(w, map[string]interface{}{"size": size})
+}
+
+func (h *SitesHandler) resourceUsage(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		jsonError(w, "id required", http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	site, err := h.DB.GetSite(id)
+	if err != nil {
+		jsonError(w, "site not found", http.StatusNotFound)
+		return
+	}
+	sysUser, _ := site["system_user"].(string)
+
+	// ps: list processes owned by the site user with PID, command, RSS (kB), CPU%
+	out, err := exec.Command("ps",
+		"-u", sysUser,
+		"-o", "pid,comm,rss,%cpu",
+		"--no-headers",
+		"--sort=-rss",
+	).Output()
+
+	type ProcessInfo struct {
+		PID    string  `json:"pid"`
+		Name   string  `json:"name"`
+		MemKB  int64   `json:"mem_kb"`
+		MemMB  float64 `json:"mem_mb"`
+		CPUPct float64 `json:"cpu_pct"`
+	}
+
+	var procs []ProcessInfo
+	var totalMemKB int64
+	var totalCPU float64
+
+	if err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) < 4 {
+				continue
+			}
+			var rss int64
+			var cpu float64
+			fmt.Sscanf(fields[2], "%d", &rss)
+			fmt.Sscanf(fields[3], "%f", &cpu)
+			procs = append(procs, ProcessInfo{
+				PID:    fields[0],
+				Name:   fields[1],
+				MemKB:  rss,
+				MemMB:  float64(rss) / 1024.0,
+				CPUPct: cpu,
+			})
+			totalMemKB += rss
+			totalCPU += cpu
+		}
+	}
+
+	jsonSuccess(w, map[string]interface{}{
+		"processes":    procs,
+		"total_mem_kb": totalMemKB,
+		"total_mem_mb": float64(totalMemKB) / 1024.0,
+		"total_cpu":    totalCPU,
+	})
 }
 
 func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -466,13 +537,13 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Save initial WP tools state (wp-cron disabled by default)
 	defaultState := WPToolsState{DisableWPCron: true}
-	saveWPToolsState(sysUser, defaultState)
+	saveWPToolsState(h.Cfg.DataDir, sysUser, defaultState)
 
 	// Run WordPress core install via WP-CLI
 	installCmd := exec.Command("sudo", "-u", sysUser,
 		phpBinPath, wpCLI, "core", "install",
 		"--path="+webRoot,
-		"--url="+domain,
+		"--url=https://"+domain,
 		"--title="+wpSiteTitle,
 		"--admin_user="+wpAdminUser,
 		"--admin_email="+wpAdminEmail,
@@ -530,7 +601,6 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 		ID         int64  `json:"id"`
 		Domain     string `json:"domain"`
 		Aliases    string `json:"aliases"`
-		SiteType   string `json:"site_type"`
 		PHPVersion string `json:"php_version"`
 		ProxyURL   string `json:"proxy_url"`
 		WebRoot    string `json:"web_root"`
@@ -541,18 +611,7 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate site type
-	validTypes := map[string]bool{"php": true, "html": true, "proxy": true, "wordpress": true}
-	if req.SiteType != "" && !validTypes[req.SiteType] {
-		jsonError(w, "invalid site type (must be php, html, proxy, or wordpress)", http.StatusBadRequest)
-		return
-	}
-
-	// Validate proxy URL
-	if req.SiteType == "proxy" && req.ProxyURL != "" && !strings.HasPrefix(req.ProxyURL, "http") {
-		jsonError(w, "proxy URL must start with http:// or https://", http.StatusBadRequest)
-		return
-	}
+	// Note: site_type is immutable after creation; it is read from the database.
 
 	// Validate aliases
 	if req.Aliases != "" {
@@ -571,9 +630,17 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	siteType := site["site_type"].(string)
+
+	// Validate proxy URL for proxy sites
+	if siteType == "proxy" && req.ProxyURL != "" && !strings.HasPrefix(req.ProxyURL, "http") {
+		jsonError(w, "proxy URL must start with http:// or https://", http.StatusBadRequest)
+		return
+	}
+
 	// Handle web root update for php/html/wordpress sites
 	webRoot := site["web_root"].(string)
-	if req.WebRoot != "" && (req.SiteType == "php" || req.SiteType == "html" || req.SiteType == "wordpress") {
+	if req.WebRoot != "" && siteType != "proxy" {
 		// Validate: must be under /home/ and not contain path traversal
 		if strings.Contains(req.WebRoot, "..") || !strings.HasPrefix(req.WebRoot, "/home/") {
 			jsonError(w, "invalid web root: must be under /home/ and cannot contain '..'", http.StatusBadRequest)
@@ -583,7 +650,7 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update database
-	if err := h.DB.UpdateSite(req.ID, req.Domain, req.Aliases, req.SiteType, req.PHPVersion, req.ProxyURL,
+	if err := h.DB.UpdateSite(req.ID, req.Domain, req.Aliases, siteType, req.PHPVersion, req.ProxyURL,
 		req.SSLType, site["ssl_cert_path"].(string), site["ssl_key_path"].(string)); err != nil {
 		jsonError(w, "failed to update site", http.StatusInternalServerError)
 		return
@@ -599,14 +666,14 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 
 	// If changing site type away from PHP/WordPress or updating PHP version, deal with FPM pool
 	phpTypes := map[string]bool{"php": true, "wordpress": true}
-	if phpTypes[oldSiteType] && (!phpTypes[req.SiteType] || req.PHPVersion != site["php_version"].(string)) {
+	if phpTypes[oldSiteType] && (!phpTypes[siteType] || req.PHPVersion != site["php_version"].(string)) {
 		oldVersion := site["php_version"].(string)
 		php.RemovePool(h.Cfg.PHPFPMBaseDir, oldVersion, sysUser)
 		php.RestartFPM(oldVersion)
 	}
 
 	// Create/Update FPM pool if it's currently a PHP/WordPress site
-	if phpTypes[req.SiteType] && (!phpTypes[oldSiteType] || req.PHPVersion != site["php_version"].(string)) {
+	if phpTypes[siteType] && (!phpTypes[oldSiteType] || req.PHPVersion != site["php_version"].(string)) {
 		phpSettings, _ := h.DB.GetPHPSettings(req.ID)
 
 		// If getting settings failed (e.g. was html before and didn't have settings), create defaults
@@ -632,26 +699,52 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 
 	// Regenerate Nginx config
 	accessLog, errorLog := siteLogFlags(site)
-	wpState := loadWPToolsState(sysUser)
+	wpState := loadWPToolsState(h.Cfg.DataDir, sysUser)
+
+	wpSecurity := ""
+	if siteType == "wordpress" {
+		wpSecurity = nginx.BuildWPSecurityRules(wpState.AllowXMLRPC)
+	}
+
 	vhostData := nginx.VHostData{
 		Domain: req.Domain, Aliases: req.Aliases, User: sysUser,
-		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL,
+		SiteType: siteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL,
 		WebRoot: webRoot,
 		SSLType: req.SSLType, SSLCertPath: site["ssl_cert_path"].(string),
 		SSLKeyPath: site["ssl_key_path"].(string),
 		AccessLog:  accessLog, ErrorLog: errorLog,
-		AllowXMLRPC: req.SiteType == "wordpress" && wpState.AllowXMLRPC,
+		WordPressSecurityRules: wpSecurity,
 	}
 
 	// Remove old config if domain changed
 	oldDomain := site["domain"].(string)
 	if oldDomain != req.Domain {
 		nginx.RemoveVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, oldDomain)
+		// Rename vhost template too
+		oldTplPath := vhostTemplatePath(h.Cfg.DataDir, oldDomain)
+		newTplPath := vhostTemplatePath(h.Cfg.DataDir, req.Domain)
+		os.Rename(oldTplPath, newTplPath)
 	}
 
-	if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, vhostData); err != nil {
-		jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)
-		return
+	// Use existing template if SSL type is unchanged, else full regen
+	oldSSLType := site["ssl_type"].(string)
+	tplPath := vhostTemplatePath(h.Cfg.DataDir, req.Domain)
+	if tpl, tplErr := os.ReadFile(tplPath); tplErr == nil && oldSSLType == req.SSLType {
+		expanded := nginx.ExpandVHostTemplate(string(tpl), vhostData)
+		if err := nginx.WriteConfigString(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, expanded); err != nil {
+			jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Full regen: generate template, save it, then apply
+		newTpl, tplGenErr := nginx.GenerateVHostTemplate(vhostData)
+		if tplGenErr == nil {
+			saveVHostTemplate(h.Cfg.DataDir, req.Domain, newTpl)
+		}
+		if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, vhostData); err != nil {
+			jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 	nginx.TestAndReload()
 
@@ -941,22 +1034,36 @@ func (h *SitesHandler) updateLogs(w http.ResponseWriter, r *http.Request) {
 	site["error_log"] = el
 	domain := site["domain"].(string)
 	sysUser := site["system_user"].(string)
+	siteType := site["site_type"].(string)
 
-	vhostData := nginx.VHostData{
-		Domain:      domain,
-		Aliases:     site["aliases"].(string),
-		User:        sysUser,
-		SiteType:    site["site_type"].(string),
-		PHPVersion:  site["php_version"].(string),
-		ProxyURL:    site["proxy_url"].(string),
-		WebRoot:     site["web_root"].(string),
-		SSLType:     site["ssl_type"].(string),
-		SSLCertPath: site["ssl_cert_path"].(string),
-		SSLKeyPath:  site["ssl_key_path"].(string),
-		AccessLog:   req.AccessLog,
-		ErrorLog:    req.ErrorLog,
+	wpSecurity := ""
+	if siteType == "wordpress" {
+		wpState := loadWPToolsState(h.Cfg.DataDir, sysUser)
+		wpSecurity = nginx.BuildWPSecurityRules(wpState.AllowXMLRPC)
 	}
 
+	vhostData := nginx.VHostData{
+		Domain:                 domain,
+		Aliases:                site["aliases"].(string),
+		User:                   sysUser,
+		SiteType:               siteType,
+		PHPVersion:             site["php_version"].(string),
+		ProxyURL:               site["proxy_url"].(string),
+		WebRoot:                site["web_root"].(string),
+		SSLType:                site["ssl_type"].(string),
+		SSLCertPath:            site["ssl_cert_path"].(string),
+		SSLKeyPath:             site["ssl_key_path"].(string),
+		AccessLog:              req.AccessLog,
+		ErrorLog:               req.ErrorLog,
+		WordPressSecurityRules: wpSecurity,
+	}
+
+	// Log changes always force a full regen (structural change: on/off)
+	os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
+	newTpl, tplGenErr := nginx.GenerateVHostTemplate(vhostData)
+	if tplGenErr == nil {
+		saveVHostTemplate(h.Cfg.DataDir, domain, newTpl)
+	}
 	if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {
 		jsonError(w, fmt.Sprintf("failed to update nginx config: %v", err), http.StatusInternalServerError)
 		return

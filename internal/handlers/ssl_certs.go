@@ -197,12 +197,23 @@ func (h *SSLCertsHandler) create(w http.ResponseWriter, r *http.Request) {
 	// Update site's SSL and regenerate vhost
 	h.DB.UpdateSite(siteID, domain, site["aliases"].(string), siteType, phpVersion, proxyURL, certType, certPath, keyPath)
 
+	wpSec1 := ""
+	if siteType == "wordpress" {
+		wpSt1 := loadWPToolsState(h.Cfg.DataDir, sysUser)
+		wpSec1 = nginx.BuildWPSecurityRules(wpSt1.AllowXMLRPC)
+	}
+	os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
 	vhostData := nginx.VHostData{
 		Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 		SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
 		SSLType: certType, SSLCertPath: certPath, SSLKeyPath: keyPath,
-		AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
-		ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
+		AccessLog:              func() bool { a, _ := siteLogFlags(site); return a }(),
+		ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
+		WordPressSecurityRules: wpSec1,
+	}
+	newTpl1, tplErr1 := nginx.GenerateVHostTemplate(vhostData)
+	if tplErr1 == nil {
+		saveVHostTemplate(h.Cfg.DataDir, domain, newTpl1)
 	}
 	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
 	nginx.TestAndReload()
@@ -254,14 +265,25 @@ func (h *SSLCertsHandler) activate(w http.ResponseWriter, r *http.Request) {
 	h.DB.UpdateSite(req.SiteID, domain, site["aliases"].(string), siteType, phpVersion, proxyURL, certType, certPath, keyPath)
 
 	// Regenerate vhost
-	vhostData := nginx.VHostData{
+	wpSec2 := ""
+	if siteType == "wordpress" {
+		wpSt2 := loadWPToolsState(h.Cfg.DataDir, sysUser)
+		wpSec2 = nginx.BuildWPSecurityRules(wpSt2.AllowXMLRPC)
+	}
+	os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
+	vhostData2 := nginx.VHostData{
 		Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 		SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
 		SSLType: certType, SSLCertPath: certPath, SSLKeyPath: keyPath,
-		AccessLog: func() bool { a, _ := siteLogFlags(site); return a }(),
-		ErrorLog:  func() bool { _, e := siteLogFlags(site); return e }(),
+		AccessLog:              func() bool { a, _ := siteLogFlags(site); return a }(),
+		ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
+		WordPressSecurityRules: wpSec2,
 	}
-	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
+	newTpl2, tplErr2 := nginx.GenerateVHostTemplate(vhostData2)
+	if tplErr2 == nil {
+		saveVHostTemplate(h.Cfg.DataDir, domain, newTpl2)
+	}
+	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData2)
 	nginx.TestAndReload()
 
 	jsonSuccess(w, map[string]interface{}{"message": "certificate activated"})

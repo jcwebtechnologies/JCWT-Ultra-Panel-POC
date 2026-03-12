@@ -29,7 +29,6 @@ export async function render(container, siteToken, section) {
                 <div class="page-header-left">
                     <h2 style="display: flex; align-items: center; gap: var(--space-2);">
                         <a href="http://${escapeHtml(site.domain)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;" title="Open site in new tab">${escapeHtml(site.domain)} <span style="font-size: var(--font-size-xs); opacity: 0.4;">↗</span></a>
-                        ${site.site_type === 'wordpress' ? `<a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="font-size:var(--font-size-xs);padding:2px 8px;white-space:nowrap;">WP Admin ↗</a>` : ''}
                     </h2>
                     <div class="site-detail-meta">
                         <span style="display: flex; align-items: center; gap: var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;">${icons.key}</span> ${escapeHtml(site.system_user)}</span>
@@ -62,6 +61,10 @@ export async function render(container, siteToken, section) {
                     <span class="site-info-strip-label">Created</span>
                     <span class="site-info-strip-value">${new Date(site.created_at).toLocaleDateString()}</span>
                 </div>
+                ${site.site_type === 'wordpress' ? `
+                <div class="site-info-strip-item">
+                    <a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="font-size:var(--font-size-xs);padding:2px 8px;white-space:nowrap;align-self:center;">WP Admin ↗</a>
+                </div>` : ''}
             </div>
 
             <div class="site-cards-section">
@@ -255,16 +258,6 @@ export async function render(container, siteToken, section) {
             container.querySelectorAll('.site-card').forEach(card => {
                 card.addEventListener('click', () => {
                     const sec = card.dataset.section;
-                    if (sec === 'resource-usage') {
-                        showModal('Resource Usage', `
-                            <div style="text-align:center;padding:var(--space-6) var(--space-4);">
-                                <div style="font-size:2rem;margin-bottom:var(--space-3);">&#x1F4CA;</div>
-                                <div style="font-weight:600;font-size:var(--font-size-lg);margin-bottom:var(--space-2);">Coming Soon</div>
-                                <div style="color:var(--text-secondary);font-size:var(--font-size-sm);">Per-site CPU and memory usage monitoring is under development and will be available in a future update.</div>
-                            </div>
-                        `, '<button class="btn btn-primary" onclick="document.querySelector(\'.modal-backdrop\').click()">OK</button>');
-                        return;
-                    }
                     window.location.hash = `#/sites/${siteToken}/${sec}`;
                 });
             });
@@ -296,6 +289,7 @@ export async function render(container, siteToken, section) {
                     case 'logs': renderLogs(sectionContent, site, siteId); break;
                     case 'disk-usage': renderDiskUsage(sectionContent, site, siteId); break;
                     case 'ssh': renderSSHAccess(sectionContent, site, siteId); break;
+                    case 'resource-usage': renderResourceUsage(sectionContent, site, siteId); break;
                     case 'wptools': renderWordPressTools(sectionContent, site, siteId); break;
                     case 'wpupdates': renderWordPressUpdates(sectionContent, site, siteId); break;
                 }
@@ -407,7 +401,6 @@ function renderOverview(el, site, versions, siteId) {
                 id: parseInt(siteId),
                 domain: domain,
                 aliases: (document.getElementById('edit-aliases')?.value || '').trim(),
-                site_type: siteType,
                 php_version: document.getElementById('edit-php')?.value || '',
                 proxy_url: proxyUrl,
                 web_root: webRoot,
@@ -1868,7 +1861,7 @@ async function renderVhost(container, site, siteId) {
             <div style="padding: var(--space-4);">
                 <div style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); margin-bottom: var(--space-3); background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3); border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);">
                     <span style="flex-shrink:0;width:18px;height:18px;margin-top:1px;color:rgb(234,179,8);">${icons.alertTriangle}</span>
-                    <span>This configuration is auto-managed by JCWT Panel. Manual changes may be overwritten when settings are updated through the panel. Only modify this directly if you understand nginx configuration.</span>
+                    <span>This configuration uses <strong>{token}</strong> placeholders for dynamic values. When site settings are saved, only those tokens are updated — your custom nginx directives are preserved. Use <em>Reset to Default</em> to regenerate the full template from scratch.</span>
                 </div>
                 <div class="form-group">
                     <textarea class="form-textarea mono" id="vhost-editor" style="min-height: 400px; font-size: var(--font-size-xs); line-height: 1.6; tab-size: 4; white-space: pre; overflow-x: auto;">${escapeHtml(data.config)}</textarea>
@@ -1881,12 +1874,18 @@ async function renderVhost(container, site, siteId) {
                     <summary style="cursor: pointer; font-size: var(--font-size-sm); color: var(--text-tertiary);">Available Template Variables</summary>
                     <div style="margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--text-secondary); font-family: var(--font-mono);">
                         <div style="display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3);">
-                            <span>{domain}</span><span style="color:var(--text-tertiary);">Site domain name</span>
+                            <span>{domain}</span><span style="color:var(--text-tertiary);">Primary domain name</span>
+                            <span>{domain_aliases}</span><span style="color:var(--text-tertiary);">Space-separated domain aliases</span>
                             <span>{user}</span><span style="color:var(--text-tertiary);">System user</span>
                             <span>{site_root}</span><span style="color:var(--text-tertiary);">Web root path</span>
                             <span>{php_version}</span><span style="color:var(--text-tertiary);">PHP version (e.g. 8.2)</span>
+                            <span>{proxy_url}</span><span style="color:var(--text-tertiary);">Proxy backend URL</span>
+                            <span>{ssl_cert}</span><span style="color:var(--text-tertiary);">SSL certificate file path</span>
+                            <span>{ssl_key}</span><span style="color:var(--text-tertiary);">SSL key file path</span>
                             <span>{logs_dir}</span><span style="color:var(--text-tertiary);">Log directory path</span>
+                            <span>{wordpress_security}</span><span style="color:var(--text-tertiary);">WordPress security location blocks (managed by WP Tools)</span>
                         </div>
+                        <div style="margin-top:var(--space-2);color:var(--text-tertiary);">Changes to domain, aliases, PHP version, web root, SSL paths and WordPress security rules are applied automatically when site settings are saved — your custom edits outside these tokens are preserved.</div>
                     </div>
                 </details>
             </div>
@@ -2596,7 +2595,6 @@ async function renderWordPressUpdates(container, site, siteId) {
                     btn.disabled = true;
                     btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Updating...';
                     const outputBox = document.getElementById('wp-update-output');
-                    if (outputBox) outputBox.style.display = 'none';
                     try {
                         let result;
                         if (action === 'core-update') result = await wordpress.coreUpdate(siteId);
@@ -2604,12 +2602,21 @@ async function renderWordPressUpdates(container, site, siteId) {
                         else result = await wordpress.themeUpdate(siteId);
 
                         showToast('Update completed!', 'success');
-                        if (result.output && outputBox) {
+                        if (outputBox) {
                             outputBox.style.display = '';
-                            outputBox.querySelector('pre').textContent = result.output;
+                            const pre = outputBox.querySelector('pre');
+                            if (pre && result.output) pre.textContent = result.output;
+                            if (!outputBox.querySelector('.wp-reload-btn')) {
+                                const reloadBtn = document.createElement('button');
+                                reloadBtn.className = 'btn btn-sm btn-ghost wp-reload-btn';
+                                reloadBtn.style.cssText = 'margin-top:var(--space-2);display:block;';
+                                reloadBtn.textContent = 'Check for More Updates';
+                                reloadBtn.addEventListener('click', load);
+                                outputBox.appendChild(reloadBtn);
+                            }
                         }
-                        // Refresh update statuses
-                        setTimeout(load, 1500);
+                        btn.disabled = false;
+                        btn.textContent = origText;
                     } catch (err) {
                         btn.disabled = false;
                         btn.textContent = origText;
@@ -2624,4 +2631,90 @@ async function renderWordPressUpdates(container, site, siteId) {
     }
 
     await load();
+}
+
+// ---- Resource Usage ----
+async function renderResourceUsage(container, site, siteId) {
+    let pollTimer = null;
+
+    function fmtMB(mb) {
+        return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb.toFixed(1) + ' MB';
+    }
+
+    function barWidth(val, max) {
+        return Math.min(100, max > 0 ? (val / max) * 100 : 0).toFixed(1);
+    }
+
+    async function load() {
+        try {
+            const data = await sites.resourceUsage(siteId);
+            const procs = data.processes || [];
+            const totalMB = data.total_mem_mb || 0;
+            const totalCPU = data.total_cpu || 0;
+            const maxMem = procs.reduce((m, p) => Math.max(m, p.mem_mb), 0.01);
+            const maxCPU = procs.reduce((m, p) => Math.max(m, p.cpu_pct), 0.01);
+
+            container.innerHTML = `
+            <div class="card" style="margin-bottom:var(--space-4);">
+                <div class="card-header">
+                    <h3 class="card-title">Resource Usage — ${escapeHtml(site.domain)}</h3>
+                    <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Auto-refreshes every 5s</span>
+                </div>
+                <div style="padding:var(--space-4);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+                    <div>
+                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">Total Memory</div>
+                        <div style="font-weight:600;font-size:var(--font-size-lg);">${fmtMB(totalMB)}</div>
+                        <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:6px;margin-top:var(--space-2);">
+                            <div style="height:6px;background:var(--color-primary);border-radius:var(--radius-full);width:${barWidth(totalMB, 512)}%;transition:width .4s;"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">Total CPU %</div>
+                        <div style="font-weight:600;font-size:var(--font-size-lg);">${totalCPU.toFixed(1)}%</div>
+                        <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:6px;margin-top:var(--space-2);">
+                            <div style="height:6px;background:#f59e0b;border-radius:var(--radius-full);width:${Math.min(100, totalCPU).toFixed(1)}%;transition:width .4s;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Processes (${procs.length})</h3>
+                </div>
+                ${procs.length === 0
+                    ? `<div class="empty-state" style="padding:var(--space-4);">No active processes for this site.</div>`
+                    : `<div class="table-responsive">
+                        <table class="data-table">
+                            <thead><tr><th>PID</th><th>Name</th><th>Memory</th><th style="min-width:140px;">Mem bar</th><th>CPU %</th><th style="min-width:110px;">CPU bar</th></tr></thead>
+                            <tbody>${procs.map(p => `
+                                <tr>
+                                    <td class="mono" style="font-size:var(--font-size-xs);">${escapeHtml(p.pid)}</td>
+                                    <td class="mono">${escapeHtml(p.name)}</td>
+                                    <td>${fmtMB(p.mem_mb)}</td>
+                                    <td><div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:8px;"><div style="height:8px;background:var(--color-primary);border-radius:var(--radius-full);width:${barWidth(p.mem_mb, maxMem)}%;"></div></div></td>
+                                    <td>${p.cpu_pct.toFixed(1)}%</td>
+                                    <td><div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:8px;"><div style="height:8px;background:#f59e0b;border-radius:var(--radius-full);width:${barWidth(p.cpu_pct, maxCPU)}%;"></div></div></td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>`}
+            </div>`;
+        } catch (err) {
+            if (pollTimer) clearInterval(pollTimer);
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+        }
+    }
+
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    await load();
+    pollTimer = setInterval(load, 5000);
+
+    // Stop polling when container is removed from DOM
+    const obs = new MutationObserver(() => {
+        if (!document.contains(container)) {
+            clearInterval(pollTimer);
+            obs.disconnect();
+        }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
 }

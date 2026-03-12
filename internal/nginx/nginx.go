@@ -74,6 +74,7 @@ server {
 {{- if eq .SiteType "wordpress"}}
     client_max_body_size 64m;
 
+{{.WordPressSecurityRules}}
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
@@ -86,17 +87,6 @@ server {
         fastcgi_intercept_errors on;
         fastcgi_buffers 16 16k;
         fastcgi_buffer_size 32k;
-    }
-
-    # WordPress security: block access to sensitive files
-    location ~ /wp-config\.php$ { deny all; }
-{{- if not .AllowXMLRPC}}
-    location ~ /xmlrpc\.php$ { deny all; }
-{{- end}}
-    location ~ /wp-content/debug\.log$ { deny all; }
-    location ~* /wp-content/uploads/.*\.php$ { deny all; }
-    location ~* /wp-includes/.*\.php$ {
-        deny all;
     }
 
     # Static assets caching
@@ -189,6 +179,7 @@ server {
 {{- if eq .SiteType "wordpress"}}
     client_max_body_size 64m;
 
+{{.WordPressSecurityRules}}
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
@@ -201,17 +192,6 @@ server {
         fastcgi_intercept_errors on;
         fastcgi_buffers 16 16k;
         fastcgi_buffer_size 32k;
-    }
-
-    # WordPress security: block access to sensitive files
-    location ~ /wp-config\.php$ { deny all; }
-{{- if not .AllowXMLRPC}}
-    location ~ /xmlrpc\.php$ { deny all; }
-{{- end}}
-    location ~ /wp-content/debug\.log$ { deny all; }
-    location ~* /wp-content/uploads/.*\.php$ { deny all; }
-    location ~* /wp-includes/.*\.php$ {
-        deny all;
     }
 
     # Static assets caching
@@ -265,9 +245,91 @@ type VHostData struct {
 	BasicAuthEnabled bool
 	AccessLog        bool
 	ErrorLog         bool
-	// AllowXMLRPC: when false (default), xmlrpc.php is blocked for WordPress sites.
-	// Set to true only when the user explicitly enables XML-RPC via WordPress Tools.
-	AllowXMLRPC bool
+	// WordPressSecurityRules is the pre-built nginx security block for WordPress sites.
+	// Empty for non-WordPress sites. Built via BuildWPSecurityRules().
+	WordPressSecurityRules string
+}
+
+// BuildWPSecurityRules returns the nginx security location block for WordPress sites.
+// When allowXMLRPC is true the xmlrpc.php block is omitted.
+func BuildWPSecurityRules(allowXMLRPC bool) string {
+	var sb strings.Builder
+	sb.WriteString("    # WordPress security: block access to sensitive files\n")
+	sb.WriteString("    location ~ /wp-config\\.php$ { deny all; }\n")
+	if !allowXMLRPC {
+		sb.WriteString("    location ~ /xmlrpc\\.php$ { deny all; }\n")
+	}
+	sb.WriteString("    location ~ /wp-content/debug\\.log$ { deny all; }\n")
+	sb.WriteString("    location ~* /wp-content/uploads/.*\\.php$ { deny all; }\n")
+	sb.WriteString("    location ~* /wp-includes/.*\\.php$ {\n")
+	sb.WriteString("        deny all;\n")
+	sb.WriteString("    }")
+	return sb.String()
+}
+
+// GenerateVHostTemplate generates a vhost template string where dynamic per-site values are
+// replaced by {token} placeholders. The template reflects the structural choices (SiteType,
+// SSLType, AccessLog, ErrorLog, BasicAuthEnabled) at generation time.
+// Tokens supported by ExpandVHostTemplate:
+//
+//	{domain}, {domain_aliases}, {site_root}, {user}, {php_version},
+//	{proxy_url}, {ssl_cert}, {ssl_key}, {logs_dir}, {wordpress_security}
+func GenerateVHostTemplate(data VHostData) (string, error) {
+	tokenData := VHostData{
+		Domain:                 "{domain}",
+		Aliases:                "{domain_aliases}",
+		User:                   "{user}",
+		SiteType:               data.SiteType,
+		PHPVersion:             "{php_version}",
+		ProxyURL:               "{proxy_url}",
+		WebRoot:                "{site_root}",
+		SSLType:                data.SSLType,
+		SSLCertPath:            "{ssl_cert}",
+		SSLKeyPath:             "{ssl_key}",
+		BasicAuthEnabled:       data.BasicAuthEnabled,
+		AccessLog:              data.AccessLog,
+		ErrorLog:               data.ErrorLog,
+		WordPressSecurityRules: "{wordpress_security}",
+	}
+	return GenerateConfig(tokenData)
+}
+
+// ExpandVHostTemplate replaces {token} placeholders with actual values from data.
+func ExpandVHostTemplate(tmpl string, data VHostData) string {
+	// Handle server_name aliases: remove the token (including leading space) when empty
+	if data.Aliases != "" {
+		tmpl = strings.ReplaceAll(tmpl, "{domain_aliases}", strings.TrimSpace(data.Aliases))
+	} else {
+		tmpl = strings.ReplaceAll(tmpl, " {domain_aliases}", "")
+	}
+	tmpl = strings.ReplaceAll(tmpl, "{domain}", data.Domain)
+	tmpl = strings.ReplaceAll(tmpl, "{site_root}", data.WebRoot)
+	tmpl = strings.ReplaceAll(tmpl, "{user}", data.User)
+	tmpl = strings.ReplaceAll(tmpl, "{php_version}", data.PHPVersion)
+	tmpl = strings.ReplaceAll(tmpl, "{proxy_url}", data.ProxyURL)
+	tmpl = strings.ReplaceAll(tmpl, "{ssl_cert}", data.SSLCertPath)
+	tmpl = strings.ReplaceAll(tmpl, "{ssl_key}", data.SSLKeyPath)
+	tmpl = strings.ReplaceAll(tmpl, "{logs_dir}", "/home/"+data.User+"/logs")
+	tmpl = strings.ReplaceAll(tmpl, "{wordpress_security}", data.WordPressSecurityRules)
+	return tmpl
+}
+
+// WriteConfigString writes a pre-built nginx config string and creates the symlink.
+func WriteConfigString(sitesAvailable, sitesEnabled, domain, configStr string) error {
+	confPath := filepath.Join(sitesAvailable, domain+".conf")
+	cmd := exec.Command("sudo", "tee", confPath)
+	cmd.Stdin = strings.NewReader(configStr)
+	cmd.Stdout = nil
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("write vhost config: %s: %s", err, string(output))
+	}
+	linkPath := filepath.Join(sitesEnabled, domain+".conf")
+	exec.Command("sudo", "rm", "-f", linkPath).Run()
+	cmd = exec.Command("sudo", "ln", "-s", confPath, linkPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("create symlink: %s", string(output))
+	}
+	return nil
 }
 
 // GenerateConfig generates an nginx vhost config

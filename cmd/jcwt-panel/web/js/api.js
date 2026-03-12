@@ -79,6 +79,7 @@ export const sites = {
     update: (data) => request('/api/sites', { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => request(`/api/sites?id=${id}`, { method: 'DELETE' }),
     diskUsage: (id) => request(`/api/sites?action=disk-usage&id=${id}`),
+    resourceUsage: (id) => request(`/api/sites?action=resource-usage&id=${id}`),
 };
 
 // Databases
