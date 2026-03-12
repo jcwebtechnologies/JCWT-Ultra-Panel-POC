@@ -2667,6 +2667,8 @@ async function renderResourceUsage(container, site, siteId) {
             const procs = data.processes || [];
             const totalMB = data.total_mem_mb || 0;
             const totalCPU = data.total_cpu || 0;
+            const procCount = data.process_count ?? procs.length;
+            const shared = data.shared_services || [];
             const maxMem = procs.reduce((m, p) => Math.max(m, p.mem_mb), 0.01);
             const maxCPU = procs.reduce((m, p) => Math.max(m, p.cpu_pct), 0.01);
 
@@ -2676,7 +2678,11 @@ async function renderResourceUsage(container, site, siteId) {
                     <h3 class="card-title">Resource Usage — ${escapeHtml(site.domain)}</h3>
                     <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Auto-refreshes every 5s</span>
                 </div>
-                <div style="padding:var(--space-4);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+                <div style="padding:var(--space-4);display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4);">
+                    <div>
+                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">Processes</div>
+                        <div style="font-weight:600;font-size:var(--font-size-lg);">${procCount}</div>
+                    </div>
                     <div>
                         <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">Total Memory</div>
                         <div style="font-weight:600;font-size:var(--font-size-lg);">${fmtMB(totalMB)}</div>
@@ -2693,19 +2699,20 @@ async function renderResourceUsage(container, site, siteId) {
                     </div>
                 </div>
             </div>
-            <div class="card">
+            <div class="card" style="margin-bottom:var(--space-4);">
                 <div class="card-header">
-                    <h3 class="card-title">Processes (${procs.length})</h3>
+                    <h3 class="card-title">Site Processes (${procCount})</h3>
                 </div>
                 ${procs.length === 0
                     ? `<div class="empty-state" style="padding:var(--space-4);">No active processes for this site.</div>`
                     : `<div class="table-responsive">
                         <table class="data-table">
-                            <thead><tr><th>PID</th><th>Name</th><th>Memory</th><th style="min-width:140px;">Mem bar</th><th>CPU %</th><th style="min-width:110px;">CPU bar</th></tr></thead>
+                            <thead><tr><th>PID</th><th>Name</th><th>Command</th><th>Memory</th><th style="min-width:120px;">Mem bar</th><th>CPU %</th><th style="min-width:90px;">CPU bar</th></tr></thead>
                             <tbody>${procs.map(p => `
                                 <tr>
                                     <td class="mono" style="font-size:var(--font-size-xs);">${escapeHtml(p.pid)}</td>
                                     <td class="mono">${escapeHtml(p.name)}</td>
+                                    <td class="mono" style="font-size:var(--font-size-xs);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(p.cmd || '')}">${escapeHtml(p.cmd || '—')}</td>
                                     <td>${fmtMB(p.mem_mb)}</td>
                                     <td><div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:8px;"><div style="height:8px;background:var(--color-primary);border-radius:var(--radius-full);width:${barWidth(p.mem_mb, maxMem)}%;"></div></div></td>
                                     <td>${p.cpu_pct.toFixed(1)}%</td>
@@ -2714,7 +2721,27 @@ async function renderResourceUsage(container, site, siteId) {
                             </tbody>
                         </table>
                     </div>`}
-            </div>`;
+            </div>
+            ${shared.length > 0 ? `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Shared Services</h3>
+                    <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Server-wide totals — not attributed to this site</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead><tr><th>Service</th><th>Processes</th><th>Total Memory</th><th>Total CPU %</th></tr></thead>
+                        <tbody>${shared.map(s => `
+                            <tr>
+                                <td class="mono">${escapeHtml(s.name)}</td>
+                                <td>${s.process_count}</td>
+                                <td>${fmtMB(s.total_mem_mb)}</td>
+                                <td>${s.total_cpu.toFixed(1)}%</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>` : ''}`;
         } catch (err) {
             if (pollTimer) clearInterval(pollTimer);
             container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -160,55 +161,258 @@ func (h *SitesHandler) resourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sysUser, _ := site["system_user"].(string)
+	if !userRegex.MatchString(sysUser) {
+		jsonError(w, "invalid system user", http.StatusInternalServerError)
+		return
+	}
 
-	// ps: list processes owned by the site user with PID, command, RSS (kB), CPU%
-	out, err := exec.Command("ps",
-		"-u", sysUser,
-		"-o", "pid,comm,rss,%cpu",
-		"--no-headers",
-		"--sort=-rss",
-	).Output()
+	uid, err := lookupUID(sysUser)
+	if err != nil {
+		jsonError(w, "could not resolve site user", http.StatusInternalServerError)
+		return
+	}
+
+	// Shared service names to report as server-wide context.
+	sharedNames := map[string]bool{
+		"nginx":    true,
+		"mysqld":   true,
+		"mariadbd": true,
+	}
 
 	type ProcessInfo struct {
 		PID    string  `json:"pid"`
 		Name   string  `json:"name"`
+		Cmd    string  `json:"cmd"`
 		MemKB  int64   `json:"mem_kb"`
 		MemMB  float64 `json:"mem_mb"`
 		CPUPct float64 `json:"cpu_pct"`
 	}
+	type SharedServiceInfo struct {
+		Name         string  `json:"name"`
+		ProcessCount int     `json:"process_count"`
+		TotalMemKB   int64   `json:"total_mem_kb"`
+		TotalMemMB   float64 `json:"total_mem_mb"`
+		TotalCPU     float64 `json:"total_cpu"`
+	}
 
-	var procs []ProcessInfo
+	// Single /proc scan — reads RSS, name, UID, and cmdline for every process.
+	all := scanProcAll()
+
+	// Partition into site-owned processes and shared services.
+	// Collect all relevant PIDs in a set for the CPU% query.
+	var siteEntries []procInfo
+	sharedAccum := map[string]*SharedServiceInfo{}
+	pidSet := make(map[string]bool)
+
+	for i := range all {
+		p := &all[i]
+		if p.UID == uid {
+			siteEntries = append(siteEntries, *p)
+			pidSet[p.PID] = true
+		}
+		if sharedNames[p.Name] {
+			svc, ok := sharedAccum[p.Name]
+			if !ok {
+				svc = &SharedServiceInfo{Name: p.Name}
+				sharedAccum[p.Name] = svc
+			}
+			svc.ProcessCount++
+			svc.TotalMemKB += p.RssKB
+			pidSet[p.PID] = true
+		}
+	}
+
+	// One ps call for all relevant PIDs (exec.Command, no shell — injection-safe).
+	allPIDs := make([]string, 0, len(pidSet))
+	for pid := range pidSet {
+		allPIDs = append(allPIDs, pid)
+	}
+	cpuMap := fetchCPUPercents(allPIDs)
+
+	// Build per-site process list, sorted by memory descending.
+	procs := make([]ProcessInfo, 0, len(siteEntries))
 	var totalMemKB int64
 	var totalCPU float64
+	for _, p := range siteEntries {
+		cpu := cpuMap[p.PID]
+		procs = append(procs, ProcessInfo{
+			PID:    p.PID,
+			Name:   p.Name,
+			Cmd:    p.Cmd,
+			MemKB:  p.RssKB,
+			MemMB:  float64(p.RssKB) / 1024.0,
+			CPUPct: cpu,
+		})
+		totalMemKB += p.RssKB
+		totalCPU += cpu
+	}
+	sort.Slice(procs, func(i, j int) bool { return procs[i].MemKB > procs[j].MemKB })
 
-	if err == nil {
-		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) < 4 {
-				continue
-			}
-			var rss int64
-			var cpu float64
-			fmt.Sscanf(fields[2], "%d", &rss)
-			fmt.Sscanf(fields[3], "%f", &cpu)
-			procs = append(procs, ProcessInfo{
-				PID:    fields[0],
-				Name:   fields[1],
-				MemKB:  rss,
-				MemMB:  float64(rss) / 1024.0,
-				CPUPct: cpu,
-			})
-			totalMemKB += rss
-			totalCPU += cpu
+	// Apply CPU percentages to shared service totals.
+	for i := range all {
+		p := &all[i]
+		if svc, ok := sharedAccum[p.Name]; ok {
+			svc.TotalCPU += cpuMap[p.PID]
+		}
+	}
+	for _, svc := range sharedAccum {
+		svc.TotalMemMB = float64(svc.TotalMemKB) / 1024.0
+	}
+
+	// Stable output order for shared services.
+	sharedOrder := []string{"nginx", "mysqld", "mariadbd"}
+	sharedSvcs := make([]SharedServiceInfo, 0, len(sharedAccum))
+	for _, name := range sharedOrder {
+		if svc, ok := sharedAccum[name]; ok {
+			sharedSvcs = append(sharedSvcs, *svc)
 		}
 	}
 
 	jsonSuccess(w, map[string]interface{}{
-		"processes":    procs,
-		"total_mem_kb": totalMemKB,
-		"total_mem_mb": float64(totalMemKB) / 1024.0,
-		"total_cpu":    totalCPU,
+		"processes":       procs,
+		"process_count":   len(procs),
+		"total_mem_kb":    totalMemKB,
+		"total_mem_mb":    float64(totalMemKB) / 1024.0,
+		"total_cpu":       totalCPU,
+		"shared_services": sharedSvcs,
 	})
+}
+
+// ---- /proc parsing helpers ----
+
+// procInfo holds information about a single running process read from /proc.
+type procInfo struct {
+	PID   string
+	Name  string
+	UID   int
+	RssKB int64
+	Cmd   string
+}
+
+// lookupUID returns the numeric UID for a Linux username by reading /etc/passwd.
+// Avoids spawning an external command; immune to command injection.
+func lookupUID(username string) (int, error) {
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		return -1, err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" || line[0] == '#' {
+			continue
+		}
+		// Format: username:password:UID:GID:comment:home:shell
+		fields := strings.SplitN(line, ":", 4)
+		if len(fields) < 4 {
+			continue
+		}
+		if fields[0] == username {
+			uid, err := strconv.Atoi(fields[2])
+			if err != nil {
+				return -1, fmt.Errorf("invalid uid for %s", username)
+			}
+			return uid, nil
+		}
+	}
+	return -1, fmt.Errorf("user not found: %s", username)
+}
+
+// readProcEntry reads /proc/[pid]/status and /proc/[pid]/cmdline for one process.
+// Returns nil if the process vanishes mid-read (handles the TOCTOU race gracefully).
+func readProcEntry(pid string) *procInfo {
+	data, err := os.ReadFile("/proc/" + pid + "/status")
+	if err != nil {
+		return nil // process exited between ReadDir and now
+	}
+	p := &procInfo{PID: pid, UID: -1}
+	for _, line := range strings.Split(string(data), "\n") {
+		switch {
+		case strings.HasPrefix(line, "Name:\t"):
+			p.Name = strings.TrimPrefix(line, "Name:\t")
+		case strings.HasPrefix(line, "Uid:\t"):
+			// Uid:\treal\teffective\tsaved\tfs
+			if f := strings.Fields(line); len(f) >= 2 {
+				p.UID, _ = strconv.Atoi(f[1])
+			}
+		case strings.HasPrefix(line, "VmRSS:\t"):
+			// VmRSS:\tNNN kB
+			if f := strings.Fields(line); len(f) >= 2 {
+				p.RssKB, _ = strconv.ParseInt(f[1], 10, 64)
+			}
+		}
+	}
+	if p.UID < 0 {
+		return nil
+	}
+	// cmdline is NUL-separated argv; replace NULs with spaces and truncate for display.
+	if raw, err := os.ReadFile("/proc/" + pid + "/cmdline"); err == nil && len(raw) > 0 {
+		for i, b := range raw {
+			if b == 0 {
+				raw[i] = ' '
+			}
+		}
+		cmd := strings.TrimSpace(string(raw))
+		if len(cmd) > 200 {
+			cmd = cmd[:200]
+		}
+		p.Cmd = cmd
+	}
+	return p
+}
+
+// scanProcAll walks /proc and returns all readable process entries.
+// Processes that vanish mid-scan are silently skipped.
+func scanProcAll() []procInfo {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil
+	}
+	result := make([]procInfo, 0, 64)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := strconv.ParseUint(e.Name(), 10, 32); err != nil {
+			continue // not a PID directory
+		}
+		if p := readProcEntry(e.Name()); p != nil {
+			result = append(result, *p)
+		}
+	}
+	return result
+}
+
+// fetchCPUPercents runs a single ps call for the given PID list and returns pid→cpu%.
+// Uses exec.Command (no shell) — the PID list cannot cause injection.
+// Deduplicates and caps at 512 PIDs to guard against pathological inputs.
+func fetchCPUPercents(pids []string) map[string]float64 {
+	result := make(map[string]float64, len(pids))
+	if len(pids) == 0 {
+		return result
+	}
+	seen := make(map[string]bool, len(pids))
+	uniq := make([]string, 0, len(pids))
+	for _, p := range pids {
+		if !seen[p] {
+			seen[p] = true
+			uniq = append(uniq, p)
+		}
+	}
+	if len(uniq) > 512 {
+		uniq = uniq[:512]
+	}
+	out, err := exec.Command("ps", "-p", strings.Join(uniq, ","), "-o", "pid=,%cpu=").Output()
+	if err != nil {
+		return result
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 2 {
+			var cpu float64
+			fmt.Sscanf(f[1], "%f", &cpu)
+			result[strings.TrimSpace(f[0])] = cpu
+		}
+	}
+	return result
 }
 
 func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
