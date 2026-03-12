@@ -1,5 +1,5 @@
 // JCWT Ultra Panel — Site Detail Page (SSL, PHP Settings, Cron, Files)
-import { sites, phpVersions, ssl, phpSettings, cron, files, databases, dbUsers, diskUsage, sshKeys } from '../api.js';
+import { sites, phpVersions, ssl, phpSettings, cron, files, databases, dbUsers, diskUsage, sshKeys, wordpress } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes, showConfirm } from '../app.js';
 import { request } from '../api.js';
 
@@ -29,6 +29,7 @@ export async function render(container, siteToken, section) {
                 <div class="page-header-left">
                     <h2 style="display: flex; align-items: center; gap: var(--space-2);">
                         <a href="http://${escapeHtml(site.domain)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;" title="Open site in new tab">${escapeHtml(site.domain)} <span style="font-size: var(--font-size-xs); opacity: 0.4;">↗</span></a>
+                        ${site.site_type === 'wordpress' ? `<a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="font-size:var(--font-size-xs);padding:2px 8px;white-space:nowrap;">WP Admin ↗</a>` : ''}
                     </h2>
                     <div class="site-detail-meta">
                         <span style="display: flex; align-items: center; gap: var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;">${icons.key}</span> ${escapeHtml(site.system_user)}</span>
@@ -89,14 +90,6 @@ export async function render(container, siteToken, section) {
                         <div class="site-card-icon green"><span class="nav-icon" style="width:28px;height:28px">${icons.folder}</span></div>
                         <div class="site-card-title">File Manager</div>
                     </div>
-                    <div class="site-card" data-section="databases">
-                        <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.database}</span></div>
-                        <div class="site-card-title">Databases</div>
-                    </div>
-                    <div class="site-card" data-section="dbusers">
-                        <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.users}</span></div>
-                        <div class="site-card-title">Database Users</div>
-                    </div>
                     <div class="site-card" data-section="cron">
                         <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.clock}</span></div>
                         <div class="site-card-title">Cron Jobs</div>
@@ -105,12 +98,41 @@ export async function render(container, siteToken, section) {
                         <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.download}</span></div>
                         <div class="site-card-title">Backup & Restore</div>
                     </div>
+                </div>
+            </div>
+
+            <div class="site-cards-section">
+                <div class="site-cards-section-title">Database</div>
+                <div class="site-cards-grid">
+                    <div class="site-card" data-section="databases">
+                        <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.database}</span></div>
+                        <div class="site-card-title">Databases</div>
+                    </div>
+                    <div class="site-card" data-section="dbusers">
+                        <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.users}</span></div>
+                        <div class="site-card-title">Database Users</div>
+                    </div>
                     <div class="site-card" data-section="phpmyadmin">
                         <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.pma}</span></div>
                         <div class="site-card-title">phpMyAdmin</div>
                     </div>
                 </div>
             </div>
+
+            ${site.site_type === 'wordpress' ? `
+            <div class="site-cards-section">
+                <div class="site-cards-section-title">WordPress</div>
+                <div class="site-cards-grid">
+                    <div class="site-card" data-section="wptools">
+                        <div class="site-card-icon blue"><span class="nav-icon" style="width:28px;height:28px">${icons.settings}</span></div>
+                        <div class="site-card-title">WP Tools</div>
+                    </div>
+                    <div class="site-card" data-section="wpupdates">
+                        <div class="site-card-icon green"><span class="nav-icon" style="width:28px;height:28px">${icons.download}</span></div>
+                        <div class="site-card-title">WP Updates</div>
+                    </div>
+                </div>
+            </div>` : ''}
 
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Security & SSL</div>
@@ -140,6 +162,10 @@ export async function render(container, siteToken, section) {
                     <div class="site-card" data-section="logs">
                         <div class="site-card-icon orange"><span class="nav-icon" style="width:28px;height:28px">${icons.search}</span></div>
                         <div class="site-card-title">Logs</div>
+                    </div>
+                    <div class="site-card" data-section="resource-usage">
+                        <div class="site-card-icon purple"><span class="nav-icon" style="width:28px;height:28px">${icons.dashboard || icons.settings}</span></div>
+                        <div class="site-card-title">Resource Usage</div>
                     </div>
                 </div>
             </div>
@@ -228,7 +254,18 @@ export async function render(container, siteToken, section) {
             // Bind card clicks — navigate to URL-based sections
             container.querySelectorAll('.site-card').forEach(card => {
                 card.addEventListener('click', () => {
-                    window.location.hash = `#/sites/${siteToken}/${card.dataset.section}`;
+                    const sec = card.dataset.section;
+                    if (sec === 'resource-usage') {
+                        showModal('Resource Usage', `
+                            <div style="text-align:center;padding:var(--space-6) var(--space-4);">
+                                <div style="font-size:2rem;margin-bottom:var(--space-3);">&#x1F4CA;</div>
+                                <div style="font-weight:600;font-size:var(--font-size-lg);margin-bottom:var(--space-2);">Coming Soon</div>
+                                <div style="color:var(--text-secondary);font-size:var(--font-size-sm);">Per-site CPU and memory usage monitoring is under development and will be available in a future update.</div>
+                            </div>
+                        `, '<button class="btn btn-primary" onclick="document.querySelector(\'.modal-backdrop\').click()">OK</button>');
+                        return;
+                    }
+                    window.location.hash = `#/sites/${siteToken}/${sec}`;
                 });
             });
 
@@ -259,6 +296,8 @@ export async function render(container, siteToken, section) {
                     case 'logs': renderLogs(sectionContent, site, siteId); break;
                     case 'disk-usage': renderDiskUsage(sectionContent, site, siteId); break;
                     case 'ssh': renderSSHAccess(sectionContent, site, siteId); break;
+                    case 'wptools': renderWordPressTools(sectionContent, site, siteId); break;
+                    case 'wpupdates': renderWordPressUpdates(sectionContent, site, siteId); break;
                 }
             }
         }
@@ -288,12 +327,10 @@ function renderOverview(el, site, versions, siteId) {
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Site Type</label>
-                    <select class="form-select" id="edit-type">
-                        <option value="php" ${site.site_type === 'php' ? 'selected' : ''}>PHP Application</option>
-                        <option value="wordpress" ${site.site_type === 'wordpress' ? 'selected' : ''}>WordPress</option>
-                        <option value="html" ${site.site_type === 'html' ? 'selected' : ''}>Static HTML</option>
-                        <option value="proxy" ${site.site_type === 'proxy' ? 'selected' : ''}>Reverse Proxy</option>
-                    </select>
+                    <div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) 0;">
+                        <span class="badge badge-info">${escapeHtml(site.site_type)}</span>
+                        <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Site type cannot be changed after creation</span>
+                    </div>
                 </div>
                 <div class="form-group" id="edit-php-group" style="${(site.site_type === 'php' || site.site_type === 'wordpress') ? '' : 'display: none;'}">
                     <label class="form-label">PHP Version</label>
@@ -330,17 +367,18 @@ function renderOverview(el, site, versions, siteId) {
         </div>
     </div>`;
 
-    document.getElementById('edit-type')?.addEventListener('change', (e) => {
-        const type = e.target.value;
+    // Site type is now read-only; show/hide proxy/webroot groups based on current type
+    (function() {
+        const type = site.site_type;
         document.getElementById('edit-php-group').style.display = (type === 'php' || type === 'wordpress') ? 'block' : 'none';
         document.getElementById('edit-proxy-group').style.display = type === 'proxy' ? 'block' : 'none';
         document.getElementById('edit-webroot-group').style.display = type !== 'proxy' ? 'block' : 'none';
-    });
+    })();
 
     document.getElementById('update-site-form').addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const siteType = document.getElementById('edit-type').value;
+        const siteType = site.site_type;
         const proxyUrl = (document.getElementById('edit-proxy')?.value || '').trim();
         const domain = document.getElementById('edit-domain').value.trim();
         const webRootSuffix = (document.getElementById('edit-webroot')?.value || '').trim();
@@ -2409,4 +2447,181 @@ function renderTreeHTML(children, depth, sortMode) {
                 <div class="du-children" style="${collapsed ? 'display:none;' : ''}">${childrenHTML}</div>
             </div>`;
     }).join('');
+}
+
+// ---- WordPress Tools ----
+async function renderWordPressTools(container, site, siteId) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    try {
+        const state = await wordpress.status(siteId);
+
+        function renderToggles() {
+            container.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">WordPress Tools</h3>
+                </div>
+                <div style="padding: var(--space-4);">
+                    <div class="settings-row" style="margin-bottom: var(--space-4);">
+                        <div class="settings-row-label">
+                            Allow XML-RPC
+                            <small>Enable the XML-RPC endpoint (xmlrpc.php). Disable to block brute-force attacks.</small>
+                        </div>
+                        <div>
+                            <label class="toggle">
+                                <input type="checkbox" id="wp-xmlrpc-toggle" ${state.allow_xmlrpc ? 'checked' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-row" style="margin-bottom: var(--space-4);">
+                        <div class="settings-row-label">
+                            Disable WP-Cron
+                            <small>Replace WP's built-in pseudo-cron with a server cron job (recommended).</small>
+                        </div>
+                        <div>
+                            <label class="toggle">
+                                <input type="checkbox" id="wp-wpcron-toggle" ${state.disable_wp_cron ? 'checked' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-label">
+                            Disable File Editing
+                            <small>Prevent theme and plugin editing from the WordPress admin dashboard.</small>
+                        </div>
+                        <div>
+                            <label class="toggle">
+                                <input type="checkbox" id="wp-fileedit-toggle" ${state.disable_file_edit ? 'checked' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+            async function bindToggle(id, action, stateKey) {
+                document.getElementById(id)?.addEventListener('change', async (e) => {
+                    const toggle = e.target;
+                    toggle.disabled = true;
+                    try {
+                        const result = await wordpress.toggle(action, siteId);
+                        state[stateKey] = result[stateKey];
+                        showToast('WordPress settings updated', 'success');
+                    } catch (err) {
+                        toggle.checked = !toggle.checked;
+                        showToast(err.message, 'error');
+                    } finally {
+                        toggle.disabled = false;
+                    }
+                });
+            }
+            bindToggle('wp-xmlrpc-toggle', 'toggle-xmlrpc', 'allow_xmlrpc');
+            bindToggle('wp-wpcron-toggle', 'toggle-wp-cron', 'disable_wp_cron');
+            bindToggle('wp-fileedit-toggle', 'toggle-disable-file-edit', 'disable_file_edit');
+        }
+
+        renderToggles();
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+    }
+}
+
+// ---- WordPress Updates ----
+async function renderWordPressUpdates(container, site, siteId) {
+    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+
+    async function load() {
+        try {
+            const data = await wordpress.checkUpdates(siteId);
+            container.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">WordPress Updates</h3>
+                    <button class="btn btn-sm btn-ghost" id="wp-refresh-updates"><span class="nav-icon" style="width:14px;height:14px;">${icons.refresh}</span> Check Again</button>
+                </div>
+                <div style="padding: var(--space-4);">
+                    <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
+                            <div>
+                                <div style="font-weight:600;margin-bottom:var(--space-1);">WordPress Core</div>
+                                <div style="font-size:var(--font-size-sm);color:var(--text-secondary);">
+                                    ${data.core_update_available
+                                        ? '<span class="badge badge-warning">Update available</span>'
+                                        : '<span class="badge badge-success">Up to date</span>'}
+                                </div>
+                            </div>
+                            ${data.core_update_available ? `<button class="btn btn-primary btn-sm wp-update-btn" data-action="core-update">Update Core</button>` : ''}
+                        </div>
+
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
+                            <div>
+                                <div style="font-weight:600;margin-bottom:var(--space-1);">Plugins</div>
+                                <div style="font-size:var(--font-size-sm);color:var(--text-secondary);">
+                                    ${data.plugins_with_updates > 0
+                                        ? `<span class="badge badge-warning">${data.plugins_with_updates} plugin${data.plugins_with_updates > 1 ? 's' : ''} need updating</span>`
+                                        : '<span class="badge badge-success">All up to date</span>'}
+                                </div>
+                            </div>
+                            ${data.plugins_with_updates > 0 ? `<button class="btn btn-primary btn-sm wp-update-btn" data-action="plugin-update">Update All Plugins</button>` : ''}
+                        </div>
+
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
+                            <div>
+                                <div style="font-weight:600;margin-bottom:var(--space-1);">Themes</div>
+                                <div style="font-size:var(--font-size-sm);color:var(--text-secondary);">
+                                    ${data.themes_with_updates > 0
+                                        ? `<span class="badge badge-warning">${data.themes_with_updates} theme${data.themes_with_updates > 1 ? 's' : ''} need updating</span>`
+                                        : '<span class="badge badge-success">All up to date</span>'}
+                                </div>
+                            </div>
+                            ${data.themes_with_updates > 0 ? `<button class="btn btn-primary btn-sm wp-update-btn" data-action="theme-update">Update All Themes</button>` : ''}
+                        </div>
+
+                    </div>
+                </div>
+                <div id="wp-update-output" style="display:none;padding:0 var(--space-4) var(--space-4);">
+                    <pre class="mono" style="background:var(--bg-tertiary);border:1px solid var(--border-primary);border-radius:var(--radius-md);padding:var(--space-3);font-size:var(--font-size-xs);overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;"></pre>
+                </div>
+            </div>`;
+
+            document.getElementById('wp-refresh-updates')?.addEventListener('click', load);
+
+            container.querySelectorAll('.wp-update-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const action = btn.dataset.action;
+                    const origText = btn.textContent;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Updating...';
+                    const outputBox = document.getElementById('wp-update-output');
+                    if (outputBox) outputBox.style.display = 'none';
+                    try {
+                        let result;
+                        if (action === 'core-update') result = await wordpress.coreUpdate(siteId);
+                        else if (action === 'plugin-update') result = await wordpress.pluginUpdate(siteId);
+                        else result = await wordpress.themeUpdate(siteId);
+
+                        showToast('Update completed!', 'success');
+                        if (result.output && outputBox) {
+                            outputBox.style.display = '';
+                            outputBox.querySelector('pre').textContent = result.output;
+                        }
+                        // Refresh update statuses
+                        setTimeout(load, 1500);
+                    } catch (err) {
+                        btn.disabled = false;
+                        btn.textContent = origText;
+                        showToast(err.message, 'error');
+                    }
+                });
+            });
+
+        } catch (err) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
+        }
+    }
+
+    await load();
 }

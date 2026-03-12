@@ -90,7 +90,9 @@ server {
 
     # WordPress security: block access to sensitive files
     location ~ /wp-config\.php$ { deny all; }
+{{- if not .AllowXMLRPC}}
     location ~ /xmlrpc\.php$ { deny all; }
+{{- end}}
     location ~ /wp-content/debug\.log$ { deny all; }
     location ~* /wp-content/uploads/.*\.php$ { deny all; }
     location ~* /wp-includes/.*\.php$ {
@@ -203,7 +205,9 @@ server {
 
     # WordPress security: block access to sensitive files
     location ~ /wp-config\.php$ { deny all; }
+{{- if not .AllowXMLRPC}}
     location ~ /xmlrpc\.php$ { deny all; }
+{{- end}}
     location ~ /wp-content/debug\.log$ { deny all; }
     location ~* /wp-content/uploads/.*\.php$ { deny all; }
     location ~* /wp-includes/.*\.php$ {
@@ -261,6 +265,9 @@ type VHostData struct {
 	BasicAuthEnabled bool
 	AccessLog        bool
 	ErrorLog         bool
+	// AllowXMLRPC: when false (default), xmlrpc.php is blocked for WordPress sites.
+	// Set to true only when the user explicitly enables XML-RPC via WordPress Tools.
+	AllowXMLRPC bool
 }
 
 // GenerateConfig generates an nginx vhost config

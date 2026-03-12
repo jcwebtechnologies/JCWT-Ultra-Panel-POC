@@ -240,3 +240,13 @@ export const sshKeys = {
     authorize: (data) => request('/api/ssh?action=authorize', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id, siteId) => request(`/api/ssh?id=${id}&site_id=${siteId}`, { method: 'DELETE' }),
 };
+
+// WordPress Tools & Updates
+export const wordpress = {
+    status: (siteId) => request(`/api/wordpress?action=status&site_id=${siteId}`),
+    toggle: (action, siteId) => request('/api/wordpress', { method: 'POST', body: JSON.stringify({ action, site_id: siteId }) }),
+    checkUpdates: (siteId) => request('/api/wordpress', { method: 'POST', body: JSON.stringify({ action: 'check-updates', site_id: siteId }) }),
+    coreUpdate: (siteId) => request('/api/wordpress', { method: 'POST', body: JSON.stringify({ action: 'core-update', site_id: siteId }) }),
+    pluginUpdate: (siteId) => request('/api/wordpress', { method: 'POST', body: JSON.stringify({ action: 'plugin-update', site_id: siteId }) }),
+    themeUpdate: (siteId) => request('/api/wordpress', { method: 'POST', body: JSON.stringify({ action: 'theme-update', site_id: siteId }) }),
+};

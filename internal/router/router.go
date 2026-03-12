@@ -64,6 +64,9 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	// DB Users
 	mux.Handle("/api/db-users", middleware.RequireAuth(middleware.RequireCSRF(&handlers.DBUsersHandler{DB: database})))
 
+	// WordPress Tools & Updates
+	mux.Handle("/api/wordpress", middleware.RequireAuth(middleware.RequireCSRF(&handlers.WordPressHandler{DB: database, Cfg: cfg})))
+
 	// SSL
 	mux.Handle("/api/ssl", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SSLHandler{DB: database, Cfg: cfg})))
 

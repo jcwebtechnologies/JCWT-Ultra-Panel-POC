@@ -442,13 +442,31 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 		"--dbhost=localhost",
 		"--dbcharset=utf8mb4",
 		"--dbprefix="+wpTablePrefix,
-		"--extra-php=define( 'DISABLE_WP_CRON', true );",
 		"--force",
 	)
 	if output, err := configCmd.CombinedOutput(); err != nil {
 		log.Printf("WP-CLI config create failed for site %d: %v: %s", siteID, err, string(output))
 		return fmt.Errorf("wp-config.php generation failed: %s", strings.TrimSpace(string(output)))
 	}
+
+	// Inject DISABLE_WP_CRON inside JCWT markers in wp-config.php
+	wpConfigPath := filepath.Join(webRoot, "wp-config.php")
+	if wpConfigContent, readErr := exec.Command("sudo", "cat", wpConfigPath).Output(); readErr == nil {
+		updatedConfig := updateWPConfigSnippet(string(wpConfigContent),
+			"define( 'DISABLE_WP_CRON', true );",
+			"DISABLE_WP_CRON",
+			true,
+		)
+		cmd := exec.Command("sudo", "tee", wpConfigPath)
+		cmd.Stdin = strings.NewReader(updatedConfig)
+		cmd.CombinedOutput()
+		exec.Command("sudo", "chown", sysUser+":"+sysUser, wpConfigPath).Run()
+		exec.Command("sudo", "chmod", "640", wpConfigPath).Run()
+	}
+
+	// Save initial WP tools state (wp-cron disabled by default)
+	defaultState := WPToolsState{DisableWPCron: true}
+	saveWPToolsState(sysUser, defaultState)
 
 	// Run WordPress core install via WP-CLI
 	installCmd := exec.Command("sudo", "-u", sysUser,
@@ -614,6 +632,7 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 
 	// Regenerate Nginx config
 	accessLog, errorLog := siteLogFlags(site)
+	wpState := loadWPToolsState(sysUser)
 	vhostData := nginx.VHostData{
 		Domain: req.Domain, Aliases: req.Aliases, User: sysUser,
 		SiteType: req.SiteType, PHPVersion: req.PHPVersion, ProxyURL: req.ProxyURL,
@@ -621,6 +640,7 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 		SSLType: req.SSLType, SSLCertPath: site["ssl_cert_path"].(string),
 		SSLKeyPath: site["ssl_key_path"].(string),
 		AccessLog:  accessLog, ErrorLog: errorLog,
+		AllowXMLRPC: req.SiteType == "wordpress" && wpState.AllowXMLRPC,
 	}
 
 	// Remove old config if domain changed
