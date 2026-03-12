@@ -250,6 +250,14 @@ func tokenizeVHost(config string, site map[string]interface{}, sysUser string) s
 	if phpVer != "" {
 		config = strings.ReplaceAll(config, "php"+phpVer+"-fpm", "php{php_version}-fpm")
 	}
+	// Try to tokenize WordPress security block (try both allowXMLRPC variants)
+	for _, allowXMLRPC := range []bool{false, true} {
+		wpRules := nginx.BuildWPSecurityRules(allowXMLRPC)
+		if strings.Contains(config, wpRules) {
+			config = strings.ReplaceAll(config, wpRules, "{wordpress_security}")
+			break
+		}
+	}
 	// Replace domain last to avoid partial matches when domain appears inside phpver-fpm socket paths etc.
 	config = strings.ReplaceAll(config, domain, "{domain}")
 	config = strings.ReplaceAll(config, sysUser, "{user}")

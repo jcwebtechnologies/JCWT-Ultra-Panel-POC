@@ -35,7 +35,10 @@ export async function render(container, siteToken, section) {
                         <span style="display: flex; align-items: center; gap: var(--space-1); min-width: 0;"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;flex-shrink:0;">${icons.folder}</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(site.web_root)}</span></span>
                     </div>
                 </div>
-                <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:16px;height:16px;">${icons.sites}</span> All Sites</a>
+                <div style="display:flex;align-items:center;gap:var(--space-2);">
+                    ${site.site_type === 'wordpress' ? `<a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;">${icons.key}</span> WP Admin</a>` : ''}
+                    <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon" style="width:16px;height:16px;">${icons.sites}</span> All Sites</a>
+                </div>
             </div>
 
             ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-primary back-nav-btn" title="Back to Site Overview"><span class="nav-icon" style="width:16px;height:16px;">${icons.chevronLeft}</span> Site Overview</a></div>` : `
@@ -2543,7 +2546,7 @@ async function renderWordPressUpdates(container, site, siteId) {
                 <div style="padding: var(--space-4);">
                     <div style="display:flex;flex-direction:column;gap:var(--space-4);">
 
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
+                        <div id="wp-section-core" style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
                             <div>
                                 <div style="font-weight:600;margin-bottom:var(--space-1);">WordPress Core</div>
                                 <div style="font-size:var(--font-size-sm);color:var(--text-secondary);">
@@ -2555,7 +2558,7 @@ async function renderWordPressUpdates(container, site, siteId) {
                             ${data.core_update_available ? `<button class="btn btn-primary btn-sm wp-update-btn" data-action="core-update">Update Core</button>` : ''}
                         </div>
 
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
+                        <div id="wp-section-plugins" style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
                             <div>
                                 <div style="font-weight:600;margin-bottom:var(--space-1);">Plugins</div>
                                 <div style="font-size:var(--font-size-sm);color:var(--text-secondary);">
@@ -2567,7 +2570,7 @@ async function renderWordPressUpdates(container, site, siteId) {
                             ${data.plugins_with_updates > 0 ? `<button class="btn btn-primary btn-sm wp-update-btn" data-action="plugin-update">Update All Plugins</button>` : ''}
                         </div>
 
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
+                        <div id="wp-section-themes" style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);">
                             <div>
                                 <div style="font-weight:600;margin-bottom:var(--space-1);">Themes</div>
                                 <div style="font-size:var(--font-size-sm);color:var(--text-secondary);">
@@ -2615,8 +2618,21 @@ async function renderWordPressUpdates(container, site, siteId) {
                                 outputBox.appendChild(reloadBtn);
                             }
                         }
-                        btn.disabled = false;
-                        btn.textContent = origText;
+                        // Update the section row: badge → up to date, remove update button
+                        const sectionId = action === 'core-update' ? 'wp-section-core'
+                            : action === 'plugin-update' ? 'wp-section-plugins' : 'wp-section-themes';
+                        const sectionRow = document.getElementById(sectionId);
+                        if (sectionRow) {
+                            const badgeEl = sectionRow.querySelector('.badge');
+                            if (badgeEl) {
+                                badgeEl.className = 'badge badge-success';
+                                badgeEl.textContent = action === 'core-update' ? 'Up to date' : 'All up to date';
+                            }
+                            btn.remove();
+                        } else {
+                            btn.disabled = false;
+                            btn.textContent = origText;
+                        }
                     } catch (err) {
                         btn.disabled = false;
                         btn.textContent = origText;
