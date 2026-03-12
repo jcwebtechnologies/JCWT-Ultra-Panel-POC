@@ -172,13 +172,6 @@ func (h *SitesHandler) resourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Shared service names to report as server-wide context.
-	sharedNames := map[string]bool{
-		"nginx":    true,
-		"mysqld":   true,
-		"mariadbd": true,
-	}
-
 	type ProcessInfo struct {
 		PID    string  `json:"pid"`
 		Name   string  `json:"name"`
@@ -187,47 +180,24 @@ func (h *SitesHandler) resourceUsage(w http.ResponseWriter, r *http.Request) {
 		MemMB  float64 `json:"mem_mb"`
 		CPUPct float64 `json:"cpu_pct"`
 	}
-	type SharedServiceInfo struct {
-		Name         string  `json:"name"`
-		ProcessCount int     `json:"process_count"`
-		TotalMemKB   int64   `json:"total_mem_kb"`
-		TotalMemMB   float64 `json:"total_mem_mb"`
-		TotalCPU     float64 `json:"total_cpu"`
-	}
 
 	// Single /proc scan — reads RSS, name, UID, and cmdline for every process.
 	all := scanProcAll()
 
-	// Partition into site-owned processes and shared services.
-	// Collect all relevant PIDs in a set for the CPU% query.
+	// Collect processes owned by this site's user.
 	var siteEntries []procInfo
-	sharedAccum := map[string]*SharedServiceInfo{}
-	pidSet := make(map[string]bool)
-
 	for i := range all {
-		p := &all[i]
-		if p.UID == uid {
-			siteEntries = append(siteEntries, *p)
-			pidSet[p.PID] = true
-		}
-		if sharedNames[p.Name] {
-			svc, ok := sharedAccum[p.Name]
-			if !ok {
-				svc = &SharedServiceInfo{Name: p.Name}
-				sharedAccum[p.Name] = svc
-			}
-			svc.ProcessCount++
-			svc.TotalMemKB += p.RssKB
-			pidSet[p.PID] = true
+		if all[i].UID == uid {
+			siteEntries = append(siteEntries, all[i])
 		}
 	}
 
-	// One ps call for all relevant PIDs (exec.Command, no shell — injection-safe).
-	allPIDs := make([]string, 0, len(pidSet))
-	for pid := range pidSet {
-		allPIDs = append(allPIDs, pid)
+	// One ps call for all site PIDs to get CPU% (exec.Command, no shell — injection-safe).
+	sitePIDs := make([]string, 0, len(siteEntries))
+	for _, p := range siteEntries {
+		sitePIDs = append(sitePIDs, p.PID)
 	}
-	cpuMap := fetchCPUPercents(allPIDs)
+	cpuMap := fetchCPUPercents(sitePIDs)
 
 	// Build per-site process list, sorted by memory descending.
 	procs := make([]ProcessInfo, 0, len(siteEntries))
@@ -248,33 +218,12 @@ func (h *SitesHandler) resourceUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(procs, func(i, j int) bool { return procs[i].MemKB > procs[j].MemKB })
 
-	// Apply CPU percentages to shared service totals.
-	for i := range all {
-		p := &all[i]
-		if svc, ok := sharedAccum[p.Name]; ok {
-			svc.TotalCPU += cpuMap[p.PID]
-		}
-	}
-	for _, svc := range sharedAccum {
-		svc.TotalMemMB = float64(svc.TotalMemKB) / 1024.0
-	}
-
-	// Stable output order for shared services.
-	sharedOrder := []string{"nginx", "mysqld", "mariadbd"}
-	sharedSvcs := make([]SharedServiceInfo, 0, len(sharedAccum))
-	for _, name := range sharedOrder {
-		if svc, ok := sharedAccum[name]; ok {
-			sharedSvcs = append(sharedSvcs, *svc)
-		}
-	}
-
 	jsonSuccess(w, map[string]interface{}{
-		"processes":       procs,
-		"process_count":   len(procs),
-		"total_mem_kb":    totalMemKB,
-		"total_mem_mb":    float64(totalMemKB) / 1024.0,
-		"total_cpu":       totalCPU,
-		"shared_services": sharedSvcs,
+		"processes":     procs,
+		"process_count": len(procs),
+		"total_mem_kb":  totalMemKB,
+		"total_mem_mb":  float64(totalMemKB) / 1024.0,
+		"total_cpu":     totalCPU,
 	})
 }
 
@@ -930,10 +879,12 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 		os.Rename(oldTplPath, newTplPath)
 	}
 
-	// Use existing template if SSL type is unchanged, else full regen
+	// Use existing template only if SSL type AND aliases are unchanged; any structural
+	// change forces a full regen so that {domain_aliases} is correctly inserted/removed.
 	oldSSLType := site["ssl_type"].(string)
+	oldAliases := site["aliases"].(string)
 	tplPath := vhostTemplatePath(h.Cfg.DataDir, req.Domain)
-	if tpl, tplErr := os.ReadFile(tplPath); tplErr == nil && oldSSLType == req.SSLType {
+	if tpl, tplErr := os.ReadFile(tplPath); tplErr == nil && oldSSLType == req.SSLType && oldAliases == req.Aliases {
 		expanded := nginx.ExpandVHostTemplate(string(tpl), vhostData)
 		if err := nginx.WriteConfigString(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, expanded); err != nil {
 			jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)

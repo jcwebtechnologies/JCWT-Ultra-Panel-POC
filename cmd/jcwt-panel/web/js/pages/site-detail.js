@@ -2668,7 +2668,6 @@ async function renderResourceUsage(container, site, siteId) {
             const totalMB = data.total_mem_mb || 0;
             const totalCPU = data.total_cpu || 0;
             const procCount = data.process_count ?? procs.length;
-            const shared = data.shared_services || [];
             const maxMem = procs.reduce((m, p) => Math.max(m, p.mem_mb), 0.01);
             const maxCPU = procs.reduce((m, p) => Math.max(m, p.cpu_pct), 0.01);
 
@@ -2684,24 +2683,28 @@ async function renderResourceUsage(container, site, siteId) {
                         <div style="font-weight:600;font-size:var(--font-size-lg);">${procCount}</div>
                     </div>
                     <div>
-                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">Total Memory</div>
+                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">RAM Used</div>
                         <div style="font-weight:600;font-size:var(--font-size-lg);">${fmtMB(totalMB)}</div>
                         <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:6px;margin-top:var(--space-2);">
                             <div style="height:6px;background:var(--color-primary);border-radius:var(--radius-full);width:${barWidth(totalMB, 512)}%;transition:width .4s;"></div>
                         </div>
                     </div>
                     <div>
-                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">Total CPU %</div>
+                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">CPU %</div>
                         <div style="font-weight:600;font-size:var(--font-size-lg);">${totalCPU.toFixed(1)}%</div>
                         <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:6px;margin-top:var(--space-2);">
                             <div style="height:6px;background:#f59e0b;border-radius:var(--radius-full);width:${Math.min(100, totalCPU).toFixed(1)}%;transition:width .4s;"></div>
                         </div>
                     </div>
                 </div>
+                <div style="padding:0 var(--space-4) var(--space-4);font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6;border-top:1px solid var(--border-primary);padding-top:var(--space-3);margin-top:0;">
+                    <strong>RAM</strong>: sum of RSS (Resident Set Size) of all processes running as this site’s Linux user — i.e. PHP-FPM workers, WP-CLI etc. Does not include shared memory from nginx or MySQL.<br>
+                    <strong>CPU %</strong>: cumulative CPU percentage sampled at request time via <code>ps</code>. A value of 0% means those processes are currently idle. Each CPU core contributes up to 100%, so values above 100% are normal on multi-core servers (e.g. 200% = fully using 2 cores).
+                </div>
             </div>
-            <div class="card" style="margin-bottom:var(--space-4);">
+            <div class="card">
                 <div class="card-header">
-                    <h3 class="card-title">Site Processes (${procCount})</h3>
+                    <h3 class="card-title">Processes (${procCount})</h3>
                 </div>
                 ${procs.length === 0
                     ? `<div class="empty-state" style="padding:var(--space-4);">No active processes for this site.</div>`
@@ -2721,27 +2724,7 @@ async function renderResourceUsage(container, site, siteId) {
                             </tbody>
                         </table>
                     </div>`}
-            </div>
-            ${shared.length > 0 ? `
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">Shared Services</h3>
-                    <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Server-wide totals — not attributed to this site</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead><tr><th>Service</th><th>Processes</th><th>Total Memory</th><th>Total CPU %</th></tr></thead>
-                        <tbody>${shared.map(s => `
-                            <tr>
-                                <td class="mono">${escapeHtml(s.name)}</td>
-                                <td>${s.process_count}</td>
-                                <td>${fmtMB(s.total_mem_mb)}</td>
-                                <td>${s.total_cpu.toFixed(1)}%</td>
-                            </tr>`).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>` : ''}`;
+            </div>`;
         } catch (err) {
             if (pollTimer) clearInterval(pollTimer);
             container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Error: ${escapeHtml(err.message)}</div></div>`;
