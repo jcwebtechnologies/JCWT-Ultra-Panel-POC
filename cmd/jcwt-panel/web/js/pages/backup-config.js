@@ -16,7 +16,7 @@ export async function render(container) {
         </div>
 
         <div class="card" style="margin-bottom: var(--space-6);">
-            <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.database}</span> Backup Methods</h3>
+            <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.database}</span> Backup Methods</h3>
             <p style="color: var(--text-tertiary); font-size: var(--font-size-sm); margin-bottom: var(--space-4);">Configure backup storage methods available for site backups.</p>
             <div id="backup-methods-list" style="margin-bottom: var(--space-4);"></div>
             <button type="button" class="btn btn-sm btn-secondary" id="add-backup-method-btn">+ Add Backup Method</button>

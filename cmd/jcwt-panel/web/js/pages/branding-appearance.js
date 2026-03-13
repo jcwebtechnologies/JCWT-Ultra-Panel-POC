@@ -19,7 +19,7 @@ export async function render(container) {
 
         <form id="branding-form">
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.palette}</span> Branding</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.palette}</span> Branding</h3>
 
                 <div class="settings-row">
                     <div class="settings-row-label">Panel Name<small>Displayed in sidebar and title</small></div>
@@ -65,7 +65,7 @@ export async function render(container) {
             </div>
 
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.target}</span> Appearance</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.target}</span> Appearance</h3>
 
                 <div class="settings-row">
                     <div class="settings-row-label">Primary Color<small>Used for buttons, links, accent</small></div>

@@ -72,10 +72,10 @@ export async function render(container) {
                                     <td>
                                         <div class="table-actions">
                                             <button class="btn btn-sm btn-secondary" data-edit-rule="${r.id}" title="Edit">
-                                                <span class="nav-icon" style="width:14px;height:14px;">${icons.edit}</span>
+                                                <span class="nav-icon nav-icon-xs">${icons.edit}</span>
                                             </button>
                                             <button class="btn btn-sm btn-danger" data-delete-rule="${r.id}" title="Delete">
-                                                <span class="nav-icon" style="width:14px;height:14px;">${icons.trash}</span>
+                                                <span class="nav-icon nav-icon-xs">${icons.trash}</span>
                                             </button>
                                         </div>
                                     </td>

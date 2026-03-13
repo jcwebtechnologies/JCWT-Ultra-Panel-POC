@@ -55,7 +55,7 @@ export async function render(container) {
                                 </td>
                                 <td data-label="Actions" style="text-align:right;">
                                     <button class="btn btn-sm btn-secondary edit-template-btn" data-id="${t.id}" title="Edit template">
-                                        <span class="nav-icon" style="width:14px;height:14px">${icons.edit}</span>
+                                        <span class="nav-icon nav-icon-xs">${icons.edit}</span>
                                     </button>
                                 </td>
                             </tr>

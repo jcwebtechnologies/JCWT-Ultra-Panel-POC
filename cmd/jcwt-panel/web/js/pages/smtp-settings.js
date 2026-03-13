@@ -81,7 +81,7 @@ async function loadForm() {
                         <span class="nav-icon">${icons.mail}</span> Send Test Email
                     </button>
                 </div>
-                ${data.smtp_configured ? `<div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-primary);"><button type="button" class="btn btn-sm btn-danger" id="smtp-delete-btn"><span class="nav-icon" style="width:14px;height:14px;">${icons.trash}</span> Delete SMTP Configuration</button></div>` : ''}
+                ${data.smtp_configured ? `<div style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-primary);"><button type="button" class="btn btn-sm btn-danger" id="smtp-delete-btn"><span class="nav-icon nav-icon-xs">${icons.trash}</span> Delete SMTP Configuration</button></div>` : ''}
             </form>`;
 
         // Toggle auth fields

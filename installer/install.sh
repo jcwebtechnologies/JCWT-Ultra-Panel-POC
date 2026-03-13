@@ -1295,10 +1295,21 @@ print_banner() {
     echo -e "  ${BOLD}Access Your Panel${NC}"
     echo -e "  ─────────────────────────────────────────"
     echo -e "  ${CYAN}URL:${NC}       https://[${IPV6_ADDR}]:${PANEL_PORT}"
-    echo -e "  ${CYAN}Username:${NC}  admin"
-    echo -e "  ${CYAN}Password:${NC}  admin"
     echo ""
-    echo -e "  ${RED}${BOLD}⚠  CHANGE THE DEFAULT PASSWORD IMMEDIATELY!${NC}"
+
+    # Extract setup token from panel log (generated on first start)
+    SETUP_TOKEN=$(grep -oP 'Setup Token: \K[0-9a-f]+' "$LOG_DIR/panel.log" 2>/dev/null | tail -1)
+    if [ -n "$SETUP_TOKEN" ]; then
+        echo -e "  ${YELLOW}${BOLD}First-Time Setup Required${NC}"
+        echo -e "  Open the URL above and use this one-time token"
+        echo -e "  to create your admin account:"
+        echo ""
+        echo -e "  ${CYAN}Setup Token:${NC}  ${GREEN}${BOLD}${SETUP_TOKEN}${NC}"
+        echo ""
+        echo -e "  ${DIM}This token can only be used once.${NC}"
+    else
+        echo -e "  ${DIM}An admin account already exists. Log in with your credentials.${NC}"
+    fi
     echo ""
 
     echo -e "  ${BOLD}Service Status${NC}"

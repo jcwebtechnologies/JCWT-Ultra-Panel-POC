@@ -17,7 +17,7 @@ export async function render(container) {
                 <p>Create and manage your websites</p>
             </div>
             <button class="btn btn-primary" id="add-site-btn">
-                <span class="nav-icon" style="width:16px;height:16px;">${icons.plus}</span>
+                <span class="nav-icon nav-icon-sm">${icons.plus}</span>
                 Add Site
             </button>
         </div>
@@ -132,7 +132,7 @@ export async function render(container) {
                                     <label class="form-label">Admin Password</label>
                                     <div style="position:relative;">
                                         <input type="password" class="form-input" id="wp-admin-pass" placeholder="Strong password" required autocomplete="new-password" style="padding-right:40px;">
-                                        <button type="button" id="toggle-wp-pass" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:var(--text-tertiary);display:flex;align-items:center;" title="Toggle password visibility"><span class="nav-icon" style="width:18px;height:18px;">${icons.eye}</span></button>
+                                        <button type="button" id="toggle-wp-pass" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:var(--text-tertiary);display:flex;align-items:center;" title="Toggle password visibility"><span class="nav-icon nav-icon-md">${icons.eye}</span></button>
                                     </div>
                                 </div>
                             </div>
@@ -158,10 +158,10 @@ export async function render(container) {
                 const toggleBtn = document.getElementById('toggle-wp-pass');
                 if (passInput.type === 'password') {
                     passInput.type = 'text';
-                    toggleBtn.innerHTML = `<span class="nav-icon" style="width:18px;height:18px;">${icons.eyeOff}</span>`;
+                    toggleBtn.innerHTML = `<span class="nav-icon nav-icon-md">${icons.eyeOff}</span>`;
                 } else {
                     passInput.type = 'password';
-                    toggleBtn.innerHTML = `<span class="nav-icon" style="width:18px;height:18px;">${icons.eye}</span>`;
+                    toggleBtn.innerHTML = `<span class="nav-icon nav-icon-md">${icons.eye}</span>`;
                 }
             });
 

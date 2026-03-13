@@ -20,7 +20,7 @@ export async function render(container) {
         <form id="settings-form">
             <!-- Branding Section -->
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.palette}</span> Branding</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.palette}</span> Branding</h3>
 
                 <div class="settings-row">
                     <div class="settings-row-label">Panel Name<small>Displayed in sidebar and title</small></div>
@@ -67,7 +67,7 @@ export async function render(container) {
 
             <!-- Appearance Section -->
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.target}</span> Appearance</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.target}</span> Appearance</h3>
 
                 <div class="settings-row">
                     <div class="settings-row-label">Primary Color<small>Used for buttons, links, accent</small></div>
@@ -91,7 +91,7 @@ export async function render(container) {
 
             <!-- Security Section -->
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.shield}</span> Security & Session</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.shield}</span> Security & Session</h3>
 
                 <div class="settings-row">
                     <div class="settings-row-label">Session Timeout<small>Minutes of inactivity before logout</small></div>
@@ -118,7 +118,7 @@ export async function render(container) {
 
             <!-- Backup Configuration Section -->
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.database}</span> Backup Configuration</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.database}</span> Backup Configuration</h3>
                 <p style="color: var(--text-tertiary); font-size: var(--font-size-sm); margin-bottom: var(--space-4);">Configure backup storage methods available for site backups.</p>
                 <div id="backup-methods-list" style="margin-bottom: var(--space-4);"></div>
                 <button type="button" class="btn btn-sm btn-secondary" id="add-backup-method-btn">+ Add Backup Method</button>
@@ -126,7 +126,7 @@ export async function render(container) {
 
             <!-- reCAPTCHA Section -->
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.bot}</span> reCAPTCHA (Login Protection)</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.bot}</span> reCAPTCHA (Login Protection)</h3>
                 <p style="color: var(--text-tertiary); font-size: var(--font-size-sm); margin-bottom: var(--space-4);">Add Google reCAPTCHA v2 to the login page. Get keys from <a href="https://www.google.com/recaptcha/admin" target="_blank" style="color: var(--primary);">Google reCAPTCHA Admin</a>.</p>
 
                 <div class="settings-row">

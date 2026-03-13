@@ -20,7 +20,7 @@ export async function render(container) {
                     <p>Disk usage overview for all sites</p>
                 </div>
                 <button class="btn btn-secondary" id="refresh-all-du">
-                    <span class="nav-icon" style="width:16px;height:16px">${icons.refresh}</span> Refresh
+                    <span class="nav-icon nav-icon-sm">${icons.refresh}</span> Refresh
                 </button>
             </div>
 
@@ -60,7 +60,7 @@ export async function render(container) {
                                     <td data-label="backups" style="text-align:right;" class="mono">${escapeHtml(s.backups)}</td>
                                     <td data-label="Actions" style="text-align:right;">
                                         <button class="btn btn-sm btn-secondary cleanup-tmp-btn" data-id="${s.id}" data-domain="${escapeHtml(s.domain)}" title="Clean up tmp directory">
-                                            <span class="nav-icon" style="width:14px;height:14px">${icons.trash}</span> Clean Tmp
+                                            <span class="nav-icon nav-icon-xs">${icons.trash}</span> Clean Tmp
                                         </button>
                                     </td>
                                 </tr>
@@ -103,7 +103,7 @@ export async function render(container) {
                     } catch (err) {
                         showToast(err.message || 'Cleanup failed', 'error');
                         btn.disabled = false;
-                        btn.innerHTML = `<span class="nav-icon" style="width:14px;height:14px">${icons.trash}</span> Clean Tmp`;
+                        btn.innerHTML = `<span class="nav-icon nav-icon-xs">${icons.trash}</span> Clean Tmp`;
                     }
                 });
             });

@@ -1635,6 +1635,93 @@ a:hover {
     transition: width var(--transition-slow);
 }
 
+/* ---- Inline-style Replacements ---- */
+
+/* Icon sizes (used on .nav-icon spans) */
+.nav-icon-xs  { width: 14px; height: 14px; }
+.nav-icon-sm  { width: 16px; height: 16px; }
+.nav-icon-md  { width: 18px; height: 18px; }
+.nav-icon-lg  { width: 28px; height: 28px; }
+.nav-icon-xl  { width: 32px; height: 32px; }
+.nav-icon-xxl { width: 48px; height: 48px; }
+
+/* Section-title icon (settings/security) */
+.section-icon { width: 18px; height: 18px; color: var(--accent-primary); }
+
+/* Spacing one-offs */
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-3 { margin-bottom: var(--space-3); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mb-5 { margin-bottom: var(--space-5); }
+.mb-6 { margin-bottom: var(--space-6); }
+.mt-2 { margin-top: var(--space-2); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-5 { margin-top: var(--space-5); }
+.p-3  { padding: var(--space-3); }
+.p-4  { padding: var(--space-4); }
+.p-6  { padding: var(--space-6); }
+
+/* Text helpers */
+.text-muted       { color: var(--text-tertiary); }
+.text-secondary   { color: var(--text-secondary); }
+.text-xs          { font-size: var(--font-size-xs); }
+.text-sm          { font-size: var(--font-size-sm); }
+.text-xs-muted    { font-size: var(--font-size-xs); color: var(--text-tertiary); }
+.text-sm-secondary{ font-size: var(--font-size-sm); color: var(--text-secondary); }
+
+/* Flex layouts */
+.flex-center-gap-2 { display: flex; align-items: center; gap: var(--space-2); }
+.flex-center-gap-3 { display: flex; align-items: center; gap: var(--space-3); }
+.flex-gap-2        { display: flex; gap: var(--space-2); }
+.flex-gap-3        { display: flex; gap: var(--space-3); }
+.flex-between      { display: flex; justify-content: space-between; align-items: center; }
+
+/* Warning/caution banner */
+.warning-banner {
+    display: flex; align-items: flex-start; gap: var(--space-3);
+    padding: var(--space-3); margin-bottom: var(--space-3);
+    background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3);
+    border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);
+}
+.danger-banner {
+    display: flex; align-items: flex-start; gap: var(--space-3);
+    padding: var(--space-3); margin-bottom: var(--space-3);
+    background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);
+    border-radius: var(--radius-md); color: var(--text-secondary); font-size: var(--font-size-sm);
+}
+.warning-banner-icon { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; color: rgb(234,179,8); }
+.danger-banner-icon  { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; color: rgb(239,68,68); }
+
+/* Copy-to-clipboard inline button */
+.copy-btn-inline {
+    cursor: pointer; display: inline-flex; align-items: center;
+    vertical-align: middle; opacity: 0.5; background: none; border: none; padding: 0;
+    color: inherit; transition: opacity var(--transition-fast);
+}
+.copy-btn-inline:hover { opacity: 1; }
+
+/* Password toggle positioned inside input */
+.pwd-toggle-btn {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; padding: 4px;
+    color: var(--text-tertiary); display: flex; align-items: center;
+}
+
+/* Compact form select (log viewer, filters) */
+.form-select-compact {
+    width: auto; min-width: 120px;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--font-size-xs);
+}
+
+/* WordPress / bordered section row */
+.bordered-section-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-3); border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+}
+
 /* =============================================
    Responsive
    ============================================= */

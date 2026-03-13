@@ -19,7 +19,7 @@ export async function render(container) {
 
         <form id="security-form">
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.shield}</span> Security & Session</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.shield}</span> Security & Session</h3>
 
                 <div class="settings-row">
                     <div class="settings-row-label">Session Timeout<small>Minutes of inactivity before logout</small></div>
@@ -45,7 +45,7 @@ export async function render(container) {
             </div>
 
             <div class="card" style="margin-bottom: var(--space-6);">
-                <h3 class="settings-section-title"><span class="nav-icon" style="width:18px;height:18px;color:var(--accent-primary)">${icons.bot}</span> reCAPTCHA (Login Protection)</h3>
+                <h3 class="settings-section-title"><span class="nav-icon section-icon">${icons.bot}</span> reCAPTCHA (Login Protection)</h3>
                 <p style="color: var(--text-tertiary); font-size: var(--font-size-sm); margin-bottom: var(--space-4);">Add Google reCAPTCHA v2 to the login page. Get keys from <a href="https://www.google.com/recaptcha/admin" target="_blank" style="color: var(--primary);">Google reCAPTCHA Admin</a>.</p>
 
                 <div class="settings-row">

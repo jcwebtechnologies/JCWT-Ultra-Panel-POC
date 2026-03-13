@@ -319,7 +319,7 @@ async function show2FAModal() {
                                 <label class="form-label">Manual Entry Key:</label>
                                 <div style="display: flex; gap: var(--space-2);">
                                     <input type="text" class="form-input mono" value="${data.secret}" readonly id="twofa-secret-display" style="font-size: var(--font-size-xs);">
-                                    <button class="btn btn-sm btn-secondary" id="twofa-copy-secret" title="Copy"><span class="nav-icon" style="width:14px;height:14px">${icons.copy}</span></button>
+                                    <button class="btn btn-sm btn-secondary" id="twofa-copy-secret" title="Copy"><span class="nav-icon nav-icon-xs">${icons.copy}</span></button>
                                 </div>
                             </div>
                             <p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
