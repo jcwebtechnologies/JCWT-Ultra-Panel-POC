@@ -132,6 +132,52 @@ export function showConfirm(title, message, confirmText = 'Confirm', confirmClas
     });
 }
 
+/**
+ * Show a styled prompt dialog (replaces native prompt()).
+ * @param {string} title - Dialog title
+ * @param {string} message - Description text
+ * @param {string} [defaultValue=''] - Pre-filled input value
+ * @returns {Promise<string|null>} The entered value, or null if cancelled
+ */
+export function showPrompt(title, message, defaultValue = '') {
+    return new Promise((resolve) => {
+        closeModal();
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal" style="max-width: 440px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">${escapeHtml(title)}</h3>
+                    <button class="modal-close" id="prompt-close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6; margin-bottom: var(--space-3);">${escapeHtml(message)}</p>
+                    <input type="text" class="form-input" id="prompt-input" value="${escapeHtml(defaultValue)}" autofocus>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="prompt-cancel-btn">Cancel</button>
+                    <button class="btn btn-primary" id="prompt-ok-btn">OK</button>
+                </div>
+            </div>
+        `;
+        const cleanup = (result) => { overlay.remove(); resolve(result); };
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
+        overlay.querySelector('#prompt-close-btn').addEventListener('click', () => cleanup(null));
+        overlay.querySelector('#prompt-cancel-btn').addEventListener('click', () => cleanup(null));
+        overlay.querySelector('#prompt-ok-btn').addEventListener('click', () => {
+            cleanup(overlay.querySelector('#prompt-input').value);
+        });
+        overlay.querySelector('#prompt-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                cleanup(overlay.querySelector('#prompt-input').value);
+            }
+        });
+        document.body.appendChild(overlay);
+    });
+}
+
 // ---- Utilities ----
 export function escapeHtml(str) {
     if (!str) return '';

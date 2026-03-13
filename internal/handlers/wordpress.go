@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -175,7 +176,8 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 		out, runErr := exec.Command("sudo", "-u", sysUser,
 			phpBin, wpCLI, "--path="+webRoot, "core", "update").CombinedOutput()
 		if runErr != nil {
-			jsonError(w, strings.TrimSpace(string(out)), http.StatusInternalServerError)
+			log.Printf("WordPress core-update failed: %s", strings.TrimSpace(string(out)))
+			jsonError(w, "WordPress core update failed", http.StatusInternalServerError)
 			return
 		}
 		jsonSuccess(w, map[string]interface{}{"output": strings.TrimSpace(string(out))})
@@ -184,7 +186,8 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 		out, runErr := exec.Command("sudo", "-u", sysUser,
 			phpBin, wpCLI, "--path="+webRoot, "plugin", "update", "--all").CombinedOutput()
 		if runErr != nil {
-			jsonError(w, strings.TrimSpace(string(out)), http.StatusInternalServerError)
+			log.Printf("WordPress plugin-update failed: %s", strings.TrimSpace(string(out)))
+			jsonError(w, "WordPress plugin update failed", http.StatusInternalServerError)
 			return
 		}
 		jsonSuccess(w, map[string]interface{}{"output": strings.TrimSpace(string(out))})
@@ -193,7 +196,8 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 		out, runErr := exec.Command("sudo", "-u", sysUser,
 			phpBin, wpCLI, "--path="+webRoot, "theme", "update", "--all").CombinedOutput()
 		if runErr != nil {
-			jsonError(w, strings.TrimSpace(string(out)), http.StatusInternalServerError)
+			log.Printf("WordPress theme-update failed: %s", strings.TrimSpace(string(out)))
+			jsonError(w, "WordPress theme update failed", http.StatusInternalServerError)
 			return
 		}
 		jsonSuccess(w, map[string]interface{}{"output": strings.TrimSpace(string(out))})

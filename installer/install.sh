@@ -1028,9 +1028,17 @@ RestartSec=5
 StandardOutput=append:$LOG_DIR/panel.log
 StandardError=append:$LOG_DIR/panel.log
 
-# Note: No ProtectSystem — panel needs to create users (/etc/passwd), manage nginx/php configs
+# Security hardening (panel uses sudo for privileged operations)
 NoNewPrivileges=false
 ProtectHome=false
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=$DATA_DIR /etc/nginx /etc/php /home /etc/logrotate.d $LOG_DIR /etc/sudoers.d /usr/local/bin
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
@@ -1042,47 +1050,114 @@ EOF
 
     log_info "Configuring sudo privileges..."
     cat > /etc/sudoers.d/jcwt-panel << 'EOF'
-# JCWT Ultra Panel - Required privileges for system management
-jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd *
-jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/userdel *
-jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod *
-jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/groupdel *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl reload *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl restart *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl stop *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start *
+# JCWT Ultra Panel - Scoped privileges for system management
+# NO wildcard bash, rm, cat, tee — all file ops use specific arg patterns
+
+# User management (only useradd/userdel/usermod with controlled args)
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd -m -d /home/[a-z]* -s /bin/bash [a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd -m -d /home/[a-z]* -s /usr/sbin/nologin [a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/userdel -r [a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -s /bin/bash [a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -s /usr/sbin/nologin [a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/groupdel [a-z]*
+
+# Systemd service control (only allowed services)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl reload php*-fpm
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl restart nginx
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl restart php*-fpm
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl restart mariadb
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl restart redis-server
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl stop nginx
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl stop php*-fpm
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl stop mariadb
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl stop redis-server
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start nginx
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start php*-fpm
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start mariadb
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start redis-server
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show *
+
+# Nginx
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/nginx -t
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysql *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysqldump *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/crontab *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/openssl *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/certbot *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/cp *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/bash *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ls *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/cat *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ln *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/timedatectl *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/curl *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/find *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tail *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/sed *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test *
-jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget *
+
+# MariaDB client (admin socket auth, no shell needed)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysql -e *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysql [a-zA-Z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysqldump --single-transaction [a-zA-Z]*
+
+# Crontab management
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/crontab -u [a-z]* -
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/crontab -r -u [a-z]*
+
+# SSL/TLS
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/openssl req *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/openssl x509 *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/certbot certonly *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/certbot renew *
+
+# File operations (scoped to allowed paths only)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown [a-z]*\:[a-z]* /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown -R [a-z]*\:[a-z]* /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /etc/nginx/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/nginx/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-available/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-enabled/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/htpasswd/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -rf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /var/lib/jcwt-panel/ssl/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ln -sf /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/nginx/sites-available/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/logrotate.d/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /home/[a-z]*
+
+# Tar/archive operations (scoped)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -xzf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -tzf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar cf - -C /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar xf - -C /home/[a-z]*
+
+# Disk usage (read-only)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -sh /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -b /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test -f /home/[a-z]*
+
+# Log viewing
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tail -n [0-9]* /home/[a-z]*/logs/*
+
+# Timezone
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/timedatectl set-timezone *
+
+# htpasswd
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd -c -B -b /etc/nginx/htpasswd/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd -B -b /etc/nginx/htpasswd/*
+
+# Firewall
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw status *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw allow *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw deny *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw delete *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force enable
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw reload
+
+# Rsync (for backup restore)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*
+
+# Wget (only to /home and /tmp paths)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget -q https\://wordpress.org/* -O /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget -q https\://raw.githubusercontent.com/wp-cli/* -O /usr/local/bin/wp
+
+# WP-CLI and PHP (run as site user only)
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php*
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.2 /usr/local/bin/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.3 /usr/local/bin/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.4 /usr/local/bin/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.5 /usr/local/bin/wp *
 EOF
     chmod 440 /etc/sudoers.d/jcwt-panel
     log_detail "Sudoers: /etc/sudoers.d/jcwt-panel (mode 440)"

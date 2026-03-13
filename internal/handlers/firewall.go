@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -188,7 +189,8 @@ func (h *FirewallHandler) toggle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if output, err := cmd.CombinedOutput(); err != nil {
-		jsonError(w, fmt.Sprintf("failed to toggle firewall: %s", string(output)), http.StatusInternalServerError)
+		log.Printf("failed to toggle firewall: %s", string(output))
+		jsonError(w, "failed to toggle firewall", http.StatusInternalServerError)
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,12 +27,79 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	loginHandler := &authHandler{db: database, auth: authMgr}
 	mux.Handle("/api/auth/login", middleware.RateLimit(loginHandler))
 
+	// Bootstrap endpoint: create first admin using one-time setup token
+	mux.Handle("/api/setup", middleware.RateLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		if !database.NeedsSetup() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"success":false,"error":"setup already completed"}`))
+			return
+		}
+		var req struct {
+			SetupToken string `json:"setup_token"`
+			Username   string `json:"username"`
+			Password   string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"success":false,"error":"invalid request"}`))
+			return
+		}
+		if len(req.Username) < 3 || len(req.Username) > 31 || len(req.Password) < 10 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"success":false,"error":"username must be 3-31 chars and password at least 10 chars"}`))
+			return
+		}
+		ok, err := database.ValidateSetupToken(req.SetupToken)
+		if err != nil || !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"success":false,"error":"invalid or expired setup token"}`))
+			return
+		}
+		hash, err := auth.HashPassword(req.Password)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"success":false,"error":"failed to hash password"}`))
+			return
+		}
+		if err := database.CreateAdmin(req.Username, hash); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(`{"success":false,"error":"failed to create admin"}`))
+			return
+		}
+		database.ConsumeSetupToken()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"success":true,"data":{"message":"Admin account created. You can now log in."}}`))
+	})))
+
+	// Setup status check (tells frontend whether setup is needed)
+	mux.HandleFunc("/api/setup/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"data":    map[string]interface{}{"needs_setup": database.NeedsSetup()},
+		})
+	})
+
 	// 2FA endpoints
 	twofaHandler := &handlers.TwoFAHandler{DB: database, AuthMgr: authMgr}
 	mux.Handle("/api/auth/2fa", middleware.RequireAuth(middleware.RequireCSRF(twofaHandler)))
 	mux.Handle("/api/auth/2fa/verify", middleware.RateLimit(http.HandlerFunc(twofaHandler.Verify)))
 
-	mux.HandleFunc("/api/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/auth/logout", middleware.RequireAuth(middleware.RequireCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
 		sessionID := auth.GetSessionID(r)
 		if sessionID != "" {
 			authMgr.DestroySession(sessionID)
@@ -39,7 +107,7 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		auth.ClearSessionCookie(w)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"success":true}`))
-	})
+	}))))
 	mux.HandleFunc("/api/auth/check", func(w http.ResponseWriter, r *http.Request) {
 		sessionID := auth.GetSessionID(r)
 		sess, ok := authMgr.GetSession(sessionID)
@@ -55,41 +123,63 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	// Dashboard
 	mux.Handle("/api/dashboard", middleware.RequireAuth(&handlers.DashboardHandler{DB: database}))
 
-	// Sites
-	mux.Handle("/api/sites", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SitesHandler{DB: database, Cfg: cfg})))
+	// Sites (admin + manager only)
+	mux.Handle("/api/sites", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.SitesHandler{DB: database, Cfg: cfg}),
+	)))
 
-	// Databases
-	mux.Handle("/api/databases", middleware.RequireAuth(middleware.RequireCSRF(&handlers.DatabasesHandler{DB: database})))
+	// Databases (admin + manager only)
+	mux.Handle("/api/databases", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.DatabasesHandler{DB: database}),
+	)))
 
-	// DB Users
-	mux.Handle("/api/db-users", middleware.RequireAuth(middleware.RequireCSRF(&handlers.DBUsersHandler{DB: database})))
+	// DB Users (admin + manager only)
+	mux.Handle("/api/db-users", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.DBUsersHandler{DB: database}),
+	)))
 
-	// WordPress Tools & Updates
-	mux.Handle("/api/wordpress", middleware.RequireAuth(middleware.RequireCSRF(&handlers.WordPressHandler{DB: database, Cfg: cfg})))
+	// WordPress Tools & Updates (admin + manager only)
+	mux.Handle("/api/wordpress", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.WordPressHandler{DB: database, Cfg: cfg}),
+	)))
 
-	// SSL
-	mux.Handle("/api/ssl", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SSLHandler{DB: database, Cfg: cfg})))
+	// SSL (admin + manager only)
+	mux.Handle("/api/ssl", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.SSLHandler{DB: database, Cfg: cfg}),
+	)))
 
-	// Cron
-	mux.Handle("/api/cron", middleware.RequireAuth(middleware.RequireCSRF(&handlers.CronHandler{DB: database})))
+	// Cron (admin + manager only)
+	mux.Handle("/api/cron", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.CronHandler{DB: database}),
+	)))
 
-	// Files (File Browser manager)
+	// Files (File Browser manager) — admin + manager only
 	filesHandler := &handlers.FilesHandler{DB: database, Cfg: cfg}
 	filesHandler.StartIdleReaper()
-	mux.Handle("/api/files", middleware.RequireAuth(middleware.RequireCSRF(filesHandler)))
-	mux.Handle("/api/files/delete", middleware.RequireAuth(middleware.RequireCSRF(http.HandlerFunc(filesHandler.DeleteFile))))
+	mux.Handle("/api/files", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(filesHandler),
+	)))
+	mux.Handle("/api/files/delete", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(http.HandlerFunc(filesHandler.DeleteFile)),
+	)))
 
-	// File Browser reverse proxy — requires auth but not CSRF (File Browser handles its own requests)
-	mux.Handle("/fb/", middleware.RequireAuth(http.HandlerFunc(filesHandler.ProxyHandler())))
+	// File Browser reverse proxy — admin + manager only
+	mux.Handle("/fb/", middleware.RequireAuth(
+		middleware.RequireRole("admin", "manager")(http.HandlerFunc(filesHandler.ProxyHandler())),
+	))
 
-	// PHP Settings
-	mux.Handle("/api/php-settings", middleware.RequireAuth(middleware.RequireCSRF(&handlers.PHPHandler{DB: database, Cfg: cfg})))
+	// PHP Settings (admin + manager only)
+	mux.Handle("/api/php-settings", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.PHPHandler{DB: database, Cfg: cfg}),
+	)))
 
-	// PHP Versions
+	// PHP Versions (all authenticated users can view)
 	mux.Handle("/api/php-versions", middleware.RequireAuth(&handlers.PHPVersionsHandler{}))
 
 	// Panel Settings (admin + manager only)
-	mux.Handle("/api/settings", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SettingsHandler{DB: database, Cfg: cfg, Version: version})))
+	mux.Handle("/api/settings", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.SettingsHandler{DB: database, Cfg: cfg, Version: version}),
+	)))
 
 	// Users Management (admin only)
 	usersHandler := &handlers.UsersHandler{DB: database, Middleware: middleware}
@@ -97,10 +187,12 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		middleware.RequireRole("admin")(usersHandler),
 	)))
 
-	// phpMyAdmin auto-login (POST /api/pma returns a URL the frontend opens directly)
+	// phpMyAdmin auto-login (admin + manager only)
 	pmaHandler := &handlers.PhpMyAdminHandler{DB: database}
 	pmaHandler.CleanupStaleTempUsers()
-	mux.Handle("/api/pma", middleware.RequireAuth(middleware.RequireCSRF(pmaHandler)))
+	mux.Handle("/api/pma", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(pmaHandler),
+	)))
 
 	// Current user info
 	mux.HandleFunc("/api/me", func(w http.ResponseWriter, r *http.Request) {
@@ -142,25 +234,35 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "data": public})
 	})
 
-	// Services
-	mux.Handle("/api/services", middleware.RequireAuth(middleware.RequireCSRF(&handlers.ServicesHandler{DB: database})))
+	// Services (admin only)
+	mux.Handle("/api/services", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.ServicesHandler{DB: database}),
+	)))
 
-	// Vhost Editor
-	mux.Handle("/api/vhost", middleware.RequireAuth(middleware.RequireCSRF(&handlers.VhostHandler{DB: database, Cfg: cfg})))
+	// Vhost Editor (admin only)
+	mux.Handle("/api/vhost", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.VhostHandler{DB: database, Cfg: cfg}),
+	)))
 
-	// Site Backups
-	mux.Handle("/api/backups", middleware.RequireAuth(middleware.RequireCSRF(&handlers.BackupHandler{DB: database, Cfg: cfg})))
+	// Site Backups (admin + manager only)
+	mux.Handle("/api/backups", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.BackupHandler{DB: database, Cfg: cfg}),
+	)))
 
 	// Backup Methods (panel-wide, admin only)
 	mux.Handle("/api/backup-methods", middleware.RequireAuth(middleware.RequireCSRF(
 		middleware.RequireRole("admin")(&handlers.BackupMethodsHandler{DB: database}),
 	)))
 
-	// Site Logs
-	mux.Handle("/api/logs", middleware.RequireAuth(&handlers.LogsHandler{DB: database}))
+	// Site Logs (admin + manager only)
+	mux.Handle("/api/logs", middleware.RequireAuth(
+		middleware.RequireRole("admin", "manager")(&handlers.LogsHandler{DB: database}),
+	))
 
-	// SSL Certificates (multi-cert)
-	mux.Handle("/api/ssl-certs", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SSLCertsHandler{DB: database, Cfg: cfg})))
+	// SSL Certificates (admin + manager only)
+	mux.Handle("/api/ssl-certs", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(&handlers.SSLCertsHandler{DB: database, Cfg: cfg}),
+	)))
 
 	// SMTP Settings (admin only)
 	mux.Handle("/api/smtp", middleware.RequireAuth(middleware.RequireCSRF(
@@ -182,13 +284,17 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		middleware.RequireRole("admin")(&handlers.DiskUsageHandler{DB: database, Cfg: cfg}),
 	)))
 
-	// SSH Key Management
-	mux.Handle("/api/ssh", middleware.RequireAuth(middleware.RequireCSRF(&handlers.SSHHandler{DB: database})))
+	// SSH Key Management (admin only)
+	mux.Handle("/api/ssh", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin")(&handlers.SSHHandler{DB: database}),
+	)))
 
-	// Serve uploaded files
+	// Serve uploaded files (require auth to prevent public access)
 	uploadsDir := filepath.Join(cfg.DataDir, "uploads")
-	os.MkdirAll(uploadsDir, 0755)
-	mux.Handle("/api/uploads/", http.StripPrefix("/api/uploads/", http.FileServer(http.Dir(uploadsDir))))
+	os.MkdirAll(uploadsDir, 0750)
+	mux.Handle("/api/uploads/", middleware.RequireAuth(
+		http.StripPrefix("/api/uploads/", http.FileServer(http.Dir(uploadsDir))),
+	))
 
 	// Password change endpoint
 	mux.Handle("/api/auth/change-password", middleware.RequireAuth(middleware.RequireCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -356,7 +462,7 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte(`{"success":false,"error":"captcha verification required"}`))
 				return
 			}
-			if !verifyCaptcha(secretKey, req.CaptchaToken) {
+			if !verifyCaptcha(secretKey, req.CaptchaToken, r.Host) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte(`{"success":false,"error":"captcha verification failed"}`))
@@ -390,8 +496,8 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"success":true,"data":{"csrf_token":"` + csrfToken + `","username":"` + req.Username + `","role":"` + role + `"}}`))
 }
 
-// verifyCaptcha verifies a Google reCAPTCHA v2 token
-func verifyCaptcha(secretKey, token string) bool {
+// verifyCaptcha verifies a Google reCAPTCHA v2 token with hostname validation
+func verifyCaptcha(secretKey, token, expectedHostname string) bool {
 	resp, err := http.PostForm("https://www.google.com/recaptcha/api/siteverify", url.Values{
 		"secret":   {secretKey},
 		"response": {token},
@@ -407,12 +513,22 @@ func verifyCaptcha(secretKey, token string) bool {
 	}
 
 	var result struct {
-		Success bool `json:"success"`
+		Success    bool     `json:"success"`
+		Hostname   string   `json:"hostname"`
+		ErrorCodes []string `json:"error-codes"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return false
 	}
-	return result.Success
+	if !result.Success {
+		return false
+	}
+	// Validate hostname to prevent token reuse from other origins
+	if expectedHostname != "" && result.Hostname != expectedHostname {
+		log.Printf("reCAPTCHA hostname mismatch: expected %s, got %s", expectedHostname, result.Hostname)
+		return false
+	}
+	return true
 }
 
 // Unused import suppression

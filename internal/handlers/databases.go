@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -254,7 +255,8 @@ func (h *DBUsersHandler) changePassword(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := system.MariaDBChangePassword(req.Username, req.NewPassword); err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("MariaDB password change failed for %s: %v", req.Username, err)
+		jsonError(w, "failed to change database password", http.StatusInternalServerError)
 		return
 	}
 

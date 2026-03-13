@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -145,7 +146,8 @@ func (h *VhostHandler) update(w http.ResponseWriter, r *http.Request) {
 	cmd.Stdin = strings.NewReader(expanded)
 	cmd.Stdout = nil
 	if output, err := cmd.CombinedOutput(); err != nil {
-		jsonError(w, fmt.Sprintf("failed to write vhost: %s", string(output)), http.StatusInternalServerError)
+		log.Printf("Failed to write vhost %s: %s", confPath, strings.TrimSpace(string(output)))
+		jsonError(w, "failed to write vhost configuration", http.StatusInternalServerError)
 		return
 	}
 

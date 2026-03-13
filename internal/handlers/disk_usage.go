@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -206,7 +207,8 @@ func (h *DiskUsageHandler) cleanupTmp(w http.ResponseWriter, r *http.Request) {
 	// Uses find -mindepth 1 -maxdepth 5 to prevent accidental traverse beyond expected depth.
 	cmd := exec.Command("sudo", "find", tmpDir, "-mindepth", "1", "-maxdepth", "5", "-delete")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		jsonError(w, fmt.Sprintf("cleanup failed: %s", strings.TrimSpace(string(output))), http.StatusInternalServerError)
+		log.Printf("cleanup failed: %s", strings.TrimSpace(string(output)))
+		jsonError(w, "cleanup failed", http.StatusInternalServerError)
 		return
 	}
 

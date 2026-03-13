@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — Services Page
 import { request } from '../api.js';
-import { showToast, showConfirm, icons } from '../app.js';
+import { showToast, showConfirm, icons, escapeHtml } from '../app.js';
 
 let lastRefreshTime = 0;
 
@@ -184,11 +184,4 @@ async function loadServices(container) {
     } catch (err) {
         listEl.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load services</div><div class="empty-state-text">${escapeHtml(err.message)}</div></div>`;
     }
-}
-
-function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
 }

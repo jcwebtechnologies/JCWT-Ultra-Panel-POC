@@ -475,7 +475,8 @@ func (h *FilesHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	// Use sudo -u to delete as the site's system user (respects file ownership)
 	out, err := exec.Command("sudo", "-u", sysUser, "rm", "-rf", fullPath).CombinedOutput()
 	if err != nil {
-		jsonError(w, fmt.Sprintf("failed to delete: %s", strings.TrimSpace(string(out))), http.StatusInternalServerError)
+		log.Printf("File delete failed for %s: %s", fullPath, strings.TrimSpace(string(out)))
+		jsonError(w, "failed to delete file or directory", http.StatusInternalServerError)
 		return
 	}
 

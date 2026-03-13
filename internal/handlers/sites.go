@@ -614,12 +614,9 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	}
 
 	// Move WordPress files to webroot (overwrite welcome page)
-	mvCmd := fmt.Sprintf("sudo bash -c 'rm -rf %s/* && mv %s/wordpress/* %s/ && rm -rf %s/wordpress %s'",
-		webRoot, tmpDir, webRoot, tmpDir, wpArchive)
-	cmd = exec.Command("bash", "-c", mvCmd)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("move WordPress files: %s", string(output))
-	}
+	wpExtracted := filepath.Join(tmpDir, "wordpress")
+	exec.Command("sudo", "rsync", "-a", "--delete", wpExtracted+"/", webRoot+"/").Run()
+	exec.Command("sudo", "rm", "-rf", wpExtracted, wpArchive).Run()
 
 	// Create WordPress database and user
 	dbName := strings.ReplaceAll(sysUser, "-", "_") + "_wp"
@@ -711,8 +708,8 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Set correct permissions
 	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
-	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type d -exec chmod 750 {} \\;", webRoot)).Run()
-	exec.Command("bash", "-c", fmt.Sprintf("sudo find %s -type f -exec chmod 640 {} \\;", webRoot)).Run()
+	exec.Command("sudo", "find", webRoot, "-type", "d", "-exec", "chmod", "750", "{}", ";").Run()
+	exec.Command("sudo", "find", webRoot, "-type", "f", "-exec", "chmod", "640", "{}", ";").Run()
 
 	// Create system cron job for wp-cron.php (direct PHP call, every 30 minutes)
 	cronLogDir := filepath.Join(homeDir, "logs", "custom-cron")
@@ -794,9 +791,16 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	// Handle web root update for php/html/wordpress sites
 	webRoot := site["web_root"].(string)
 	if req.WebRoot != "" && siteType != "proxy" {
-		// Validate: must be under /home/ and not contain path traversal
-		if strings.Contains(req.WebRoot, "..") || !strings.HasPrefix(req.WebRoot, "/home/") {
-			jsonError(w, "invalid web root: must be under /home/ and cannot contain '..'", http.StatusBadRequest)
+		// Validate: must be under /home/, no path traversal, no shell metacharacters
+		if !isValidWebRoot(req.WebRoot) {
+			jsonError(w, "invalid web root: must be a clean path under /home/ with no special characters", http.StatusBadRequest)
+			return
+		}
+		// Ensure web root is under the correct user's home directory
+		sysUser := site["system_user"].(string)
+		expectedPrefix := filepath.Join("/home", sysUser) + "/"
+		if !strings.HasPrefix(req.WebRoot, expectedPrefix) {
+			jsonError(w, "web root must be under the site user's home directory", http.StatusBadRequest)
 			return
 		}
 		webRoot = req.WebRoot
@@ -1110,8 +1114,9 @@ func (h *SitesHandler) updateSecurity(w http.ResponseWriter, r *http.Request) {
 					log.Printf("htpasswd error for user %s: %s %v", username, string(out), err)
 				}
 			}
-			// Ensure nginx can read the file
-			exec.Command("sudo", "chmod", "644", htpasswdPath).Run()
+			// Ensure nginx can read the file (owner root, group www-data)
+			exec.Command("sudo", "chown", "root:www-data", htpasswdPath).Run()
+			exec.Command("sudo", "chmod", "640", htpasswdPath).Run()
 		} else if !req.BasicAuthEnabled {
 			// Remove htpasswd file when disabling
 			htpasswdPath := fmt.Sprintf("/etc/nginx/htpasswd/%s.htpasswd", domain)

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/jcwt/ultra-panel/internal/crypto"
 )
 
 //go:embed schema.sql
@@ -140,6 +142,14 @@ func Open(dataDir string) (*DB, error) {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	)`)
 
+	// Setup token table for bootstrap flow (single-use, first admin creation)
+	conn.Exec(`CREATE TABLE IF NOT EXISTS setup_tokens (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		token_hash TEXT NOT NULL,
+		used INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+
 	return &DB{Conn: conn}, nil
 }
 
@@ -206,6 +216,36 @@ func (d *DB) AdminCount() (int, error) {
 	var count int
 	err := d.Conn.QueryRow("SELECT COUNT(*) FROM admin_users").Scan(&count)
 	return count, err
+}
+
+// --- Setup Token queries (bootstrap flow) ---
+
+func (d *DB) SetSetupToken(tokenHash string) error {
+	_, err := d.Conn.Exec("INSERT OR REPLACE INTO setup_tokens (id, token_hash, used) VALUES (1, ?, 0)", tokenHash)
+	return err
+}
+
+func (d *DB) ValidateSetupToken(token string) (bool, error) {
+	var storedHash string
+	var used int
+	err := d.Conn.QueryRow("SELECT token_hash, used FROM setup_tokens WHERE id = 1").Scan(&storedHash, &used)
+	if err != nil {
+		return false, err
+	}
+	if used != 0 {
+		return false, nil
+	}
+	return storedHash == token, nil
+}
+
+func (d *DB) ConsumeSetupToken() error {
+	_, err := d.Conn.Exec("UPDATE setup_tokens SET used = 1 WHERE id = 1")
+	return err
+}
+
+func (d *DB) NeedsSetup() bool {
+	count, _ := d.AdminCount()
+	return count == 0
 }
 
 // --- TOTP queries ---
@@ -600,6 +640,8 @@ func (d *DB) GetSMTPSettings() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decrypt password (handles both encrypted and legacy plaintext)
+	password, _ = crypto.Decrypt(password)
 	return map[string]interface{}{
 		"host": host, "port": port, "encryption": encryption,
 		"auth_enabled": authEnabled == 1, "username": username, "password": password,
@@ -612,8 +654,13 @@ func (d *DB) UpdateSMTPSettings(host string, port int, encryption string, authEn
 	if authEnabled {
 		auth = 1
 	}
-	_, err := d.Conn.Exec(`UPDATE smtp_settings SET host=?, port=?, encryption=?, auth_enabled=?, username=?, password=?, from_email=?, from_name=? WHERE id = 1`,
-		host, port, encryption, auth, username, password, fromEmail, fromName,
+	// Encrypt password at rest
+	encPassword, err := crypto.Encrypt(password)
+	if err != nil {
+		return fmt.Errorf("encrypt smtp password: %w", err)
+	}
+	_, err = d.Conn.Exec(`UPDATE smtp_settings SET host=?, port=?, encryption=?, auth_enabled=?, username=?, password=?, from_email=?, from_name=? WHERE id = 1`,
+		host, port, encryption, auth, username, encPassword, fromEmail, fromName,
 	)
 	return err
 }
@@ -1059,6 +1106,8 @@ func (d *DB) GetSSHKey(id int64) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decrypt private key (handles both encrypted and legacy plaintext)
+	privKey, _ = crypto.Decrypt(privKey)
 	return map[string]interface{}{
 		"id": id, "site_id": sid, "name": name, "key_type": keyType,
 		"bits": bits, "public_key": pubKey, "private_key": privKey,
@@ -1067,9 +1116,14 @@ func (d *DB) GetSSHKey(id int64) (map[string]interface{}, error) {
 }
 
 func (d *DB) CreateSSHKey(siteID int64, name, keyType string, bits int, pubKey, privKey, fingerprint string) (int64, error) {
+	// Encrypt private key at rest
+	encPrivKey, err := crypto.Encrypt(privKey)
+	if err != nil {
+		return 0, fmt.Errorf("encrypt ssh private key: %w", err)
+	}
 	res, err := d.Conn.Exec(
 		"INSERT INTO ssh_keys (site_id, name, key_type, bits, public_key, private_key, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		siteID, name, keyType, bits, pubKey, privKey, fingerprint,
+		siteID, name, keyType, bits, pubKey, encPrivKey, fingerprint,
 	)
 	if err != nil {
 		return 0, err

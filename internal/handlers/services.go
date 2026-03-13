@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -13,20 +14,20 @@ import (
 
 // Allowed services whitelist — prevents arbitrary service control
 var allowedServices = map[string]string{
-	"nginx":       "nginx",
-	"mariadb":     "mariadb",
-	"redis":       "redis-server",
-	"php8.2":      "php8.2-fpm",
-	"php8.3":      "php8.3-fpm",
-	"php8.4":      "php8.4-fpm",
-	"php8.5":      "php8.5-fpm",
-	"jcwt-panel":  "jcwt-panel",
+	"nginx":      "nginx",
+	"mariadb":    "mariadb",
+	"redis":      "redis-server",
+	"php8.2":     "php8.2-fpm",
+	"php8.3":     "php8.3-fpm",
+	"php8.4":     "php8.4-fpm",
+	"php8.5":     "php8.5-fpm",
+	"jcwt-panel": "jcwt-panel",
 }
 
 type ServicesHandler struct {
-	DB          *db.DB
-	restartMu   sync.Mutex
-	restartLog  map[string][]time.Time
+	DB         *db.DB
+	restartMu  sync.Mutex
+	restartLog map[string][]time.Time
 }
 
 func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -58,12 +59,12 @@ func (h *ServicesHandler) list(w http.ResponseWriter, r *http.Request) {
 	for displayName, unitName := range allowedServices {
 		status := getServiceStatus(unitName)
 		services = append(services, map[string]interface{}{
-			"name":    displayName,
-			"unit":    unitName,
-			"status":  status["status"],
-			"active":  status["active"],
-			"memory":  status["memory"],
-			"uptime":  status["uptime"],
+			"name":   displayName,
+			"unit":   unitName,
+			"status": status["status"],
+			"active": status["active"],
+			"memory": status["memory"],
+			"uptime": status["uptime"],
 		})
 	}
 
@@ -116,7 +117,8 @@ func (h *ServicesHandler) restart(w http.ResponseWriter, r *http.Request) {
 	// Restart the service
 	output, err := exec.Command("sudo", "systemctl", "restart", unitName).CombinedOutput()
 	if err != nil {
-		jsonError(w, "restart failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
+		log.Printf("Service restart failed for %s: %s", unitName, strings.TrimSpace(string(output)))
+		jsonError(w, "service restart failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -181,7 +183,8 @@ func (h *ServicesHandler) reload(w http.ResponseWriter, r *http.Request) {
 
 	output, err := exec.Command("sudo", "systemctl", "reload", unitName).CombinedOutput()
 	if err != nil {
-		jsonError(w, "reload failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
+		log.Printf("reload %s failed: %s", unitName, strings.TrimSpace(string(output)))
+		jsonError(w, "reload failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -240,7 +243,8 @@ func (h *ServicesHandler) stop(w http.ResponseWriter, r *http.Request) {
 
 	output, err := exec.Command("sudo", "systemctl", "stop", unitName).CombinedOutput()
 	if err != nil {
-		jsonError(w, "stop failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
+		log.Printf("stop %s failed: %s", unitName, strings.TrimSpace(string(output)))
+		jsonError(w, "stop failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -294,7 +298,8 @@ func (h *ServicesHandler) start(w http.ResponseWriter, r *http.Request) {
 
 	output, err := exec.Command("sudo", "systemctl", "start", unitName).CombinedOutput()
 	if err != nil {
-		jsonError(w, "start failed: "+strings.TrimSpace(string(output)), http.StatusInternalServerError)
+		log.Printf("start %s failed: %s", unitName, strings.TrimSpace(string(output)))
+		jsonError(w, "start failed", http.StatusInternalServerError)
 		return
 	}
 

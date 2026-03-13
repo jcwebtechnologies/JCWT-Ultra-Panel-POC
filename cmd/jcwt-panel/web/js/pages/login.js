@@ -1,5 +1,6 @@
 // JCWT Ultra Panel — Login Page (Dynamic Branding + reCAPTCHA + 2FA)
 import { auth, setCsrfToken, request, twofa } from '../api.js';
+import { escapeHtml } from '../app.js';
 
 let recaptchaLoaded = false;
 
@@ -21,11 +22,7 @@ export async function render(container) {
     container.innerHTML = `
     <div class="login-page">
         <div class="login-card">
-            <div class="login-logo">
-                ${logoUrl
-                    ? `<img src="${logoUrl}" alt="${panelName}" style="width: 48px; height: 48px; border-radius: 12px; margin-bottom: 8px;">`
-                    : `<div class="logo-icon">${panelName.charAt(0)}</div>`
-                }
+            <div class="login-logo" id="login-logo-container">
                 <h1>${escapeHtml(panelName)}</h1>
                 <p>${escapeHtml(panelTagline)}</p>
             </div>
@@ -52,6 +49,21 @@ export async function render(container) {
             </form>
         </div>
     </div>`;
+
+    // Insert logo via DOM APIs to avoid XSS from logo URL
+    const logoContainer = document.getElementById('login-logo-container');
+    if (logoUrl) {
+        const img = document.createElement('img');
+        img.src = logoUrl;
+        img.alt = panelName;
+        img.style.cssText = 'width: 48px; height: 48px; border-radius: 12px; margin-bottom: 8px;';
+        logoContainer.insertBefore(img, logoContainer.firstChild);
+    } else {
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'logo-icon';
+        iconDiv.textContent = panelName.charAt(0);
+        logoContainer.insertBefore(iconDiv, logoContainer.firstChild);
+    }
 
     // Load reCAPTCHA if configured
     if (recaptchaSiteKey && !recaptchaLoaded) {
@@ -147,21 +159,11 @@ export async function render(container) {
     });
 }
 
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
 function show2FAStep(container, twofaToken, panelName, logoUrl) {
     container.innerHTML = `
     <div class="login-page">
         <div class="login-card">
-            <div class="login-logo">
-                ${logoUrl
-                    ? `<img src="${logoUrl}" alt="${panelName}" style="width: 48px; height: 48px; border-radius: 12px; margin-bottom: 8px;">`
-                    : `<div class="logo-icon">${panelName.charAt(0)}</div>`
-                }
+            <div class="login-logo" id="twofa-logo-container">
                 <h1>Two-Factor Authentication</h1>
                 <p>Enter the 6-digit code from your authenticator app</p>
             </div>
@@ -181,6 +183,21 @@ function show2FAStep(container, twofaToken, panelName, logoUrl) {
             </div>
         </div>
     </div>`;
+
+    // Insert logo via DOM APIs to avoid XSS
+    const logoContainer = document.getElementById('twofa-logo-container');
+    if (logoUrl) {
+        const img = document.createElement('img');
+        img.src = logoUrl;
+        img.alt = panelName;
+        img.style.cssText = 'width: 48px; height: 48px; border-radius: 12px; margin-bottom: 8px;';
+        logoContainer.insertBefore(img, logoContainer.firstChild);
+    } else {
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'logo-icon';
+        iconDiv.textContent = panelName.charAt(0);
+        logoContainer.insertBefore(iconDiv, logoContainer.firstChild);
+    }
 
     document.getElementById('twofa-form').addEventListener('submit', async (e) => {
         e.preventDefault();

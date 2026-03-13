@@ -1,6 +1,6 @@
 // JCWT Ultra Panel — Settings Page (Panel Branding & Configuration)
 import { settings, backupMethods } from '../api.js';
-import { icons, showToast, escapeHtml, showConfirm } from '../app.js';
+import { icons, showToast, escapeHtml, showConfirm, showPrompt } from '../app.js';
 
 export async function render(container) {
     document.getElementById('page-title').textContent = 'Panel Settings';
@@ -270,9 +270,9 @@ export async function render(container) {
         loadBackupMethods();
 
         document.getElementById('add-backup-method-btn')?.addEventListener('click', async () => {
-            const name = prompt('Backup method name (e.g. "Local Backups"):');
+            const name = await showPrompt('Backup Method Name', 'Enter a name for the backup method (e.g. "Local Backups")');
             if (!name) return;
-            const type = prompt('Type (local, s3, sftp, gdrive, dropbox):', 'local');
+            const type = await showPrompt('Backup Method Type', 'Enter the type (local, s3, sftp, gdrive, dropbox)', 'local');
             if (!type) return;
             try {
                 await backupMethods.create({ name, type, config: '{}' });

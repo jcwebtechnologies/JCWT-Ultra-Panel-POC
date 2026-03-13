@@ -176,9 +176,7 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, sit
 	case "full":
 		htdocsStaging := filepath.Join(stagingDir, "htdocs")
 		exec.Command("sudo", "mkdir", "-p", htdocsStaging).Run()
-		pipeCmd := fmt.Sprintf("sudo tar cf - -C '%s' . | sudo tar xf - -C '%s'",
-			webRoot, htdocsStaging)
-		cmd := exec.Command("bash", "-c", pipeCmd)
+		cmd := exec.Command("sudo", "rsync", "-a", "--delete", webRoot+"/", htdocsStaging+"/")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			backupErr = fmt.Errorf("backup failed copying files: %s", string(output))
 		}
@@ -190,10 +188,30 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, sit
 				exec.Command("sudo", "mkdir", "-p", dbStaging).Run()
 				for _, db := range siteDbs {
 					dbName := db["db_name"].(string)
+					if !isValidDBName(dbName) {
+						log.Printf("Skipping invalid database name: %s", dbName)
+						continue
+					}
 					dumpFile := filepath.Join(dbStaging, dbName+".sql.gz")
-					dumpCmd := fmt.Sprintf("sudo mysqldump --single-transaction %s 2>/dev/null | gzip > %s",
-						dbName, dumpFile)
-					exec.Command("bash", "-c", dumpCmd).Run()
+					dumpCmd := exec.Command("sudo", "mysqldump", "--single-transaction", dbName)
+					gzipCmd := exec.Command("gzip")
+					outFile, err := os.Create(dumpFile)
+					if err != nil {
+						log.Printf("Failed to create dump file %s: %v", dumpFile, err)
+						continue
+					}
+					gzipCmd.Stdout = outFile
+					pipe, err := dumpCmd.StdoutPipe()
+					if err != nil {
+						outFile.Close()
+						continue
+					}
+					gzipCmd.Stdin = pipe
+					dumpCmd.Start()
+					gzipCmd.Start()
+					dumpCmd.Wait()
+					gzipCmd.Wait()
+					outFile.Close()
 				}
 			}
 		}
@@ -358,7 +376,8 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 				// Try without ./ prefix (legacy backups)
 				cmd = exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "htdocs")
 				if output2, err2 := cmd.CombinedOutput(); err2 != nil {
-					jsonError(w, fmt.Sprintf("restore files failed: %s / %s", string(output), string(output2)), http.StatusInternalServerError)
+					log.Printf("restore files failed: %s / %s", string(output), string(output2))
+					jsonError(w, "restore files failed", http.StatusInternalServerError)
 					return
 				}
 			}
@@ -366,14 +385,16 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 			htdocsStage := filepath.Join(restoreDir, "htdocs")
 			cmd = exec.Command("sudo", "rsync", "-a", "--delete", htdocsStage+"/", webRoot+"/")
 			if output, err := cmd.CombinedOutput(); err != nil {
-				jsonError(w, fmt.Sprintf("restore files failed: %s", string(output)), http.StatusInternalServerError)
+				log.Printf("restore files (rsync) failed: %s", string(output))
+				jsonError(w, "restore files failed", http.StatusInternalServerError)
 				return
 			}
 		} else {
 			// Old-style: extract directly over web root parent
 			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", filepath.Dir(webRoot))
 			if output, err := cmd.CombinedOutput(); err != nil {
-				jsonError(w, fmt.Sprintf("restore failed: %s", string(output)), http.StatusInternalServerError)
+				log.Printf("restore failed: %s", string(output))
+				jsonError(w, "restore failed", http.StatusInternalServerError)
 				return
 			}
 		}
@@ -395,19 +416,40 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 			if len(allowedDBs) > 0 && !allowedDBs[dbName] {
 				continue
 			}
+			if !isValidDBName(dbName) {
+				log.Printf("Skipping invalid database name during restore: %s", dbName)
+				continue
+			}
 
 			// Ensure the database exists before importing
 			createSQL := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbName)
 			exec.Command("sudo", "mysql", "-e", createSQL).Run()
 
 			// Extract .sql.gz to stdout and pipe through gunzip into mysql
-			importCmd := fmt.Sprintf("sudo tar -xzf %s --to-stdout %s | gunzip | sudo mysql %s",
-				backupPath, dbFile, dbName)
-			if output, err := exec.Command("bash", "-c", importCmd).CombinedOutput(); err != nil {
+			tarCmd := exec.Command("sudo", "tar", "-xzf", backupPath, "--to-stdout", dbFile)
+			gunzipCmd := exec.Command("gunzip")
+			mysqlCmd := exec.Command("sudo", "mysql", dbName)
+			pipe1, err := tarCmd.StdoutPipe()
+			if err != nil {
+				log.Printf("Failed pipe for %s: %v", dbName, err)
+				continue
+			}
+			gunzipCmd.Stdin = pipe1
+			pipe2, err := gunzipCmd.StdoutPipe()
+			if err != nil {
+				log.Printf("Failed pipe for %s: %v", dbName, err)
+				continue
+			}
+			mysqlCmd.Stdin = pipe2
+			tarCmd.Start()
+			gunzipCmd.Start()
+			if output, err := mysqlCmd.CombinedOutput(); err != nil {
 				log.Printf("Failed to restore database %s: %s: %s", dbName, err, string(output))
 			} else {
 				restored = append(restored, "database:"+dbName)
 			}
+			tarCmd.Wait()
+			gunzipCmd.Wait()
 
 			// Re-create panel DB record if missing
 			existingDBs, _ := h.DB.ListDatabasesBySite(siteID)
