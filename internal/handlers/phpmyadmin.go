@@ -136,9 +136,12 @@ exit;
 
 	writeCmd := exec.Command("sudo", "tee", pmaSignonPath)
 	writeCmd.Stdin = strings.NewReader(signContent)
-	writeCmd.Stdout = nil
-	if out, err := writeCmd.CombinedOutput(); err != nil {
-		log.Printf("Failed to write PMA signon PHP: %s %v", string(out), err)
+	writeCmd.Stdout = nil // discard tee's stdout echo — prevents credentials leaking into logs
+	var signonStderr strings.Builder
+	writeCmd.Stderr = &signonStderr
+	if err := writeCmd.Run(); err != nil {
+		log.Printf("PMA signon write failed for db %q: %v; detail: %s",
+			dbName, err, strings.TrimSpace(signonStderr.String()))
 		jsonError(w, "failed to prepare phpMyAdmin access", http.StatusInternalServerError)
 		return
 	}
