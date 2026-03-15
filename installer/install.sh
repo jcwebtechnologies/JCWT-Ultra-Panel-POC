@@ -1032,7 +1032,7 @@ StandardError=append:$LOG_DIR/panel.log
 NoNewPrivileges=false
 ProtectHome=false
 PrivateTmp=true
-ProtectSystem=full
+ProtectSystem=yes
 ReadWritePaths=$DATA_DIR /etc/nginx /etc/php /home /etc/logrotate.d $LOG_DIR /etc/sudoers.d /usr/local/bin /etc/default
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -1303,16 +1303,30 @@ print_banner() {
     echo -e "  ${CYAN}URL:${NC}       https://[${IPV6_ADDR}]:${PANEL_PORT}"
     echo ""
 
-    # Extract setup token from panel log (generated on first start)
-    SETUP_TOKEN=$(grep -oP 'Setup Token: \K[0-9a-f]+' "$LOG_DIR/panel.log" 2>/dev/null | tail -1)
-    if [ -n "$SETUP_TOKEN" ]; then
-        echo -e "  ${YELLOW}${BOLD}First-Time Setup Required${NC}"
-        echo -e "  Open the URL above and use this one-time token"
-        echo -e "  to create your admin account:"
-        echo ""
-        echo -e "  ${CYAN}Setup Token:${NC}  ${GREEN}${BOLD}${SETUP_TOKEN}${NC}"
-        echo ""
-        echo -e "  ${DIM}This token can only be used once.${NC}"
+    # Check whether an admin account already exists in the database.
+    # This correctly handles re-installs where the old setup token is still
+    # present in the log file from a previous run.
+    NEEDS_SETUP=true
+    if command -v sqlite3 &>/dev/null && [ -f "$DATA_DIR/panel.db" ]; then
+        ADMIN_COUNT=$(sqlite3 "$DATA_DIR/panel.db" "SELECT COUNT(*) FROM admin_users;" 2>/dev/null)
+        if [ "${ADMIN_COUNT:-0}" -gt 0 ]; then
+            NEEDS_SETUP=false
+        fi
+    fi
+
+    if [ "$NEEDS_SETUP" = "true" ]; then
+        # Extract the setup token from the log — this is freshly generated on
+        # each start when no admin exists, so tail -1 gives the current token.
+        SETUP_TOKEN=$(grep -oP 'Setup Token: \K[0-9a-f]+' "$LOG_DIR/panel.log" 2>/dev/null | tail -1)
+        if [ -n "$SETUP_TOKEN" ]; then
+            echo -e "  ${YELLOW}${BOLD}First-Time Setup Required${NC}"
+            echo -e "  Open the URL above and use this one-time token"
+            echo -e "  to create your admin account:"
+            echo ""
+            echo -e "  ${CYAN}Setup Token:${NC}  ${GREEN}${BOLD}${SETUP_TOKEN}${NC}"
+            echo ""
+            echo -e "  ${DIM}This token can only be used once.${NC}"
+        fi
     else
         echo -e "  ${DIM}An admin account already exists. Log in with your credentials.${NC}"
     fi
