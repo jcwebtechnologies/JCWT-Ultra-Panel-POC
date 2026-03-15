@@ -483,6 +483,16 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// cleanupSite rolls back all work done after CreateSite on any subsequent failure.
+	cleanupSite := func() {
+		h.DB.DeleteSite(id)
+		system.DeleteSystemUser(req.SystemUser)
+		nginx.RemoveVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain)
+		if req.SiteType == "php" || req.SiteType == "wordpress" {
+			php.RemovePool(h.Cfg.PHPFPMBaseDir, req.PHPVersion, req.SystemUser)
+		}
+	}
+
 	// Write welcome page (skip for wordpress — WP files will replace it)
 	if req.SiteType != "wordpress" {
 		if err := system.WriteWelcomePage(webRoot, req.SiteType, req.Domain, req.SystemUser); err != nil {
@@ -510,6 +520,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 			MaxInputVars: 1000, PostMaxSize: postMaxSize, UploadMaxFilesize: uploadMaxFilesize,
 		}
 		if err := php.WritePool(h.Cfg.PHPFPMBaseDir, req.PHPVersion, req.SystemUser, poolData); err != nil {
+			cleanupSite()
 			jsonError(w, fmt.Sprintf("failed to write PHP pool: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -519,6 +530,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 	// WordPress setup: download, extract, create DB/user, generate wp-config.php
 	if req.SiteType == "wordpress" {
 		if err := h.setupWordPress(id, req.Domain, req.SystemUser, webRoot, req.PHPVersion, req.WPAdminUser, req.WPAdminEmail, req.WPAdminPass, req.WPSiteTitle, req.WPTablePrefix); err != nil {
+			cleanupSite()
 			jsonError(w, fmt.Sprintf("WordPress setup failed: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -535,10 +547,12 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		AccessLog: true, ErrorLog: true,
 	}
 	if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, vhostData); err != nil {
+		cleanupSite()
 		jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)
 		return
 	}
 	if err := nginx.TestAndReload(); err != nil {
+		cleanupSite()
 		jsonError(w, fmt.Sprintf("nginx config error: %v", err), http.StatusInternalServerError)
 		return
 	}

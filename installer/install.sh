@@ -1303,15 +1303,12 @@ print_banner() {
     echo -e "  ${CYAN}URL:${NC}       https://[${IPV6_ADDR}]:${PANEL_PORT}"
     echo ""
 
-    # Check whether an admin account already exists in the database.
-    # This correctly handles re-installs where the old setup token is still
-    # present in the log file from a previous run.
+    # Check whether setup is still needed by querying the running panel API.
+    # This is reliable even on re-installs because it checks live state, not log files.
     NEEDS_SETUP=true
-    if command -v sqlite3 &>/dev/null && [ -f "$DATA_DIR/panel.db" ]; then
-        ADMIN_COUNT=$(sqlite3 "$DATA_DIR/panel.db" "SELECT COUNT(*) FROM admin_users;" 2>/dev/null)
-        if [ "${ADMIN_COUNT:-0}" -gt 0 ]; then
-            NEEDS_SETUP=false
-        fi
+    SETUP_STATUS=$(curl -sk --max-time 5 "https://[::1]:${PANEL_PORT}/api/setup/status" 2>/dev/null)
+    if echo "$SETUP_STATUS" | grep -q '"needs_setup":false'; then
+        NEEDS_SETUP=false
     fi
 
     if [ "$NEEDS_SETUP" = "true" ]; then

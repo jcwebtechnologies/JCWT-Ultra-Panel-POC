@@ -324,8 +324,7 @@ func WriteConfigString(sitesAvailable, sitesEnabled, domain, configStr string) e
 		return fmt.Errorf("write vhost config: %s: %s", err, string(output))
 	}
 	linkPath := filepath.Join(sitesEnabled, domain+".conf")
-	exec.Command("sudo", "rm", "-f", linkPath).Run()
-	cmd = exec.Command("sudo", "ln", "-s", confPath, linkPath)
+	cmd = exec.Command("sudo", "ln", "-sf", confPath, linkPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("create symlink: %s", string(output))
 	}
@@ -367,8 +366,7 @@ func WriteVHost(sitesAvailable, sitesEnabled, domain string, data VHostData) err
 
 	// Create symlink in sites-enabled
 	linkPath := filepath.Join(sitesEnabled, domain+".conf")
-	exec.Command("sudo", "rm", "-f", linkPath).Run()
-	cmd = exec.Command("sudo", "ln", "-s", confPath, linkPath)
+	cmd = exec.Command("sudo", "ln", "-sf", confPath, linkPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("create symlink: %s", string(output))
 	}
