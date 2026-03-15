@@ -203,14 +203,20 @@ func (h *DiskUsageHandler) cleanupTmp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Safely remove contents of tmp directory while keeping the directory itself.
-	// Uses find -mindepth 1 -maxdepth 5 to prevent accidental traverse beyond expected depth.
-	cmd := exec.Command("sudo", "find", tmpDir, "-mindepth", "1", "-maxdepth", "5", "-delete")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("cleanup failed: %s", strings.TrimSpace(string(output)))
+	// Remove and recreate the tmp directory to clear its contents.
+	// This uses only commands already allowed in sudoers (rm -rf, mkdir, chown, chmod).
+	if out, err := exec.Command("sudo", "rm", "-rf", tmpDir).CombinedOutput(); err != nil {
+		log.Printf("cleanup rm failed: %s", strings.TrimSpace(string(out)))
 		jsonError(w, "cleanup failed", http.StatusInternalServerError)
 		return
 	}
+	if out, err := exec.Command("sudo", "mkdir", "-p", tmpDir).CombinedOutput(); err != nil {
+		log.Printf("cleanup mkdir failed: %s", strings.TrimSpace(string(out)))
+		jsonError(w, "cleanup failed", http.StatusInternalServerError)
+		return
+	}
+	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, tmpDir).Run()
+	exec.Command("sudo", "chmod", "750", tmpDir).Run()
 
 	jsonSuccess(w, map[string]interface{}{"cleaned": true})
 }

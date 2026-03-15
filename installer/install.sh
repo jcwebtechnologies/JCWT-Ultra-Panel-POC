@@ -1153,6 +1153,8 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar xf - -C /home/[a-z]*
 # Disk usage (read-only)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -sh /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -b /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -sb /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -b --max-depth=3 /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test -f /home/[a-z]*
 
 # Log viewing
