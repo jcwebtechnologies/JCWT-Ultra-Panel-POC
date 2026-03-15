@@ -12,7 +12,7 @@ func EnableSSH(username string) error {
 	if !safeDomainRegex.MatchString(username) {
 		return fmt.Errorf("invalid username")
 	}
-	cmd := exec.Command("sudo", "usermod", "--shell", "/bin/bash", username)
+	cmd := exec.Command("sudo", "usermod", "-s", "/bin/bash", username)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("enable SSH: %s", strings.TrimSpace(string(output)))
 	}
@@ -24,7 +24,7 @@ func DisableSSH(username string) error {
 	if !safeDomainRegex.MatchString(username) {
 		return fmt.Errorf("invalid username")
 	}
-	cmd := exec.Command("sudo", "usermod", "--shell", "/usr/sbin/nologin", username)
+	cmd := exec.Command("sudo", "usermod", "-s", "/usr/sbin/nologin", username)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("disable SSH: %s", strings.TrimSpace(string(output)))
 	}

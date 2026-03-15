@@ -1033,7 +1033,7 @@ NoNewPrivileges=false
 ProtectHome=false
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=$DATA_DIR /etc/nginx /etc/php /home /etc/logrotate.d $LOG_DIR /etc/sudoers.d /usr/local/bin
+ReadWritePaths=$DATA_DIR /etc/nginx /etc/php /home /etc/logrotate.d $LOG_DIR /etc/sudoers.d /usr/local/bin /etc/default
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -1059,6 +1059,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd -m -d /home/[a-z]* -s /usr/sbi
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/userdel -r [a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -s /bin/bash [a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -s /usr/sbin/nologin [a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -aG [a-z]* www-data
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/groupdel [a-z]*
 
 # Systemd service control (only allowed services)
@@ -1102,6 +1103,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown [a-z]*\:[a-z]* /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown -R [a-z]*\:[a-z]* /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /etc/nginx/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /etc/logrotate.d/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/nginx/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-available/*
@@ -1109,10 +1111,12 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-enabled/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/htpasswd/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -rf /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /var/lib/jcwt-panel/ssl/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/logrotate.d/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ln -sf /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/nginx/sites-available/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/logrotate.d/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/default/ufw
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /home/[a-z]*
 
 # Tar/archive operations (scoped)
@@ -1143,6 +1147,8 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw allow *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw deny *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw delete *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force enable
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force reset
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw default *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw reload
 
 # Rsync (for backup restore)

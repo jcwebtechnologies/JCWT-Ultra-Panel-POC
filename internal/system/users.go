@@ -15,10 +15,9 @@ func CreateSystemUser(username, webRootBase string) error {
 	// Create user with restricted shell (requires sudo)
 	// If user already exists, continue to ensure directories are set up
 	cmd := exec.Command("sudo", "useradd",
-		"--system",
-		"--shell", "/usr/sbin/nologin",
-		"--home-dir", homeDir,
-		"--create-home",
+		"-m",
+		"-d", homeDir,
+		"-s", "/usr/sbin/nologin",
 		username,
 	)
 	output, err := cmd.CombinedOutput()
@@ -199,8 +198,9 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
 
 	indexPath := filepath.Join(webRoot, fileName)
 
-	// Write via sudo bash -c to handle permissions
-	cmd := exec.Command("sudo", "bash", "-c", fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", indexPath, indexContent))
+	// Write via sudo tee to handle permissions
+	cmd := exec.Command("sudo", "tee", indexPath)
+	cmd.Stdin = strings.NewReader(indexContent)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("write welcome page: %s", string(output))
 	}
@@ -217,7 +217,7 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
 // DeleteSystemUser removes a system user and their home directory
 func DeleteSystemUser(username string) error {
 	// Force delete with home directory removal
-	cmd := exec.Command("sudo", "userdel", "--force", "--remove", username)
+	cmd := exec.Command("sudo", "userdel", "-r", username)
 	cmd.Run() // Ignore error — user might already be deleted
 
 	// Also delete the group (userdel sometimes leaves it behind)
@@ -229,7 +229,7 @@ func DeleteSystemUser(username string) error {
 
 // ClearCrontab clears the crontab for a user
 func ClearCrontab(username string) {
-	cmd := exec.Command("sudo", "crontab", "-u", username, "-r")
+	cmd := exec.Command("sudo", "crontab", "-r", "-u", username)
 	cmd.Run()
 }
 

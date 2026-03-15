@@ -2,7 +2,9 @@ package system
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 )
 
 // SetupIPv6Firewall configures basic IPv6 firewall rules using ufw
@@ -11,9 +13,9 @@ func SetupIPv6Firewall(panelPort string) error {
 		{"ufw", "--force", "reset"},
 		{"ufw", "default", "deny", "incoming"},
 		{"ufw", "default", "allow", "outgoing"},
-		{"ufw", "allow", "22/tcp"},         // SSH
-		{"ufw", "allow", "80/tcp"},         // HTTP
-		{"ufw", "allow", "443/tcp"},        // HTTPS
+		{"ufw", "allow", "22/tcp"},           // SSH
+		{"ufw", "allow", "80/tcp"},           // HTTP
+		{"ufw", "allow", "443/tcp"},          // HTTPS
 		{"ufw", "allow", panelPort + "/tcp"}, // Panel
 		{"ufw", "--force", "enable"},
 	}
@@ -32,11 +34,19 @@ func SetupIPv6Firewall(panelPort string) error {
 
 // EnableIPv6InUFW ensures UFW is configured for IPv6
 func EnableIPv6InUFW() error {
-	// ufw on Ubuntu 24.04 has IPv6 enabled by default
-	// Ensure it's set in the config
-	cmd := exec.Command("sudo", "sed", "-i", "s/IPV6=no/IPV6=yes/", "/etc/default/ufw")
-	output, err := cmd.CombinedOutput()
+	// Read the current config
+	data, err := os.ReadFile("/etc/default/ufw")
 	if err != nil {
+		return fmt.Errorf("read ufw config: %w", err)
+	}
+
+	// Replace IPV6=no with IPV6=yes
+	updated := strings.ReplaceAll(string(data), "IPV6=no", "IPV6=yes")
+
+	// Write back via sudo tee
+	cmd := exec.Command("sudo", "tee", "/etc/default/ufw")
+	cmd.Stdin = strings.NewReader(updated)
+	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("enable IPv6 in ufw: %s", string(output))
 	}
 	return nil

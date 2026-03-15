@@ -498,7 +498,7 @@ function renderLayout(pageName) {
                                 <div class="user-dropdown-avatar">${currentUser ? currentUser[0].toUpperCase() : 'A'}</div>
                                 <div>
                                     <div style="font-weight: 600; font-size: var(--font-size-sm);">${escapeHtml(currentUser || 'Admin')}</div>
-                                    <div style="font-size: var(--font-size-xs); color: var(--text-tertiary);">Administrator</div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--text-tertiary);">${escapeHtml(currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : 'Admin')}</div>
                                 </div>
                             </div>
                             <div class="user-dropdown-divider"></div>
