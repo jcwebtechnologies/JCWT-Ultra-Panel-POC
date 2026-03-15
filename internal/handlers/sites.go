@@ -524,6 +524,9 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, fmt.Sprintf("failed to write PHP pool: %v", err), http.StatusInternalServerError)
 			return
 		}
+		// Fix any legacy pool files with pm=dynamic + pm.process_idle_timeout before
+		// restarting FPM, otherwise PHP-FPM 8.x exits with code 78 (EX_CONFIG).
+		php.FixDynamicPools(h.Cfg.PHPFPMBaseDir, req.PHPVersion)
 		php.RestartFPM(req.PHPVersion)
 	}
 
@@ -840,7 +843,8 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 	if phpTypes[oldSiteType] && (!phpTypes[siteType] || req.PHPVersion != site["php_version"].(string)) {
 		oldVersion := site["php_version"].(string)
 		php.RemovePool(h.Cfg.PHPFPMBaseDir, oldVersion, sysUser)
-		php.RestartFPM(oldVersion)
+		php.ReloadFPM(oldVersion)
+		php.RemoveSock(oldVersion, sysUser)
 	}
 
 	// Create/Update FPM pool if it's currently a PHP/WordPress site
@@ -954,7 +958,10 @@ func (h *SitesHandler) delete(w http.ResponseWriter, r *http.Request) {
 	nginx.RemoveVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain)
 	nginx.Reload()
 	php.RemovePool(h.Cfg.PHPFPMBaseDir, phpVersion, sysUser)
-	php.RestartFPM(phpVersion)
+	// Graceful reload so other pools keep serving; sock file may linger if FPM
+	// is already down, so always remove it explicitly afterwards.
+	php.ReloadFPM(phpVersion)
+	php.RemoveSock(phpVersion, sysUser)
 	system.ClearCrontab(sysUser)
 
 	// Drop MariaDB users and databases for this site

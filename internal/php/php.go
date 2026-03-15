@@ -123,6 +123,53 @@ func RemovePool(phpBaseDir, phpVersion, user string) error {
 	return nil
 }
 
+// RemoveSock removes the stale PHP-FPM unix socket for a pool.
+// Call this after RemovePool + ReloadFPM to clean up any socket file that
+// was not removed by FPM during a graceful reload (e.g. when FPM is down).
+func RemoveSock(version, user string) {
+	sockPath := fmt.Sprintf("/run/php/php%s-fpm-%s.sock", version, user)
+	exec.Command("sudo", "rm", "-f", sockPath).Run()
+}
+
+// FixDynamicPools scans pool.d and removes the pm.process_idle_timeout directive
+// from any pool configured with pm = dynamic. That directive is only valid for
+// pm = ondemand; PHP-FPM 8.x treats the combination as a fatal config error (exit 78).
+// This is a one-time migration for pool files created by older panel versions.
+func FixDynamicPools(phpBaseDir, phpVersion string) {
+	poolDir := filepath.Join(phpBaseDir, phpVersion, "fpm", "pool.d")
+	entries, err := os.ReadDir(poolDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".conf") {
+			continue
+		}
+		path := filepath.Join(poolDir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		// Only touch dynamic pools that have the invalid directive
+		if !strings.Contains(content, "pm = dynamic") || !strings.Contains(content, "pm.process_idle_timeout") {
+			continue
+		}
+		var lines []string
+		for _, line := range strings.Split(content, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "pm.process_idle_timeout") {
+				continue
+			}
+			lines = append(lines, line)
+		}
+		fixed := strings.Join(lines, "\n")
+		cmd := exec.Command("sudo", "tee", path)
+		cmd.Stdin = strings.NewReader(fixed)
+		cmd.Stdout = nil
+		cmd.CombinedOutput()
+	}
+}
+
 // ReloadFPM gracefully reloads the PHP-FPM service for a specific version
 func ReloadFPM(version string) error {
 	service := fmt.Sprintf("php%s-fpm", version)

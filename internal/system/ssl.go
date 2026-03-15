@@ -1,6 +1,7 @@
 package system
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,10 +42,21 @@ func SaveCustomCert(sslBaseDir, domain string, certData, keyData []byte) (certPa
 	certPath = filepath.Join(dir, "cert.pem")
 	keyPath = filepath.Join(dir, "key.pem")
 
-	if err = os.WriteFile(certPath, certData, 0644); err != nil {
+	// Use sudo tee so we can overwrite root-owned files that may have been created
+	// by sudo openssl during automatic self-signed cert generation.
+	writeViaSudo := func(path string, data []byte) error {
+		cmd := exec.Command("sudo", "tee", path)
+		cmd.Stdin = bytes.NewReader(data)
+		cmd.Stdout = nil
+		if out, e := cmd.CombinedOutput(); e != nil {
+			return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	if err = writeViaSudo(certPath, certData); err != nil {
 		return "", "", fmt.Errorf("write cert: %w", err)
 	}
-	if err = os.WriteFile(keyPath, keyData, 0600); err != nil {
+	if err = writeViaSudo(keyPath, keyData); err != nil {
 		return "", "", fmt.Errorf("write key: %w", err)
 	}
 	return certPath, keyPath, nil

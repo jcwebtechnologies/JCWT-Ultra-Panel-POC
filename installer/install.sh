@@ -1112,6 +1112,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/htpasswd/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -rf /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /var/lib/jcwt-panel/ssl/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/logrotate.d/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /run/php/php*-fpm-*.sock
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ln -sf /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/nginx/sites-available/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*
@@ -1172,6 +1173,20 @@ EOF
 
     systemctl daemon-reload
     systemctl enable jcwt-panel > /dev/null 2>&1
+
+    # Fix any PHP-FPM pool files written by older panel versions that incorrectly
+    # combined pm = dynamic with pm.process_idle_timeout (fatal for PHP-FPM 8.x).
+    log_info "Validating PHP-FPM pool configurations..."
+    for phpver_dir in /etc/php/*/fpm/pool.d; do
+        [ -d "$phpver_dir" ] || continue
+        for f in "$phpver_dir"/*.conf; do
+            [ -f "$f" ] || continue
+            if grep -q '^pm = dynamic' "$f" && grep -q '^pm\.process_idle_timeout' "$f"; then
+                sed -i '/^pm\.process_idle_timeout/d' "$f"
+                log_detail "Fixed pool: $f"
+            fi
+        done
+    done
 
     log_info "Starting JCWT Ultra Panel service..."
     if systemctl start jcwt-panel; then
