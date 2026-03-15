@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -164,7 +165,7 @@ exit;
 
 // PhpMyAdminInstalled verifies phpMyAdmin is installed
 func PhpMyAdminInstalled() bool {
-	_, err := exec.Command("sudo", "ls", "/usr/share/phpmyadmin/index.php").Output()
+	_, err := os.Stat("/usr/share/phpmyadmin/index.php")
 	return err == nil
 }
 

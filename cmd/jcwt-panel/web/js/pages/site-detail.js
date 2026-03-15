@@ -175,13 +175,13 @@ export async function render(container, siteToken, section) {
                         <div class="site-card-icon blue"><span class="nav-icon nav-icon-lg">${icons.database}</span></div>
                         <div class="site-card-title">Disk Usage</div>
                     </div>
-                    <div class="site-card" data-section="logs">
-                        <div class="site-card-icon orange"><span class="nav-icon nav-icon-lg">${icons.search}</span></div>
-                        <div class="site-card-title">Logs</div>
-                    </div>
                     <div class="site-card" data-section="resource-usage">
                         <div class="site-card-icon purple"><span class="nav-icon nav-icon-lg">${icons.dashboard || icons.settings}</span></div>
                         <div class="site-card-title">Resource Usage</div>
+                    </div>
+                    <div class="site-card" data-section="logs">
+                        <div class="site-card-icon orange"><span class="nav-icon nav-icon-lg">${icons.search}</span></div>
+                        <div class="site-card-title">Logs</div>
                     </div>
                 </div>
             </div>

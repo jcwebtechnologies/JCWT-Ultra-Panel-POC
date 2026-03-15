@@ -421,10 +421,6 @@ function renderLayout(pageName) {
                     <a href="#/sites" class="nav-item ${pageName === 'sites' || pageName === 'site-detail' ? 'active' : ''}">
                         <span class="nav-icon">${icons.sites}</span> Sites
                     </a>
-                    ${currentRole === 'admin' || currentRole === 'manager' ? `
-                    <a href="#/databases" class="nav-item ${pageName === 'databases' ? 'active' : ''}">
-                        <span class="nav-icon">${icons.database}</span> Databases
-                    </a>` : ''}
                     ${currentRole === 'admin' ? `
                     <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
                         <span class="nav-icon">${icons.key}</span> Users

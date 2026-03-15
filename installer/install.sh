@@ -1118,6 +1118,8 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/logrotate.d/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/default/ufw
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /usr/share/phpmyadmin/signon_*.php
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /usr/share/phpmyadmin/signon_*.php
 
 # Tar/archive operations (scoped)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]*

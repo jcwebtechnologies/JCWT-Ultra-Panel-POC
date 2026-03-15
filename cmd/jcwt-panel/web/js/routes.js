@@ -7,7 +7,6 @@ export const ROUTES = {
     DASHBOARD:           '/dashboard',
     SITES:               '/sites',
     SITE_DETAIL:         '/sites/:id',
-    DATABASES:           '/databases',
     SERVICES:            '/services',
     FIREWALL:            '/firewall',
     DISK_USAGE:          '/disk-usage',

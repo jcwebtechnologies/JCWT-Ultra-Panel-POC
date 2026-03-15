@@ -21,11 +21,8 @@ listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
 
-pm = dynamic
+pm = ondemand
 pm.max_children = 10
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 4
 pm.process_idle_timeout = 10s
 pm.max_requests = 500
 
