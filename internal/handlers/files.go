@@ -295,8 +295,13 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		// Non-admin with all file-operation permissions (archive/extract needs create+modify).
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			"/usr/local/bin/filebrowser", "users", "add", "fbuser", "admin-noauth-panel",
+			"--perm.admin=false",
 			"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
 			"--perm.download", "--perm.execute",
+			"--viewMode", "mosaic",
+			"--aceEditorTheme", "chrome",
+			"--lockPassword",
+			"--hideDotfiles",
 			"--database", dbPath,
 		).CombinedOutput(); err != nil {
 			log.Printf("File Browser users add failed for site %d: %v: %s", siteID, err, string(out))
@@ -326,23 +331,6 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
 	}
-
-	// Always update user permissions — migrates old DBs (wrong perms, missing flags)
-	// and keeps new DBs in the canonical state. Non-fatal: a failure here won't
-	// prevent the instance from starting, but may limit available features.
-	// if out, err := exec.Command("sudo", "-u", sysUser,
-	// 	"/usr/local/bin/filebrowser", "users", "update", "1",
-	// 	"--perm.admin=false",
-	// 	"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
-	// 	"--perm.download", "--perm.execute",
-	// 	"--viewMode", "mosaic",
-	// 	"--aceEditorTheme", "chrome",
-	// 	"--lockPassword",
-	// 	"--hideDotfiles",
-	// 	"--database", dbPath,
-	// ).CombinedOutput(); err != nil {
-	// 	log.Printf("File Browser users update failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
-	// }
 
 	cmd := exec.Command("sudo", "-u", sysUser,
 		"/usr/local/bin/filebrowser",
