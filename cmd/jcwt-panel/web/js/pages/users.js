@@ -1,10 +1,10 @@
 // JCWT Ultra Panel — Users Management Page (Admin Only)
 import { request } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
+import { showLoading } from '../ui.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'User Management';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const users = await request('/api/users');

@@ -18,12 +18,18 @@ NoNewPrivileges=false
 ProtectHome=false
 PrivateTmp=true
 ProtectSystem=yes
-ReadWritePaths=/var/lib/jcwt-panel /etc/nginx /etc/php /home /etc/logrotate.d /var/log/jcwt-panel /etc/sudoers.d /usr/local/bin /etc/default /usr/share/phpmyadmin
+ReadWritePaths=/var/lib/jcwt-panel /etc/nginx /etc/php /home /etc/logrotate.d /var/log/jcwt-panel /etc/default /usr/share/phpmyadmin
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
+RestrictNamespaces=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryDenyWriteExecute=true
+RemoveIPC=true
 
 [Install]
 WantedBy=multi-user.target

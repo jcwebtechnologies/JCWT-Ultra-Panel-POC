@@ -1,9 +1,10 @@
 import { databases, dbUsers } from '../../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../../app.js';
 import { request } from '../../api.js';
+import { showLoading } from '../../ui.js';
 
 export async function renderDatabases(container, siteId, site, refreshTabs) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const allDbs = await databases.list();
@@ -99,7 +100,7 @@ export async function renderDatabases(container, siteId, site, refreshTabs) {
 }
 
 export async function renderDBUsers(container, siteId, site, refreshTabs) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     const privilegeLabels = {
         'readonly': 'Read Only',
@@ -288,7 +289,7 @@ export async function renderDBUsers(container, siteId, site, refreshTabs) {
 }
 
 export async function renderPhpMyAdmin(container, siteId) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
     try {
         const [allDbs, allUsers] = await Promise.all([databases.list(), dbUsers.list()]);
         const siteDbs = (allDbs || []).filter(db => String(db.site_id) === String(siteId));

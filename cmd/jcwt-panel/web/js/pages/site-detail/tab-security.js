@@ -1,6 +1,7 @@
 import { sites, sshKeys } from '../../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../../app.js';
 import { request } from '../../api.js';
+import { showLoading } from '../../ui.js';
 
 export async function renderSecurity(container, site, siteId, refreshTabs) {
     const basicAuthEnabled = site.basic_auth_enabled === 1 || site.basic_auth_enabled === true;
@@ -144,7 +145,7 @@ export async function renderSecurity(container, site, siteId, refreshTabs) {
 }
 
 export async function renderSSHAccess(container, site, siteId) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const [status, keys] = await Promise.all([

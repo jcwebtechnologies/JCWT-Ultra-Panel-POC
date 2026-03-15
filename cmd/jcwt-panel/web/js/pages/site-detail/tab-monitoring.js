@@ -1,6 +1,7 @@
 import { diskUsage, sites } from '../../api.js';
 import { icons, showToast, escapeHtml, formatBytes } from '../../app.js';
 import { request } from '../../api.js';
+import { showLoading } from '../../ui.js';
 
 // ---- Logs Viewer ----
 export async function renderLogs(container, site, siteId) {
@@ -8,7 +9,7 @@ export async function renderLogs(container, site, siteId) {
     let logLines = 25;
 
     async function loadLog() {
-        container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+        showLoading(container);
         try {
             const data = await request(`/api/logs?site_id=${siteId}&type=${activeLog}&lines=${logLines}`);
             container.innerHTML = `
@@ -53,7 +54,7 @@ export async function renderLogs(container, site, siteId) {
 
 // ---- Disk Usage ----
 export async function renderDiskUsage(container, site, siteId) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     let sortMode = 'size';
     let refreshCooldown = false;
@@ -237,7 +238,7 @@ export async function renderResourceUsage(container, site, siteId) {
         }
     }
 
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
     await load();
     pollTimer = setInterval(load, 5000);
 

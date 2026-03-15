@@ -1,6 +1,7 @@
 import { sites, phpSettings } from '../../api.js';
 import { icons, showToast, showConfirm, escapeHtml } from '../../app.js';
 import { request } from '../../api.js';
+import { showLoading } from '../../ui.js';
 
 export function renderOverview(el, site, versions, siteId) {
     const versionOpts = versions.map(v => `<option value="${v}" ${v === site.php_version ? 'selected' : ''}>PHP ${v}</option>`).join('');
@@ -202,7 +203,7 @@ export async function renderPHP(el, siteId) {
 }
 
 export async function renderVhost(container, site, siteId) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
     try {
         const data = await request(`/api/vhost?site_id=${siteId}`);
         container.innerHTML = `

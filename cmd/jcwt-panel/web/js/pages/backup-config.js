@@ -1,10 +1,10 @@
 // JCWT Ultra Panel — Backup Configuration Settings
 import { backupMethods } from '../api.js';
 import { icons, showToast, escapeHtml, showConfirm, showModal, closeModal } from '../app.js';
+import { showLoading } from '../ui.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Backup Configuration';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         container.innerHTML = `

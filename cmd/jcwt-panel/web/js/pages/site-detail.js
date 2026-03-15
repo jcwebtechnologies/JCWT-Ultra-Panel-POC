@@ -1,6 +1,9 @@
 // JCWT Ultra Panel - Site Detail Page (thin coordinator)
 import { sites, phpVersions, databases } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
+import { ROUTES, siteHref } from '../routes.js';
+import { showLoading } from '../ui.js';
+import { sslBadge } from '../css-classes.js';
 
 // Tab modules
 import { renderOverview, renderPHP, renderVhost } from './site-detail/tab-overview.js';
@@ -14,8 +17,7 @@ import { renderLogs, renderDiskUsage, renderResourceUsage } from './site-detail/
 import { renderWordPressTools, renderWordPressUpdates } from './site-detail/tab-wordpress.js';
 
 export async function render(container, siteToken, section) {
-    document.getElementById('page-title').textContent = 'Site Management';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     if (!siteToken) { container.innerHTML = '<p>No site selected</p>'; return; }
 
@@ -30,7 +32,7 @@ export async function render(container, siteToken, section) {
         let _prevSection = null;
 
         function renderPage() {
-            // Don't stop file browser on section change â€” let idle reaper reclaim it.
+            // Don't stop file browser on section change -- let idle reaper reclaim it.
             // The instance stays alive so it can be reused when the user returns to files.
             _prevSection = activeSection;
 
@@ -38,7 +40,7 @@ export async function render(container, siteToken, section) {
             <div class="page-header" style="margin-bottom: var(--space-5);">
                 <div class="page-header-left">
                     <h2 style="display: flex; align-items: center; gap: var(--space-2);">
-                        <a href="http://${escapeHtml(site.domain)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;" title="Open site in new tab">${escapeHtml(site.domain)} <span style="font-size: var(--font-size-xs); opacity: 0.4;">â†—</span></a>
+                        <a href="http://${escapeHtml(site.domain)}" target="_blank" rel="noopener" style="color: inherit; text-decoration: none;" title="Open site in new tab">${escapeHtml(site.domain)} <span style="font-size: var(--font-size-xs); opacity: 0.4;">↗</span></a>
                     </h2>
                     <div class="site-detail-meta">
                         <span style="display: flex; align-items: center; gap: var(--space-1);"><span class="nav-icon" style="width:14px;height:14px;opacity:0.5;">${icons.key}</span> ${escapeHtml(site.system_user)}</span>
@@ -47,11 +49,11 @@ export async function render(container, siteToken, section) {
                 </div>
                 <div style="display:flex;align-items:center;gap:var(--space-2);">
                     ${site.site_type === 'wordpress' ? `<a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:var(--space-1);"><span class="nav-icon nav-icon-xs">${icons.key}</span> WP Admin</a>` : ''}
-                    <a href="#/sites" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon nav-icon-sm">${icons.sites}</span> All Sites</a>
+                    <a href="#${ROUTES.SITES}" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: var(--space-2);"><span class="nav-icon nav-icon-sm">${icons.sites}</span> All Sites</a>
                 </div>
             </div>
 
-            ${activeSection ? `<div class="back-nav"><a href="#/sites/${escapeHtml(siteToken)}" class="btn btn-sm btn-primary back-nav-btn" title="Back to Site Overview"><span class="nav-icon nav-icon-sm">${icons.chevronLeft}</span> Site Overview</a></div>` : `
+            ${activeSection ? `<div class="back-nav"><a href="${siteHref(siteToken)}" class="btn btn-sm btn-primary back-nav-btn" title="Back to Site Overview"><span class="nav-icon nav-icon-sm">${icons.chevronLeft}</span> Site Overview</a></div>` : `
             <div class="site-info-strip">
                 <div class="site-info-strip-item">
                     <span class="site-info-strip-label">Type</span>
@@ -59,7 +61,7 @@ export async function render(container, siteToken, section) {
                 </div>
                 <div class="site-info-strip-item">
                     <span class="site-info-strip-label">SSL</span>
-                    <span class="site-info-strip-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${escapeHtml(site.ssl_type)}</span></span>
+                    <span class="site-info-strip-value"><span class="${sslBadge(site.ssl_type)}">${escapeHtml(site.ssl_type)}</span></span>
                 </div>
                 ${(site.site_type === 'php' || site.site_type === 'wordpress') ? `
                 <div class="site-info-strip-item">
@@ -76,7 +78,7 @@ export async function render(container, siteToken, section) {
                 </div>
                 ${site.site_type === 'wordpress' ? `
                 <div class="site-info-strip-item">
-                    <a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="font-size:var(--font-size-xs);padding:2px 8px;white-space:nowrap;align-self:center;">WP Admin â†—</a>
+                    <a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="font-size:var(--font-size-xs);padding:2px 8px;white-space:nowrap;align-self:center;">WP Admin ↗</a>
                 </div>` : ''}
             </div>
 
@@ -256,7 +258,7 @@ export async function render(container, siteToken, section) {
                         await sites.delete(siteId);
                         closeModal();
                         showToast('Site deleted successfully', 'success');
-                        window.location.hash = '#/sites';
+                        window.location.hash = `#${ROUTES.SITES}`;
                     } catch (err) {
                         confirmBtn.disabled = false;
                         confirmBtn.textContent = 'Delete Site';
@@ -267,11 +269,11 @@ export async function render(container, siteToken, section) {
                 });
             });
 
-            // Bind card clicks â€” navigate to URL-based sections
+            // Bind card clicks -- navigate to URL-based sections
             container.querySelectorAll('.site-card').forEach(card => {
                 card.addEventListener('click', () => {
                     const sec = card.dataset.section;
-                    window.location.hash = `#/sites/${siteToken}/${sec}`;
+                    window.location.hash = siteHref(siteToken, sec);
                 });
             });
 

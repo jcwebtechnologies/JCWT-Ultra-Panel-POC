@@ -1,11 +1,12 @@
 // JCWT Ultra Panel — Sites Page
 import { sites, phpVersions, databases } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
+import { siteHref } from '../routes.js';
+import { showLoading } from '../ui.js';
+import { sslBadge } from '../css-classes.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Sites';
-
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const [siteList, versions] = await Promise.all([sites.list(), phpVersions.list()]);
@@ -55,11 +56,11 @@ export async function render(container) {
                                 ${s.site_type === 'html' ? `<span class="badge" style="background:var(--error);color:white">HTML</span>` : ''}
                                 ${s.site_type === 'proxy' ? `<span class="badge" style="background:var(--text-secondary);color:white">Proxy</span>` : ''}
                             </td>
-                            <td data-label="SSL"><span class="badge ${s.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${s.ssl_type === 'none' ? 'None' : s.ssl_type}</span></td>
+                            <td data-label="SSL"><span class="${sslBadge(s.ssl_type)}">${s.ssl_type === 'none' ? 'None' : s.ssl_type}</span></td>
                             <td data-label="Created" style="color: var(--text-tertiary); font-size: var(--font-size-xs);">${new Date(s.created_at).toLocaleDateString()}</td>
                             <td>
                                 <div class="table-actions">
-                                    <a href="#/sites/${s.token}" class="btn btn-sm btn-secondary">Manage</a>
+                                    <a href="${siteHref(s.token)}" class="btn btn-sm btn-secondary">Manage</a>
                                     <button class="btn btn-sm btn-danger delete-site" data-id="${s.id}" data-domain="${escapeHtml(s.domain)}">Delete</button>
                                 </div>
                             </td>

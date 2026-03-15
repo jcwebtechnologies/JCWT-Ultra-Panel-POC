@@ -1,10 +1,10 @@
 // JCWT Ultra Panel — Databases Page
 import { databases, dbUsers, sites } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
+import { showLoading } from '../ui.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Databases';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     let activeTab = 'databases';
 

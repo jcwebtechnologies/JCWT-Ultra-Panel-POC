@@ -5,7 +5,6 @@ import { showToast, showConfirm, icons, escapeHtml } from '../app.js';
 let lastRefreshTime = 0;
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Services';
     container.innerHTML = `
         <div class="page-header">
             <div>

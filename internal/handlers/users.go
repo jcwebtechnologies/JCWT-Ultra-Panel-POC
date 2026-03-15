@@ -64,8 +64,8 @@ func (h *UsersHandler) create(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "username must be 3-31 chars, start with letter, only letters/numbers/underscore", http.StatusBadRequest)
 		return
 	}
-	if len(req.Password) < 8 {
-		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
+	if len(req.Password) < 10 {
+		jsonError(w, "password must be at least 10 characters", http.StatusBadRequest)
 		return
 	}
 	if len(req.Password) > 128 {
@@ -141,8 +141,8 @@ func (h *UsersHandler) update(w http.ResponseWriter, r *http.Request) {
 
 	// Update password if provided
 	if req.Password != "" {
-		if len(req.Password) < 8 {
-			jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
+		if len(req.Password) < 10 {
+			jsonError(w, "password must be at least 10 characters", http.StatusBadRequest)
 			return
 		}
 		hash, err := auth.HashPassword(req.Password)

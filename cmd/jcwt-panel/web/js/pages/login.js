@@ -1,6 +1,7 @@
 // JCWT Ultra Panel — Login Page (Dynamic Branding + reCAPTCHA + 2FA)
 import { auth, setCsrfToken, request, twofa } from '../api.js';
 import { escapeHtml } from '../app.js';
+import { ROUTES, navigateTo } from '../routes.js';
 
 let recaptchaLoaded = false;
 
@@ -145,7 +146,7 @@ export async function render(container) {
             }
 
             setCsrfToken(data.csrf_token);
-            window.location.hash = '#/dashboard';
+            navigateTo(ROUTES.DASHBOARD);
         } catch (err) {
             errorEl.textContent = err.message || 'Invalid credentials';
             errorEl.style.display = 'block';
@@ -179,7 +180,7 @@ function show2FAStep(container, twofaToken, panelName, logoUrl) {
                 </button>
             </form>
             <div style="margin-top: var(--space-4); text-align: center;">
-                <a href="#/login" style="color: var(--text-tertiary); font-size: var(--font-size-sm); text-decoration: none;">← Back to Login</a>
+                <a href="#${ROUTES.LOGIN}" style="color: var(--text-tertiary); font-size: var(--font-size-sm); text-decoration: none;">← Back to Login</a>
             </div>
         </div>
     </div>`;
@@ -218,7 +219,7 @@ function show2FAStep(container, twofaToken, panelName, logoUrl) {
         try {
             const data = await twofa.verify(twofaToken, code);
             setCsrfToken(data.csrf_token);
-            window.location.hash = '#/dashboard';
+            navigateTo(ROUTES.DASHBOARD);
         } catch (err) {
             errorEl.textContent = err.message || 'Invalid code';
             errorEl.style.display = 'block';

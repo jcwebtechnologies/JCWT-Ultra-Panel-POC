@@ -1,16 +1,15 @@
 // JCWT Ultra Panel — Dashboard Page (Auto-Refresh)
 import { dashboard } from '../api.js';
 import { icons, showToast } from '../app.js';
+import { showLoading } from '../ui.js';
 
 let refreshInterval = null;
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Dashboard';
-
     // Clean up any previous interval
     if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
 
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const stats = await dashboard.stats();

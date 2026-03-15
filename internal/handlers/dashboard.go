@@ -9,10 +9,57 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jcwt/ultra-panel/internal/db"
 )
+
+// ipCache caches public IP addresses with a 5-minute TTL
+var ipCache struct {
+	sync.RWMutex
+	ipv4 []string
+	ipv6 []string
+}
+
+func init() {
+	// Populate cache immediately at startup, then refresh every 5 minutes
+	refreshIPCache()
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		for range ticker.C {
+			refreshIPCache()
+		}
+	}()
+}
+
+func refreshIPCache() {
+	var v4, v6 []string
+	if out, err := exec.Command("curl", "-4s", "--max-time", "3", "https://icanhazip.com").Output(); err == nil {
+		if ip := strings.TrimSpace(string(out)); ip != "" {
+			v4 = append(v4, ip)
+		}
+	}
+	if out, err := exec.Command("curl", "-6s", "--max-time", "3", "https://icanhazip.com").Output(); err == nil {
+		if ip := strings.TrimSpace(string(out)); ip != "" {
+			v6 = append(v6, ip)
+		}
+	}
+	ipCache.Lock()
+	ipCache.ipv4 = v4
+	ipCache.ipv6 = v6
+	ipCache.Unlock()
+}
+
+func getCachedIPs() ([]string, []string) {
+	ipCache.RLock()
+	defer ipCache.RUnlock()
+	v4 := make([]string, len(ipCache.ipv4))
+	v6 := make([]string, len(ipCache.ipv6))
+	copy(v4, ipCache.ipv4)
+	copy(v6, ipCache.ipv6)
+	return v4, v6
+}
 
 type DashboardHandler struct {
 	DB *db.DB
@@ -158,25 +205,8 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	stats["php_versions"] = availableVersions
 	stats["server_time"] = time.Now().Format(time.RFC3339)
 
-	// Public IP addresses (via external services, 2-second timeout)
-	var ipv4s, ipv6s []string
-
-	// Get public IPv4
-	if out, err := exec.Command("curl", "-4s", "--max-time", "2", "https://icanhazip.com").Output(); err == nil {
-		ip := strings.TrimSpace(string(out))
-		if ip != "" {
-			ipv4s = append(ipv4s, ip)
-		}
-	}
-
-	// Get public IPv6
-	if out, err := exec.Command("curl", "-6s", "--max-time", "2", "https://icanhazip.com").Output(); err == nil {
-		ip := strings.TrimSpace(string(out))
-		if ip != "" {
-			ipv6s = append(ipv6s, ip)
-		}
-	}
-
+	// Public IP addresses (served from background cache, refreshed every 5 min)
+	ipv4s, ipv6s := getCachedIPs()
 	stats["ipv4_addresses"] = ipv4s
 	stats["ipv6_addresses"] = ipv6s
 

@@ -1,10 +1,10 @@
 // JCWT Ultra Panel — Firewall Management Page
 import { firewall } from '../api.js';
 import { icons, showToast, escapeHtml, showConfirm } from '../app.js';
+import { showLoading } from '../ui.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Firewall';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const data = await firewall.list();

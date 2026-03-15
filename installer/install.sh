@@ -1033,12 +1033,18 @@ NoNewPrivileges=false
 ProtectHome=false
 PrivateTmp=true
 ProtectSystem=yes
-ReadWritePaths=$DATA_DIR /etc/nginx /etc/php /home /etc/logrotate.d $LOG_DIR /etc/sudoers.d /usr/local/bin /etc/default /usr/share/phpmyadmin
+ReadWritePaths=$DATA_DIR /etc/nginx /etc/php /home /etc/logrotate.d $LOG_DIR /etc/default /usr/share/phpmyadmin
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
+RestrictNamespaces=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryDenyWriteExecute=true
+RemoveIPC=true
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
@@ -1077,8 +1083,22 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start nginx
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start php*-fpm
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start mariadb
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl start redis-server
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active *
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active nginx
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active php*-fpm
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active mariadb
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active redis-server
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active jcwt-panel
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active ufw
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show nginx --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show nginx --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show php*-fpm --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show php*-fpm --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show mariadb --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show mariadb --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show redis-server --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show redis-server --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show jcwt-panel --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show jcwt-panel --property=ActiveEnterTimestamp --value
 
 # Nginx
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/nginx -t
@@ -1116,7 +1136,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /run/php/php*-fpm-*.sock
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/php/*/fpm/pool.d/*.conf
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ln -sf /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/nginx/sites-available/*
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*/fpm/pool.d/*.conf
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/logrotate.d/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/default/ufw
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /home/[a-z]*

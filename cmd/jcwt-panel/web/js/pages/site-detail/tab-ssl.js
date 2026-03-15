@@ -1,9 +1,11 @@
 import { ssl } from '../../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../../app.js';
 import { request } from '../../api.js';
+import { showLoading } from '../../ui.js';
+import { sslBadge } from '../../css-classes.js';
 
 export function renderSSL(el, site, siteId) {
-    el.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(el);
 
     request(`/api/ssl-certs?site_id=${siteId}`).then(data => {
         const certs = data.certificates || [];
@@ -18,7 +20,7 @@ export function renderSSL(el, site, siteId) {
             <div style="padding: var(--space-4);">
                 <div class="info-item" style="margin-bottom: var(--space-4);">
                     <span class="info-label">Active Certificate</span>
-                    <span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type === 'none' ? 'None' : site.ssl_type}</span></span>
+                    <span class="info-value"><span class="${sslBadge(site.ssl_type)}">${site.ssl_type === 'none' ? 'None' : site.ssl_type}</span></span>
                 </div>
                 ${activeCert && activeCert.cert_path ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Certificate Path</span><span class="info-value mono" style="font-size: var(--font-size-xs);">${escapeHtml(activeCert.cert_path)}</span></div>` : ''}
                 ${activeCert && activeCert.common_name ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Common Name</span><span class="info-value mono" style="font-size: var(--font-size-xs);">${escapeHtml(activeCert.common_name)}</span></div>` : ''}
@@ -213,7 +215,7 @@ export function renderSSL(el, site, siteId) {
             <h3 class="card-title" style="margin-bottom: var(--space-4);">SSL Certificate</h3>
             <div class="info-item" style="margin-bottom: var(--space-4);">
                 <span class="info-label">Current Status</span>
-                <span class="info-value"><span class="badge ${site.ssl_type === 'none' ? 'badge-warning' : 'badge-success'}">${site.ssl_type}</span></span>
+                <span class="info-value"><span class="${sslBadge(site.ssl_type)}">${site.ssl_type}</span></span>
             </div>
             ${site.ssl_cert_path ? `<div class="info-item" style="margin-bottom: var(--space-4);"><span class="info-label">Certificate Path</span><span class="info-value mono">${escapeHtml(site.ssl_cert_path)}</span></div>` : ''}
             <div style="display: flex; gap: var(--space-3); flex-wrap: wrap;">

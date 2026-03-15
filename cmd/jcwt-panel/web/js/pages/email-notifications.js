@@ -1,13 +1,14 @@
 // JCWT Ultra Panel — Email Notifications Settings Page
 import { emailTemplates } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml } from '../app.js';
+import { showLoading } from '../ui.js';
+import { enabledBadge } from '../css-classes.js';
 
 const DEFAULT_HEADER_HTML = `<td style="background:#6366f1;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;"><h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">JCWT Ultra Panel</h1></td>`;
 const DEFAULT_FOOTER_HTML = `<td style="background:#f9fafb;padding:20px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;text-align:center;"><p style="margin:0;color:#9ca3af;font-size:12px;">&copy; ${new Date().getFullYear()} JCWT Ultra Panel &mdash; This is an automated message.</p></td>`;
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Email Notifications';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const [templates, layout] = await Promise.all([
@@ -51,7 +52,7 @@ export async function render(container) {
                                 </td>
                                 <td data-label="Subject"><code style="font-size:var(--font-size-xs);">${escapeHtml(t.subject)}</code></td>
                                 <td data-label="Status">
-                                    <span class="badge ${t.enabled ? 'badge-success' : 'badge-warning'}">${t.enabled ? 'Enabled' : 'Disabled'}</span>
+                                    <span class="${enabledBadge(t.enabled)}">${t.enabled ? 'Enabled' : 'Disabled'}</span>
                                 </td>
                                 <td data-label="Actions" style="text-align:right;">
                                     <button class="btn btn-sm btn-secondary edit-template-btn" data-id="${t.id}" title="Edit template">

@@ -1,10 +1,11 @@
 // JCWT Ultra Panel — Site Disk Usage Management Page
 import { diskUsage } from '../api.js';
 import { icons, showToast, showConfirm, escapeHtml } from '../app.js';
+import { siteHref } from '../routes.js';
+import { showLoading } from '../ui.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Site Disk Usage';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     let refreshCooldown = false;
 
@@ -50,7 +51,7 @@ export async function render(container) {
                                 ${list.map(s => `
                                 <tr>
                                     <td data-label="Site">
-                                        <a href="#/sites/${encodeURIComponent(s.token)}" style="color:var(--accent-primary);text-decoration:none;font-weight:600;">${escapeHtml(s.domain)}</a>
+                                        <a href="${siteHref(s.token)}" style="color:var(--accent-primary);text-decoration:none;font-weight:600;">${escapeHtml(s.domain)}</a>
                                     </td>
                                     <td data-label="System User"><code style="font-size:var(--font-size-xs);">${escapeHtml(s.system_user)}</code></td>
                                     <td data-label="Total" style="text-align:right;font-weight:600;" class="mono">${escapeHtml(s.total)}</td>

@@ -3,7 +3,6 @@ import { smtpSettings } from '../api.js';
 import { showToast, showModal, closeModal, showConfirm, icons, escapeHtml } from '../app.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'SMTP Settings';
     container.innerHTML = `
         <div class="page-header">
             <div>

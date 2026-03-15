@@ -1,9 +1,10 @@
 import { wordpress } from '../../api.js';
 import { icons, showToast, escapeHtml } from '../../app.js';
+import { showLoading } from '../../ui.js';
 
 // ---- WordPress Tools ----
 export async function renderWordPressTools(container, site, siteId) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
     try {
         const state = await wordpress.status(siteId);
 
@@ -82,7 +83,7 @@ export async function renderWordPressTools(container, site, siteId) {
 
 // ---- WordPress Updates ----
 export async function renderWordPressUpdates(container, site, siteId) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     async function load() {
         try {

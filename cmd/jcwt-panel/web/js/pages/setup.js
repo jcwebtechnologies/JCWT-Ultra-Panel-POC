@@ -1,6 +1,7 @@
 // JCWT Ultra Panel — First-Time Setup Page
 import { setup, request } from '../api.js';
 import { escapeHtml } from '../app.js';
+import { ROUTES } from '../routes.js';
 
 export async function render(container) {
     // Fetch public settings for branding
@@ -111,7 +112,7 @@ export async function render(container) {
                     </div>
                     <h2 style="margin-bottom: var(--space-2);">Admin Account Created!</h2>
                     <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">You can now sign in with your new credentials.</p>
-                    <a href="#/login" class="btn btn-primary" style="display: inline-block;">Go to Login</a>
+                    <a href="#${ROUTES.LOGIN}" class="btn btn-primary" style="display: inline-block;">Go to Login</a>
                 </div>
             </div>`;
         } catch (err) {

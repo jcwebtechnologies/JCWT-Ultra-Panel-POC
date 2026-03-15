@@ -1,10 +1,10 @@
 // JCWT Ultra Panel — Branding & Appearance Settings
 import { settings } from '../api.js';
 import { icons, showToast, escapeHtml } from '../app.js';
+import { showLoading } from '../ui.js';
 
 export async function render(container) {
-    document.getElementById('page-title').textContent = 'Branding & Appearance';
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
 
     try {
         const cfg = await settings.get();

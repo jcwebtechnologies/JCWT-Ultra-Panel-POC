@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,6 +19,9 @@ import (
 	"github.com/jcwt/ultra-panel/internal/db"
 	"github.com/jcwt/ultra-panel/internal/handlers"
 )
+
+// usernameRegex mirrors the constraint in handlers/users.go
+var setupUsernameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{2,30}$`)
 
 // Setup creates and configures the HTTP router
 func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS http.FileSystem, version string) http.Handler {
@@ -50,10 +55,10 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 			w.Write([]byte(`{"success":false,"error":"invalid request"}`))
 			return
 		}
-		if len(req.Username) < 3 || len(req.Username) > 31 || len(req.Password) < 10 {
+		if !setupUsernameRegex.MatchString(req.Username) || len(req.Password) < 10 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"success":false,"error":"username must be 3-31 chars and password at least 10 chars"}`))
+			w.Write([]byte(`{"success":false,"error":"username must be 3-31 chars (letter start, alphanumeric/underscore) and password at least 10 chars"}`))
 			return
 		}
 		ok, err := database.ValidateSetupToken(req.SetupToken)
@@ -452,8 +457,8 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate input lengths
-	if len(req.Username) == 0 || len(req.Username) > 100 || len(req.Password) == 0 || len(req.Password) > 200 {
+	// Validate input lengths (aligned with user creation constraints)
+	if len(req.Username) == 0 || len(req.Username) > 31 || len(req.Password) == 0 || len(req.Password) > 128 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"success":false,"error":"invalid credentials format"}`))
@@ -544,6 +549,10 @@ func verifyCaptcha(secretKey, token, expectedHostname string) bool {
 	}
 	if !result.Success {
 		return false
+	}
+	// Strip port from expectedHostname (r.Host may include :port)
+	if h, _, err := net.SplitHostPort(expectedHostname); err == nil {
+		expectedHostname = h
 	}
 	// Validate hostname to prevent token reuse from other origins
 	if expectedHostname != "" && result.Hostname != expectedHostname {

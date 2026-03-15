@@ -1,5 +1,6 @@
 import { cron } from '../../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../../app.js';
+import { enabledBadge } from '../../css-classes.js';
 
 export async function renderCron(el, siteId) {
     try {
@@ -27,7 +28,7 @@ export async function renderCron(el, siteId) {
                             <tr>
                                 <td data-label="Schedule" class="mono">${escapeHtml(j.schedule)}</td>
                                 <td data-label="Command" class="mono truncate" style="max-width: 300px;">${escapeHtml(j.command)}</td>
-                                <td data-label="Status"><span class="badge ${j.enabled ? 'badge-success' : 'badge-warning'}">${j.enabled ? 'Active' : 'Paused'}</span></td>
+                                <td data-label="Status"><span class="${enabledBadge(j.enabled)}">${j.enabled ? 'Active' : 'Paused'}</span></td>
                                 <td>
                                     <div class="table-actions">
                                         <button class="btn btn-sm btn-secondary edit-cron" data-id="${j.id}">Edit</button>

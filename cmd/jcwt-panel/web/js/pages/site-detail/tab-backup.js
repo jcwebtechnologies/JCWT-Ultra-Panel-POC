@@ -1,9 +1,10 @@
 import { databases } from '../../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, formatBytes, showConfirm } from '../../app.js';
 import { request } from '../../api.js';
+import { showLoading } from '../../ui.js';
 
 export async function renderBackups(container, site, siteId) {
-    container.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>';
+    showLoading(container);
     try {
         const data = await request(`/api/backups?site_id=${siteId}`);
         const backups = data.backups || [];

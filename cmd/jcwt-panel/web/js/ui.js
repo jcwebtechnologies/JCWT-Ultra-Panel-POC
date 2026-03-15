@@ -1,5 +1,5 @@
 // JCWT Ultra Panel — Shared UI State Helpers
-import { escapeHtml } from '../app.js';
+import { escapeHtml } from './app.js';
 
 /**
  * Show a centered loading spinner in the container.

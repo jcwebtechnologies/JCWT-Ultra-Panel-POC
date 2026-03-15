@@ -1,5 +1,6 @@
 // JCWT Ultra Panel — SPA Core
 import { auth, setCsrfToken, settings as settingsApi, request, twofa, setup } from './api.js';
+import { ROUTES, SETTINGS_PAGES, navigateTo, setPageTitle } from './routes.js';
 
 // ---- State ----
 let currentUser = null;
@@ -412,55 +413,55 @@ function renderLayout(pageName) {
             <nav class="sidebar-nav">
                 <div class="nav-section">
                     <div class="nav-section-title">Overview</div>
-                    <a href="#/dashboard" class="nav-item ${pageName === 'dashboard' ? 'active' : ''}">
+                    <a href="#${ROUTES.DASHBOARD}" class="nav-item ${pageName === 'dashboard' ? 'active' : ''}">
                         <span class="nav-icon">${icons.dashboard}</span> Dashboard
                     </a>
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-title">Management</div>
-                    <a href="#/sites" class="nav-item ${pageName === 'sites' || pageName === 'site-detail' ? 'active' : ''}">
+                    <a href="#${ROUTES.SITES}" class="nav-item ${pageName === 'sites' || pageName === 'site-detail' ? 'active' : ''}">
                         <span class="nav-icon">${icons.sites}</span> Sites
                     </a>
                     ${currentRole === 'admin' ? `
-                    <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
+                    <a href="#${ROUTES.USERS}" class="nav-item ${pageName === 'users' ? 'active' : ''}">
                         <span class="nav-icon">${icons.key}</span> Users
                     </a>` : ''}
                     ${currentRole === 'admin' ? `
-                    <a href="#/disk-usage" class="nav-item ${pageName === 'disk-usage' ? 'active' : ''}">
+                    <a href="#${ROUTES.DISK_USAGE}" class="nav-item ${pageName === 'disk-usage' ? 'active' : ''}">
                         <span class="nav-icon">${icons.database}</span> Site Disk Usage
                     </a>` : ''}
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-title">System</div>
                     ${currentRole === 'admin' ? `
-                    <a href="#/services" class="nav-item ${pageName === 'services' ? 'active' : ''}">
+                    <a href="#${ROUTES.SERVICES}" class="nav-item ${pageName === 'services' ? 'active' : ''}">
                         <span class="nav-icon">${icons.server}</span> Services
                     </a>` : ''}
                     ${currentRole === 'admin' ? `
-                    <a href="#/firewall" class="nav-item ${pageName === 'firewall' ? 'active' : ''}">
+                    <a href="#${ROUTES.FIREWALL}" class="nav-item ${pageName === 'firewall' ? 'active' : ''}">
                         <span class="nav-icon">${icons.shield}</span> Firewall
                     </a>` : ''}
                     ${currentRole === 'admin' || currentRole === 'manager' ? `
                     <div class="nav-item-group">
-                        <a href="javascript:void(0)" class="nav-item ${['branding-appearance','login-security','backup-config','smtp-settings','email-notifications'].includes(pageName) ? 'active' : ''}" data-has-submenu="true">
+                        <a href="javascript:void(0)" class="nav-item ${SETTINGS_PAGES.includes(pageName) ? 'active' : ''}" data-has-submenu="true">
                             <span class="nav-icon">${icons.settings}</span> Settings
-                            <svg class="submenu-arrow ${['branding-appearance','login-security','backup-config','smtp-settings','email-notifications'].includes(pageName) ? 'open' : ''}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                            <svg class="submenu-arrow ${SETTINGS_PAGES.includes(pageName) ? 'open' : ''}" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                         </a>
-                        <div class="nav-submenu ${['branding-appearance','login-security','backup-config','smtp-settings','email-notifications'].includes(pageName) ? 'open' : ''}" id="settings-submenu">
-                            <a href="#/branding-appearance" class="nav-item nav-subitem ${pageName === 'branding-appearance' ? 'active' : ''}">
+                        <div class="nav-submenu ${SETTINGS_PAGES.includes(pageName) ? 'open' : ''}" id="settings-submenu">
+                            <a href="#${ROUTES.BRANDING}" class="nav-item nav-subitem ${pageName === 'branding-appearance' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Branding & Appearance
                             </a>
-                            <a href="#/login-security" class="nav-item nav-subitem ${pageName === 'login-security' ? 'active' : ''}">
+                            <a href="#${ROUTES.LOGIN_SECURITY}" class="nav-item nav-subitem ${pageName === 'login-security' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Login Security
                             </a>
                             ${currentRole === 'admin' ? `
-                            <a href="#/backup-config" class="nav-item nav-subitem ${pageName === 'backup-config' ? 'active' : ''}">
+                            <a href="#${ROUTES.BACKUP_CONFIG}" class="nav-item nav-subitem ${pageName === 'backup-config' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Backup Configuration
                             </a>
-                            <a href="#/smtp-settings" class="nav-item nav-subitem ${pageName === 'smtp-settings' ? 'active' : ''}">
+                            <a href="#${ROUTES.SMTP_SETTINGS}" class="nav-item nav-subitem ${pageName === 'smtp-settings' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> SMTP
                             </a>
-                            <a href="#/email-notifications" class="nav-item nav-subitem ${pageName === 'email-notifications' ? 'active' : ''}">
+                            <a href="#${ROUTES.EMAIL_NOTIFICATIONS}" class="nav-item nav-subitem ${pageName === 'email-notifications' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Email Notifications
                             </a>` : ''}
                         </div>
@@ -528,15 +529,15 @@ export function registerPage(path, renderFn) {
 }
 
 async function navigate() {
-    const hash = window.location.hash || '#/dashboard';
+    const hash = window.location.hash || `#${ROUTES.DASHBOARD}`;
     const path = hash.replace('#', '');
 
     // Check if first-time setup is needed
     try {
         const { needs_setup } = await setup.status();
         if (needs_setup) {
-            if (path !== '/setup') {
-                window.location.hash = '#/setup';
+            if (path !== ROUTES.SETUP) {
+                navigateTo(ROUTES.SETUP);
                 return;
             }
             const setupModule = await import('./pages/setup.js');
@@ -550,8 +551,8 @@ async function navigate() {
     }
 
     // Setup page after setup is done → go to login
-    if (path === '/setup') {
-        window.location.hash = '#/login';
+    if (path === ROUTES.SETUP) {
+        navigateTo(ROUTES.LOGIN);
         return;
     }
 
@@ -559,8 +560,8 @@ async function navigate() {
     try {
         const authData = await auth.check();
         if (!authData.authenticated) {
-            if (path !== '/login') {
-                window.location.hash = '#/login';
+            if (path !== ROUTES.LOGIN) {
+                navigateTo(ROUTES.LOGIN);
                 return;
             }
         } else {
@@ -568,20 +569,20 @@ async function navigate() {
             currentRole = authData.role || 'admin';
             setCsrfToken(authData.csrf_token);
 
-            if (path === '/login') {
-                window.location.hash = '#/dashboard';
+            if (path === ROUTES.LOGIN) {
+                navigateTo(ROUTES.DASHBOARD);
                 return;
             }
         }
     } catch {
-        if (path !== '/login') {
-            window.location.hash = '#/login';
+        if (path !== ROUTES.LOGIN) {
+            navigateTo(ROUTES.LOGIN);
             return;
         }
     }
 
     // Login page special case
-    if (path === '/login') {
+    if (path === ROUTES.LOGIN) {
         const loginModule = await import('./pages/login.js');
         const app = document.getElementById('app');
         app.innerHTML = '';
@@ -590,8 +591,8 @@ async function navigate() {
     }
 
     // Redirect legacy /settings to first sub-page
-    if (path === '/settings') {
-        window.location.hash = '#/branding-appearance';
+    if (path === ROUTES.SETTINGS) {
+        navigateTo(ROUTES.BRANDING);
         return;
     }
 
@@ -616,12 +617,13 @@ async function navigate() {
 
     const app = document.getElementById('app');
     app.innerHTML = renderLayout(pageName);
+    setPageTitle(pageName);
 
     // Bind layout events
     document.getElementById('logout-btn')?.addEventListener('click', async (e) => {
         e.preventDefault();
         await auth.logout();
-        window.location.hash = '#/login';
+        navigateTo(ROUTES.LOGIN);
     });
 
     document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
@@ -663,7 +665,7 @@ async function navigate() {
 
     document.getElementById('dropdown-logout')?.addEventListener('click', async () => {
         await auth.logout();
-        window.location.hash = '#/login';
+        navigateTo(ROUTES.LOGIN);
     });
 
     // Close sidebar on nav click (mobile) — but not when toggling a submenu
@@ -707,7 +709,7 @@ async function navigate() {
                     <div class="empty-state-icon"><span class="nav-icon" style="width:48px;height:48px;color:var(--text-tertiary)">${icons.search}</span></div>
                     <div class="empty-state-title">Page Not Found</div>
                     <div class="empty-state-text">The page you're looking for doesn't exist.</div>
-                    <a href="#/dashboard" class="btn btn-primary">Go to Dashboard</a>
+                    <a href="#${ROUTES.DASHBOARD}" class="btn btn-primary">Go to Dashboard</a>
                 </div>`;
         }
     }

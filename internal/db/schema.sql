@@ -187,3 +187,12 @@ CREATE TABLE IF NOT EXISTS ssh_keys (
     authorized INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Indexes on foreign key columns for query performance
+CREATE INDEX IF NOT EXISTS idx_databases_site_id ON databases(site_id);
+CREATE INDEX IF NOT EXISTS idx_db_users_database_id ON db_users(database_id);
+CREATE INDEX IF NOT EXISTS idx_cron_jobs_site_id ON cron_jobs(site_id);
+CREATE INDEX IF NOT EXISTS idx_backups_site_id ON backups(site_id);
+CREATE INDEX IF NOT EXISTS idx_backup_schedules_site_id ON backup_schedules(site_id);
+CREATE INDEX IF NOT EXISTS idx_ssl_certificates_site_id ON ssl_certificates(site_id);
+CREATE INDEX IF NOT EXISTS idx_ssh_keys_site_id ON ssh_keys(site_id);
