@@ -2,6 +2,7 @@
 // Centralised route definitions to avoid scattered magic strings.
 
 export const ROUTES = {
+    SETUP:               '/setup',
     LOGIN:               '/login',
     DASHBOARD:           '/dashboard',
     SITES:               '/sites',

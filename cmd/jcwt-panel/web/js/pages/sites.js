@@ -274,7 +274,7 @@ export async function render(container) {
                     ? `<div style="margin-top: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md);"><div style="font-weight: 600; margin-bottom: var(--space-1); font-size: var(--font-size-sm);">Databases that will also be deleted:</div>${siteDbs.map(db => `<div style="font-size: var(--font-size-xs); color: var(--text-secondary);">• <span class="mono">${escapeHtml(db.db_name)}</span></div>`).join('')}</div>`
                     : '';
                 showModal('Delete Site', `
-                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6;">Delete site "<strong>${escapeHtml(domain)}</strong>"? This will remove all configs, the system user, web files, databasesand backups. This action cannot be undone.</p>
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); line-height: 1.6;">Delete site "<strong>${escapeHtml(domain)}</strong>"? This will remove all configs, the system user, web files, databases and backups. This action cannot be undone.</p>
                     ${dbList}
                 `, `
                     <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>

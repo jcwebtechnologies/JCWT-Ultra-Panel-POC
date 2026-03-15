@@ -60,7 +60,7 @@ export async function render(container) {
 
                 listEl.querySelectorAll('[data-delete-method]').forEach(btn => {
                     btn.addEventListener('click', async () => {
-                        const confirmed = await showConfirm('Delete this backup method?');
+                        const confirmed = await showConfirm('Delete Backup Method', 'Are you sure you want to delete this backup method? This cannot be undone.');
                         if (!confirmed) return;
                         try {
                             await backupMethods.delete(parseInt(btn.dataset.deleteMethod));

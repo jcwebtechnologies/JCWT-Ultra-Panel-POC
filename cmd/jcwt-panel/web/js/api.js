@@ -54,6 +54,12 @@ export async function request(url, options = {}) {
     return data.data;
 }
 
+// Setup (bootstrap first admin)
+export const setup = {
+    status: () => request('/api/setup/status'),
+    create: (data) => request('/api/setup', { method: 'POST', body: JSON.stringify(data) }),
+};
+
 // Auth
 export const auth = {
     check: () => request('/api/auth/check'),

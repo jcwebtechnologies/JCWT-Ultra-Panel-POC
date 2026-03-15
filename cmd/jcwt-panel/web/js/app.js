@@ -1,5 +1,5 @@
 // JCWT Ultra Panel — SPA Core
-import { auth, setCsrfToken, settings as settingsApi, request, twofa } from './api.js';
+import { auth, setCsrfToken, settings as settingsApi, request, twofa, setup } from './api.js';
 
 // ---- State ----
 let currentUser = null;
@@ -208,11 +208,11 @@ function showPasswordChangeModal() {
             </div>
             <div class="form-group">
                 <label class="form-label">New Password</label>
-                <input type="password" class="form-input" id="cp-new" required minlength="6" placeholder="Min. 6 characters">
+                <input type="password" class="form-input" id="cp-new" required minlength="8" placeholder="Min. 8 characters">
             </div>
             <div class="form-group">
                 <label class="form-label">Confirm New Password</label>
-                <input type="password" class="form-input" id="cp-confirm" required minlength="6" placeholder="Repeat new password">
+                <input type="password" class="form-input" id="cp-confirm" required minlength="8" placeholder="Repeat new password">
             </div>
         </form>
     `;
@@ -231,8 +231,8 @@ function showPasswordChangeModal() {
             showToast('Please fill in all fields', 'error');
             return;
         }
-        if (newPw.length < 6) {
-            showToast('New password must be at least 6 characters', 'error');
+        if (newPw.length < 8) {
+            showToast('New password must be at least 8 characters', 'error');
             return;
         }
         if (newPw !== confirm) {
@@ -421,6 +421,10 @@ function renderLayout(pageName) {
                     <a href="#/sites" class="nav-item ${pageName === 'sites' || pageName === 'site-detail' ? 'active' : ''}">
                         <span class="nav-icon">${icons.sites}</span> Sites
                     </a>
+                    ${currentRole === 'admin' || currentRole === 'manager' ? `
+                    <a href="#/databases" class="nav-item ${pageName === 'databases' ? 'active' : ''}">
+                        <span class="nav-icon">${icons.database}</span> Databases
+                    </a>` : ''}
                     ${currentRole === 'admin' ? `
                     <a href="#/users" class="nav-item ${pageName === 'users' ? 'active' : ''}">
                         <span class="nav-icon">${icons.key}</span> Users
@@ -432,9 +436,10 @@ function renderLayout(pageName) {
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-title">System</div>
+                    ${currentRole === 'admin' ? `
                     <a href="#/services" class="nav-item ${pageName === 'services' ? 'active' : ''}">
                         <span class="nav-icon">${icons.server}</span> Services
-                    </a>
+                    </a>` : ''}
                     ${currentRole === 'admin' ? `
                     <a href="#/firewall" class="nav-item ${pageName === 'firewall' ? 'active' : ''}">
                         <span class="nav-icon">${icons.shield}</span> Firewall
@@ -452,6 +457,7 @@ function renderLayout(pageName) {
                             <a href="#/login-security" class="nav-item nav-subitem ${pageName === 'login-security' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Login Security
                             </a>
+                            ${currentRole === 'admin' ? `
                             <a href="#/backup-config" class="nav-item nav-subitem ${pageName === 'backup-config' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Backup Configuration
                             </a>
@@ -460,7 +466,7 @@ function renderLayout(pageName) {
                             </a>
                             <a href="#/email-notifications" class="nav-item nav-subitem ${pageName === 'email-notifications' ? 'active' : ''}">
                                 <span style="color: var(--text-tertiary); margin-right: var(--space-1);">&mdash;</span> Email Notifications
-                            </a>
+                            </a>` : ''}
                         </div>
                     </div>` : ''}
                 </div>
@@ -528,6 +534,30 @@ export function registerPage(path, renderFn) {
 async function navigate() {
     const hash = window.location.hash || '#/dashboard';
     const path = hash.replace('#', '');
+
+    // Check if first-time setup is needed
+    try {
+        const { needs_setup } = await setup.status();
+        if (needs_setup) {
+            if (path !== '/setup') {
+                window.location.hash = '#/setup';
+                return;
+            }
+            const setupModule = await import('./pages/setup.js');
+            const app = document.getElementById('app');
+            app.innerHTML = '';
+            setupModule.render(app);
+            return;
+        }
+    } catch {
+        // If status check fails, fall through to normal auth
+    }
+
+    // Setup page after setup is done → go to login
+    if (path === '/setup') {
+        window.location.hash = '#/login';
+        return;
+    }
 
     // Check authentication
     try {

@@ -75,7 +75,7 @@ export async function render(container) {
                 window.grecaptcha.ready(() => {
                     window.grecaptcha.render('recaptcha-container', {
                         sitekey: recaptchaSiteKey,
-                        theme: document.body.classList.contains('dark-theme') ? 'dark' : 'light',
+                        theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
                     });
                 });
             }
@@ -85,7 +85,7 @@ export async function render(container) {
         window.grecaptcha.ready(() => {
             window.grecaptcha.render('recaptcha-container', {
                 sitekey: recaptchaSiteKey,
-                theme: document.body.classList.contains('dark-theme') ? 'dark' : 'light',
+                theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
             });
         });
     }

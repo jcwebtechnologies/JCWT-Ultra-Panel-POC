@@ -83,8 +83,14 @@ func main() {
 		log.Println("╚════════════════════════════════════════════════════════════╝")
 	}
 
-	// Initialize auth manager
-	authMgr := auth.NewManager(30) // 30-minute session timeout
+	// Initialize auth manager with session timeout from DB (default 30 minutes)
+	sessionTimeout := 30
+	if settings, err := database.GetPanelSettings(); err == nil {
+		if t, ok := settings["session_timeout"].(int); ok && t >= 5 {
+			sessionTimeout = t
+		}
+	}
+	authMgr := auth.NewManager(sessionTimeout)
 
 	// Setup embedded web filesystem
 	webFS, err := fs.Sub(webEmbed, "web")

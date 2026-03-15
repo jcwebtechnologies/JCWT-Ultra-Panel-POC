@@ -116,7 +116,16 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 			w.Write([]byte(`{"success":true,"data":{"authenticated":false}}`))
 			return
 		}
-		w.Write([]byte(`{"success":true,"data":{"authenticated":true,"username":"` + sess.Username + `","role":"` + sess.Role + `","csrf_token":"` + sess.CSRFToken + `"}}`))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"data": map[string]interface{}{
+				"authenticated": true,
+				"username":      sess.Username,
+				"role":          sess.Role,
+				"csrf_token":    sess.CSRFToken,
+			},
+		})
 	})
 
 	// --- Protected API endpoints ---
@@ -485,7 +494,13 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Don't create session — create pending 2FA token
 		pendingToken := h.auth.Create2FAPendingToken(id, req.Username, role)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"success":true,"data":{"requires_2fa":true,"twofa_token":"` + pendingToken + `"}}`))
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"data": map[string]interface{}{
+				"requires_2fa": true,
+				"twofa_token":  pendingToken,
+			},
+		})
 		return
 	}
 
@@ -493,7 +508,14 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	auth.SetSessionCookie(w, sessionID)
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"success":true,"data":{"csrf_token":"` + csrfToken + `","username":"` + req.Username + `","role":"` + role + `"}}`))
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"csrf_token": csrfToken,
+			"username":   req.Username,
+			"role":       role,
+		},
+	})
 }
 
 // verifyCaptcha verifies a Google reCAPTCHA v2 token with hostname validation
