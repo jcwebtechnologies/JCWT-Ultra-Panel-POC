@@ -1184,6 +1184,9 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget -q https\://wordpress.org/* -O /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget -q https\://raw.githubusercontent.com/wp-cli/* -O /usr/local/bin/wp
 
+# WP-CLI: install chmod (first-time download)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod 755 /usr/local/bin/wp
+
 # WP-CLI and PHP (run as site user only)
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.2 /usr/local/bin/wp *

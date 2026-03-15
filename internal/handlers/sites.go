@@ -663,9 +663,11 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Install WP-CLI if not present
 	wpCLI := "/usr/local/bin/wp"
-	if _, err := exec.Command("test", "-f", wpCLI).CombinedOutput(); err != nil {
-		exec.Command("sudo", "wget", "-q", "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar", "-O", wpCLI).Run()
-		exec.Command("sudo", "chmod", "+x", wpCLI).Run()
+	if _, statErr := os.Stat(wpCLI); os.IsNotExist(statErr) {
+		if output, dlErr := exec.Command("sudo", "wget", "-q", "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar", "-O", wpCLI).CombinedOutput(); dlErr != nil {
+			return fmt.Errorf("download WP-CLI failed: %s", strings.TrimSpace(string(output)))
+		}
+		exec.Command("sudo", "chmod", "755", wpCLI).Run()
 	}
 
 	// Generate wp-config.php using WP-CLI (uses wp-config-sample.php as base,

@@ -291,7 +291,7 @@ export async function render(container, siteToken, section) {
             if (activeSection && sectionContent) {
                 switch (activeSection) {
                     case 'overview': renderOverview(sectionContent, site, versions, siteId); break;
-                    case 'php': renderPHP(sectionContent, siteId); break;
+                    case 'php': renderPHP(sectionContent, siteId, versions); break;
                     case 'databases': renderDatabases(sectionContent, siteId, site, renderPage); break;
                     case 'dbusers': renderDBUsers(sectionContent, siteId, site, renderPage); break;
                     case 'ssl': renderSSL(sectionContent, site, siteId); break;

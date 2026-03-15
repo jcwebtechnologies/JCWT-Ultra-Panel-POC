@@ -4,7 +4,6 @@ import { request } from '../../api.js';
 import { showLoading } from '../../ui.js';
 
 export function renderOverview(el, site, versions, siteId) {
-    const versionOpts = versions.map(v => `<option value="${v}" ${v === site.php_version ? 'selected' : ''}>PHP ${v}</option>`).join('');
     el.innerHTML = `
     <div class="card">
         <h3 class="card-title" style="margin-bottom: var(--space-4);">Site Configuration</h3>
@@ -19,23 +18,6 @@ export function renderOverview(el, site, versions, siteId) {
                     <input type="text" class="form-input" id="edit-aliases" value="${escapeHtml(site.aliases || '')}" placeholder="www.example.com alias.com">
                 </div>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">Site Type</label>
-                    <div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) 0;">
-                        <span class="badge badge-info">${escapeHtml(site.site_type)}</span>
-                        <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Site type cannot be changed after creation</span>
-                    </div>
-                </div>
-                <div class="form-group" id="edit-php-group" style="${(site.site_type === 'php' || site.site_type === 'wordpress') ? '' : 'display: none;'}">
-                    <label class="form-label">PHP Version</label>
-                    <select class="form-select" id="edit-php">${versionOpts}</select>
-                </div>
-            </div>
-            <div class="form-group" id="edit-proxy-group" style="${site.site_type === 'proxy' ? '' : 'display: none;'}">
-                <label class="form-label">Backend URL</label>
-                <input type="url" class="form-input" id="edit-proxy" value="${escapeHtml(site.proxy_url || '')}" placeholder="http://127.0.0.1:3000">
-            </div>
             <div class="form-group" id="edit-webroot-group" style="${site.site_type !== 'proxy' ? '' : 'display: none;'}">
                 <label class="form-label">Web Root</label>
                 <div style="display: flex; align-items: center; gap: 0;">
@@ -43,6 +25,17 @@ export function renderOverview(el, site, versions, siteId) {
                     <input type="text" class="form-input mono" id="edit-webroot" value="${escapeHtml(site.web_root.replace('/home/' + site.system_user + '/', ''))}" placeholder="htdocs" style="border-radius: 0 var(--radius-md) var(--radius-md) 0;">
                 </div>
                 <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Changing this only updates the config — the directory must already exist.</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Site Type</label>
+                <div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) 0;">
+                    <span class="badge badge-info">${escapeHtml(site.site_type)}</span>
+                    <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Site type cannot be changed after creation</span>
+                </div>
+            </div>
+            <div class="form-group" id="edit-proxy-group" style="${site.site_type === 'proxy' ? '' : 'display: none;'}">
+                <label class="form-label">Backend URL</label>
+                <input type="url" class="form-input" id="edit-proxy" value="${escapeHtml(site.proxy_url || '')}" placeholder="http://127.0.0.1:3000">
             </div>
             <button type="submit" class="btn btn-primary" style="width: auto;">Save Changes</button>
         </form>
@@ -64,7 +57,6 @@ export function renderOverview(el, site, versions, siteId) {
 
     (function() {
         const type = site.site_type;
-        document.getElementById('edit-php-group').style.display = (type === 'php' || type === 'wordpress') ? 'block' : 'none';
         document.getElementById('edit-proxy-group').style.display = type === 'proxy' ? 'block' : 'none';
         document.getElementById('edit-webroot-group').style.display = type !== 'proxy' ? 'block' : 'none';
     })();
@@ -100,7 +92,7 @@ export function renderOverview(el, site, versions, siteId) {
                 id: parseInt(siteId),
                 domain: domain,
                 aliases: (document.getElementById('edit-aliases')?.value || '').trim(),
-                php_version: document.getElementById('edit-php')?.value || '',
+                php_version: site.php_version || '',
                 proxy_url: proxyUrl,
                 web_root: webRoot,
                 ssl_type: site.ssl_type,
@@ -123,7 +115,7 @@ export function renderOverview(el, site, versions, siteId) {
     });
 }
 
-export async function renderPHP(el, siteId) {
+export async function renderPHP(el, siteId, phpVersions = []) {
     const phpOpts = {
         memory_limit: ['32M', '64M', '128M', '256M', '512M', '768M', '1024M', '2048M'],
         max_execution_time: ['30', '60', '120', '300', '600', '900'],
@@ -139,11 +131,18 @@ export async function renderPHP(el, siteId) {
         const settings = await phpSettings.get(siteId);
         const site = await request(`/api/sites?id=${siteId}`);
         const poolPath = site.php_version && site.system_user ? `/etc/php/${site.php_version}/fpm/pool.d/${site.system_user}.conf` : '';
+        const isPhpSite = site.site_type === 'php' || site.site_type === 'wordpress';
+        const versionOpts = phpVersions.map(v => `<option value="${v}" ${v === site.php_version ? 'selected' : ''}>PHP ${v}</option>`).join('');
         el.innerHTML = `
         <div class="card">
-            <h3 class="card-title" style="margin-bottom: var(--space-4);">PHP Pool Settings</h3>
+            <h3 class="card-title" style="margin-bottom: var(--space-4);">PHP Settings</h3>
             ${poolPath ? `<div class="info-item" style="margin-bottom:var(--space-4);"><span class="info-label">Pool Config</span><span class="info-value mono" style="font-size:var(--font-size-xs);">${escapeHtml(poolPath)}</span></div>` : ''}
             <form id="php-settings-form">
+                ${isPhpSite && versionOpts ? `
+                <div class="form-group">
+                    <label class="form-label">PHP Version</label>
+                    <select class="form-select" id="php-version-select" style="max-width:200px;">${versionOpts}</select>
+                </div>` : ''}
                 <div class="form-row">
                     <div class="form-group">
                         <label class="form-label">Memory Limit</label>
@@ -186,6 +185,20 @@ export async function renderPHP(el, siteId) {
         document.getElementById('php-settings-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
+                const selectedVersion = document.getElementById('php-version-select')?.value || site.php_version;
+                // Update PHP version via sites.update if it changed
+                if (selectedVersion && selectedVersion !== site.php_version) {
+                    await sites.update({
+                        id: parseInt(siteId),
+                        domain: site.domain,
+                        aliases: site.aliases || '',
+                        php_version: selectedVersion,
+                        proxy_url: site.proxy_url || '',
+                        web_root: site.web_root || '',
+                        ssl_type: site.ssl_type || '',
+                    });
+                    site.php_version = selectedVersion;
+                }
                 await phpSettings.update({
                     site_id: parseInt(siteId),
                     memory_limit: document.getElementById('php-memory').value,
