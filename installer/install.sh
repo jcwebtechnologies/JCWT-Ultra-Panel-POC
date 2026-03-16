@@ -897,12 +897,13 @@ setup_panel() {
 
     # Create directories
     log_info "Creating directory structure..."
-    mkdir -p "$DATA_DIR"/{tls,ssl,uploads}
+    mkdir -p "$DATA_DIR"/{tls,ssl,uploads,tools}
     mkdir -p "$CONFIG_DIR"
     mkdir -p "$LOG_DIR"
     log_detail "$DATA_DIR/"
     log_detail "├── tls/     (panel TLS certificates)"
     log_detail "├── ssl/     (site SSL certificates)"
+    log_detail "├── tools/   (WP-CLI binary)"
     log_detail "└── uploads/ (logo, favicon uploads)"
     log_detail "$LOG_DIR/ (panel logs)"
 
@@ -920,6 +921,19 @@ setup_panel() {
 
     chown -R "$PANEL_USER:$PANEL_USER" "$DATA_DIR"
     chown -R "$PANEL_USER:$PANEL_USER" "$LOG_DIR"
+
+    # Pre-download WP-CLI into the panel data dir.
+    # /usr/local/bin is read-only for the service (ProtectSystem=yes), so WP-CLI
+    # must live in DATA_DIR which is listed in ReadWritePaths of the service unit.
+    log_info "Downloading WP-CLI..."
+    if wget -q "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar" \
+            -O "$DATA_DIR/tools/wp" 2>/dev/null; then
+        chmod 755 "$DATA_DIR/tools/wp"
+        chown "$PANEL_USER:$PANEL_USER" "$DATA_DIR/tools/wp"
+        log_ok "WP-CLI ready at $DATA_DIR/tools/wp"
+    else
+        log_warn "WP-CLI download skipped (no network) — will retry on first WordPress site creation"
+    fi
 
     log_ok "Panel directories created and secured"
 }
@@ -1182,17 +1196,12 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*
 
 # Wget (only to /home and /tmp paths)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget -q https\://wordpress.org/* -O /home/[a-z]*
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget -q https\://raw.githubusercontent.com/wp-cli/* -O /usr/local/bin/wp
-
-# WP-CLI: install chmod (first-time download)
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod 755 /usr/local/bin/wp
-
-# WP-CLI and PHP (run as site user only)
+# WP-CLI and PHP (run as site user only; WP-CLI lives in panel data dir, not /usr/local/bin)
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.2 /usr/local/bin/wp *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.3 /usr/local/bin/wp *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.4 /usr/local/bin/wp *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.5 /usr/local/bin/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.2 /var/lib/jcwt-panel/tools/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.3 /var/lib/jcwt-panel/tools/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.4 /var/lib/jcwt-panel/tools/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.5 /var/lib/jcwt-panel/tools/wp *
 EOF
     chmod 440 /etc/sudoers.d/jcwt-panel
     log_detail "Sudoers: /etc/sudoers.d/jcwt-panel (mode 440)"

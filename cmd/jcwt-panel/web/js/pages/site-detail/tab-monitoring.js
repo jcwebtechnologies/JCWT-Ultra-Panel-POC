@@ -184,24 +184,20 @@ export async function renderResourceUsage(container, site, siteId) {
                     <h3 class="card-title">Resource Usage — ${escapeHtml(site.domain)}</h3>
                     <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);">Auto-refreshes every 5s</span>
                 </div>
-                <div style="padding:var(--space-4);display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4);">
-                    <div>
-                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">Processes</div>
-                        <div style="font-weight:600;font-size:var(--font-size-lg);">${procCount}</div>
+                <div class="resource-stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Processes</div>
+                        <div class="stat-value">${procCount}</div>
                     </div>
-                    <div>
-                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">RAM Used</div>
-                        <div style="font-weight:600;font-size:var(--font-size-lg);">${fmtMB(totalMB)}</div>
-                        <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:6px;margin-top:var(--space-2);">
-                            <div style="height:6px;background:var(--color-primary);border-radius:var(--radius-full);width:${barWidth(totalMB, 512)}%;transition:width .4s;"></div>
-                        </div>
+                    <div class="stat-item">
+                        <div class="stat-label">RAM Used</div>
+                        <div class="stat-value">${fmtMB(totalMB)}</div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${barWidth(totalMB, 512)}%;transition:width .4s;"></div></div>
                     </div>
-                    <div>
-                        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-1);">CPU %</div>
-                        <div style="font-weight:600;font-size:var(--font-size-lg);">${totalCPU.toFixed(1)}%</div>
-                        <div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:6px;margin-top:var(--space-2);">
-                            <div style="height:6px;background:#f59e0b;border-radius:var(--radius-full);width:${Math.min(100, totalCPU).toFixed(1)}%;transition:width .4s;"></div>
-                        </div>
+                    <div class="stat-item">
+                        <div class="stat-label">CPU %</div>
+                        <div class="stat-value">${totalCPU.toFixed(1)}%</div>
+                        <div class="bar-track"><div class="bar-fill-warn" style="width:${Math.min(100, totalCPU).toFixed(1)}%;transition:width .4s;"></div></div>
                     </div>
                 </div>
                 <div style="padding:0 var(--space-4) var(--space-4);font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6;border-top:1px solid var(--border-primary);padding-top:var(--space-3);margin-top:0;">
@@ -216,17 +212,17 @@ export async function renderResourceUsage(container, site, siteId) {
                 ${procs.length === 0
                     ? `<div class="empty-state p-4">No active processes for this site.</div>`
                     : `<div class="table-responsive">
-                        <table class="data-table">
-                            <thead><tr><th>PID</th><th>Name</th><th>Command</th><th>Memory</th><th style="min-width:120px;">Mem bar</th><th>CPU %</th><th style="min-width:90px;">CPU bar</th></tr></thead>
+                        <table class="data-table responsive-cards">
+                            <thead><tr><th>PID</th><th>Name</th><th>Command</th><th>Memory</th><th>Mem</th><th>CPU %</th><th>CPU</th></tr></thead>
                             <tbody>${procs.map(p => `
                                 <tr>
-                                    <td class="mono" style="font-size:var(--font-size-xs);">${escapeHtml(p.pid)}</td>
-                                    <td class="mono">${escapeHtml(p.name)}</td>
-                                    <td class="mono" style="font-size:var(--font-size-xs);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(p.cmd || '')}">${escapeHtml(p.cmd || '—')}</td>
-                                    <td>${fmtMB(p.mem_mb)}</td>
-                                    <td><div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:8px;"><div style="height:8px;background:var(--color-primary);border-radius:var(--radius-full);width:${barWidth(p.mem_mb, maxMem)}%;"></div></div></td>
-                                    <td>${p.cpu_pct.toFixed(1)}%</td>
-                                    <td><div style="background:var(--bg-tertiary);border-radius:var(--radius-full);overflow:hidden;height:8px;"><div style="height:8px;background:#f59e0b;border-radius:var(--radius-full);width:${barWidth(p.cpu_pct, maxCPU)}%;"></div></div></td>
+                                    <td data-label="PID" class="mono">${escapeHtml(p.pid)}</td>
+                                    <td data-label="Name" class="mono">${escapeHtml(p.name)}</td>
+                                    <td data-label="Command" class="mono" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(p.cmd || '')}">${escapeHtml(p.cmd || '—')}</td>
+                                    <td data-label="Memory">${fmtMB(p.mem_mb)}</td>
+                                    <td data-label="Mem"><div class="bar-track"><div class="bar-fill" style="width:${barWidth(p.mem_mb, maxMem)}%;"></div></div></td>
+                                    <td data-label="CPU %">${p.cpu_pct.toFixed(1)}%</td>
+                                    <td data-label="CPU"><div class="bar-track"><div class="bar-fill-warn" style="width:${barWidth(p.cpu_pct, maxCPU)}%;"></div></div></td>
                                 </tr>`).join('')}
                             </tbody>
                         </table>

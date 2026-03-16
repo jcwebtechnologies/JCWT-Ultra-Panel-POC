@@ -44,7 +44,7 @@ export async function render(container) {
                                 </span>
                             </td>
                             <td data-label="Created">${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
-                            <td style="display: flex; gap: var(--space-1);">
+                            <td data-label="Actions" class="table-actions">
                                 <button class="btn btn-sm btn-secondary edit-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}" data-role="${u.role}" data-email="${escapeHtml(u.email || '')}">Edit</button>
                                 <button class="btn btn-sm btn-danger delete-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}">Delete</button>
                             </td>
@@ -57,20 +57,22 @@ export async function render(container) {
         <div class="card" style="margin-top: var(--space-4);">
             <div class="card-header"><h3 class="card-title">Role Permissions</h3></div>
             <div style="padding: var(--space-4);">
-                <table class="data-table">
+                <div class="table-responsive">
+                <table class="data-table responsive-cards">
                     <thead>
                         <tr><th>Permission</th><th>👑 Admin</th><th>🔧 Manager</th><th>👁️ Viewer</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td>View Dashboard</td><td>✅</td><td>✅</td><td>✅</td></tr>
-                        <tr><td>Manage Sites</td><td>✅</td><td>✅</td><td>❌</td></tr>
-                        <tr><td>Manage Databases</td><td>✅</td><td>✅</td><td>❌</td></tr>
-                        <tr><td>View Services</td><td>✅</td><td>✅</td><td>✅</td></tr>
-                        <tr><td>Manage Services</td><td>✅</td><td>❌</td><td>❌</td></tr>
-                        <tr><td>Panel Settings</td><td>✅</td><td>❌</td><td>❌</td></tr>
-                        <tr><td>User Management</td><td>✅</td><td>❌</td><td>❌</td></tr>
+                        <tr><td data-label="Permission">View Dashboard</td><td data-label="Admin">✅</td><td data-label="Manager">✅</td><td data-label="Viewer">✅</td></tr>
+                        <tr><td data-label="Permission">Manage Sites</td><td data-label="Admin">✅</td><td data-label="Manager">✅</td><td data-label="Viewer">❌</td></tr>
+                        <tr><td data-label="Permission">Manage Databases</td><td data-label="Admin">✅</td><td data-label="Manager">✅</td><td data-label="Viewer">❌</td></tr>
+                        <tr><td data-label="Permission">View Services</td><td data-label="Admin">✅</td><td data-label="Manager">✅</td><td data-label="Viewer">✅</td></tr>
+                        <tr><td data-label="Permission">Manage Services</td><td data-label="Admin">✅</td><td data-label="Manager">❌</td><td data-label="Viewer">❌</td></tr>
+                        <tr><td data-label="Permission">Panel Settings</td><td data-label="Admin">✅</td><td data-label="Manager">❌</td><td data-label="Viewer">❌</td></tr>
+                        <tr><td data-label="Permission">User Management</td><td data-label="Admin">✅</td><td data-label="Manager">❌</td><td data-label="Viewer">❌</td></tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>`;
 

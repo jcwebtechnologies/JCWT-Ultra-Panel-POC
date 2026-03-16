@@ -1538,6 +1538,68 @@ a:hover {
     }
 }
 
+/* ---- Resource Usage ---- */
+.resource-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+    padding: var(--space-4);
+}
+
+.stat-label {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-1);
+}
+
+.stat-value {
+    font-weight: 600;
+    font-size: var(--font-size-lg);
+}
+
+.bar-track {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    height: 8px;
+    margin-top: var(--space-2);
+}
+
+.bar-fill {
+    height: 8px;
+    background: var(--color-primary, var(--accent-primary));
+    border-radius: var(--radius-full);
+}
+
+.bar-fill-warn {
+    height: 8px;
+    background: #f59e0b;
+    border-radius: var(--radius-full);
+}
+
+/* ---- Site Detail Search ---- */
+.site-search-bar {
+    margin-bottom: var(--space-5);
+    position: relative;
+}
+
+.site-search-bar .search-icon {
+    position: absolute;
+    left: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    color: var(--text-tertiary);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+
+.site-search-bar .form-input {
+    padding-left: var(--space-10);
+}
+
 /* ---- Settings Section ---- */
 .settings-section {
     margin-bottom: var(--space-8);
@@ -1769,6 +1831,11 @@ a:hover {
 
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-3);
+    }
+
+    .resource-stats-grid {
+        grid-template-columns: 1fr;
         gap: var(--space-3);
     }
 

@@ -661,13 +661,23 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 		h.DB.CreateDBUser(dbUser, dbID, "full")
 	}
 
-	// Install WP-CLI if not present
-	wpCLI := "/usr/local/bin/wp"
+	// WP-CLI is stored in the panel data directory rather than /usr/local/bin because
+	// ProtectSystem=yes in the systemd service makes /usr read-only. The data dir is
+	// owned by the panel service user so no sudo is required for the download.
+	wpCLIDir := filepath.Join(h.Cfg.DataDir, "tools")
+	wpCLI := filepath.Join(wpCLIDir, "wp")
 	if _, statErr := os.Stat(wpCLI); os.IsNotExist(statErr) {
-		if output, dlErr := exec.Command("sudo", "wget", "-q", "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar", "-O", wpCLI).CombinedOutput(); dlErr != nil {
+		if err := os.MkdirAll(wpCLIDir, 0755); err != nil {
+			return fmt.Errorf("create WP-CLI dir: %v", err)
+		}
+		output, dlErr := exec.Command("/usr/bin/wget", "-q",
+			"https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar",
+			"-O", wpCLI).CombinedOutput()
+		if dlErr != nil {
+			os.Remove(wpCLI)
 			return fmt.Errorf("download WP-CLI failed: %s", strings.TrimSpace(string(output)))
 		}
-		exec.Command("sudo", "chmod", "755", wpCLI).Run()
+		os.Chmod(wpCLI, 0755)
 	}
 
 	// Generate wp-config.php using WP-CLI (uses wp-config-sample.php as base,

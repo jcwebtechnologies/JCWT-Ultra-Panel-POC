@@ -82,6 +82,11 @@ export async function render(container, siteToken, section) {
                 </div>` : ''}
             </div>
 
+            <div class="site-search-bar">
+                <span class="search-icon"><span class="nav-icon" style="width:16px;height:16px;">${icons.search}</span></span>
+                <input type="text" id="site-feature-search" class="form-input" placeholder="Search features — ssl, php, files, backup, wordpress...">
+            </div>
+
             <div class="site-cards-section">
                 <div class="site-cards-section-title">Configuration</div>
                 <div class="site-cards-grid">
@@ -274,6 +279,26 @@ export async function render(container, siteToken, section) {
                 card.addEventListener('click', () => {
                     const sec = card.dataset.section;
                     window.location.hash = siteHref(siteToken, sec);
+                });
+            });
+
+            // Feature search — filter sections and cards in real-time
+            const searchInput = container.querySelector('#site-feature-search');
+            searchInput?.addEventListener('input', (e) => {
+                const q = e.target.value.toLowerCase().trim();
+                container.querySelectorAll('.site-cards-section').forEach(section => {
+                    const sectionTitle = (section.querySelector('.site-cards-section-title')?.textContent || '').toLowerCase();
+                    const titleMatch = !q || sectionTitle.includes(q);
+                    let hasVisible = false;
+                    section.querySelectorAll('.site-card').forEach(card => {
+                        const cardTitle = (card.querySelector('.site-card-title')?.textContent || '').toLowerCase();
+                        const show = !q || cardTitle.includes(q) || titleMatch;
+                        card.style.display = show ? '' : 'none';
+                        if (show) hasVisible = true;
+                    });
+                    // Keep section visible if it matched by title or has matching cards;
+                    // always show when query is empty
+                    section.style.display = (!q || hasVisible) ? '' : 'none';
                 });
             });
 

@@ -51,7 +51,7 @@ export async function render(container) {
                                 ${list.map(s => `
                                 <tr>
                                     <td data-label="Site">
-                                        <a href="${siteHref(s.token)}" style="color:var(--accent-primary);text-decoration:none;font-weight:600;">${escapeHtml(s.domain)}</a>
+                                        <a href="${siteHref(s.token, 'disk-usage')}" style="color:var(--accent-primary);text-decoration:none;font-weight:600;">${escapeHtml(s.domain)}</a>
                                     </td>
                                     <td data-label="System User"><code style="font-size:var(--font-size-xs);">${escapeHtml(s.system_user)}</code></td>
                                     <td data-label="Total" style="text-align:right;font-weight:600;" class="mono">${escapeHtml(s.total)}</td>
