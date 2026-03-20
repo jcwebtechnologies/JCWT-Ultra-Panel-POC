@@ -11,8 +11,11 @@ import (
 	"github.com/jcwt/ultra-panel/internal/system"
 )
 
-var dbNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{0,63}$`)
-var dbUserRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{0,31}$`)
+// Suffix regexes — the system-user prefix is prepended automatically; these validate only the user-supplied suffix.
+// Full DB name  = sysUser (≤16) + "_" + suffix (≤47) ≤ 64  (MariaDB identifier limit)
+// Full username = sysUser (≤16) + "_" + suffix (≤15) ≤ 32  (MariaDB username limit)
+var dbNameSuffixRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{0,46}$`)
+var dbUserSuffixRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{0,14}$`)
 
 type DatabasesHandler struct {
 	DB *db.DB
@@ -58,8 +61,8 @@ func (h *DatabasesHandler) create(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "db_name is required", http.StatusBadRequest)
 		return
 	}
-	if !dbNameRegex.MatchString(req.DBName) {
-		jsonError(w, "invalid database name: use only letters, numbers, underscore (max 64 chars, must start with letter)", http.StatusBadRequest)
+	if !dbNameSuffixRegex.MatchString(req.DBName) {
+		jsonError(w, "invalid database name: use lowercase letters, numbers, underscore (max 47 chars, must start with a letter)", http.StatusBadRequest)
 		return
 	}
 	if req.SiteID <= 0 {
@@ -67,28 +70,37 @@ func (h *DatabasesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up the site's system user to use as a name prefix
+	var sysUser string
+	h.DB.Conn.QueryRow("SELECT system_user FROM sites WHERE id = ?", req.SiteID).Scan(&sysUser)
+	if sysUser == "" {
+		jsonError(w, "site not found", http.StatusNotFound)
+		return
+	}
+	fullDBName := sysUser + "_" + req.DBName
+
 	// Check if database name already exists in panel DB
 	var existCount int
-	h.DB.Conn.QueryRow("SELECT COUNT(*) FROM databases WHERE db_name = ?", req.DBName).Scan(&existCount)
+	h.DB.Conn.QueryRow("SELECT COUNT(*) FROM databases WHERE db_name = ?", fullDBName).Scan(&existCount)
 	if existCount > 0 {
 		jsonError(w, "a database with this name already exists", http.StatusConflict)
 		return
 	}
 
 	// Create in MariaDB
-	if err := system.MariaDBCreateDatabase(req.DBName); err != nil {
+	if err := system.MariaDBCreateDatabase(fullDBName); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Store in panel DB
-	id, err := h.DB.CreateDatabase(req.DBName, req.SiteID)
+	id, err := h.DB.CreateDatabase(fullDBName, req.SiteID)
 	if err != nil {
 		jsonError(w, "failed to save database record", http.StatusInternalServerError)
 		return
 	}
 
-	jsonSuccess(w, map[string]interface{}{"id": id, "db_name": req.DBName})
+	jsonSuccess(w, map[string]interface{}{"id": id, "db_name": fullDBName})
 }
 
 func (h *DatabasesHandler) delete(w http.ResponseWriter, r *http.Request) {
@@ -178,8 +190,8 @@ func (h *DBUsersHandler) create(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "username and password are required", http.StatusBadRequest)
 		return
 	}
-	if !dbUserRegex.MatchString(req.Username) {
-		jsonError(w, "invalid username: use only letters, numbers, underscore (max 32 chars, must start with letter)", http.StatusBadRequest)
+	if !dbUserSuffixRegex.MatchString(req.Username) {
+		jsonError(w, "invalid username: use lowercase letters, numbers, underscore (max 15 chars, must start with a letter)", http.StatusBadRequest)
 		return
 	}
 	if len(req.Password) < 8 {
@@ -197,42 +209,43 @@ func (h *DBUsersHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get db name for grant
-	var dbName string
-	h.DB.Conn.QueryRow("SELECT db_name FROM databases WHERE id = ?", req.DatabaseID).Scan(&dbName)
+	// Get DB name and site's system user (for prefix)
+	var dbName, sysUser string
+	h.DB.Conn.QueryRow(`SELECT d.db_name, s.system_user FROM databases d JOIN sites s ON s.id = d.site_id WHERE d.id = ?`, req.DatabaseID).Scan(&dbName, &sysUser)
 	if dbName == "" {
 		jsonError(w, "database not found", http.StatusNotFound)
 		return
 	}
+	fullUsername := sysUser + "_" + req.Username
 
 	// Check if username already exists in panel DB
 	var existCount int
-	h.DB.Conn.QueryRow("SELECT COUNT(*) FROM db_users WHERE username = ?", req.Username).Scan(&existCount)
+	h.DB.Conn.QueryRow("SELECT COUNT(*) FROM db_users WHERE username = ?", fullUsername).Scan(&existCount)
 	if existCount > 0 {
 		jsonError(w, "a database user with this username already exists", http.StatusConflict)
 		return
 	}
 
 	// Create in MariaDB
-	if err := system.MariaDBCreateUser(req.Username, req.Password); err != nil {
+	if err := system.MariaDBCreateUser(fullUsername, req.Password); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Grant access with privilege level
-	if err := system.MariaDBGrantAccess(req.Username, dbName, req.PrivilegeLevel); err != nil {
+	if err := system.MariaDBGrantAccess(fullUsername, dbName, req.PrivilegeLevel); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Store in panel DB
-	id, err := h.DB.CreateDBUser(req.Username, req.DatabaseID, req.PrivilegeLevel)
+	id, err := h.DB.CreateDBUser(fullUsername, req.DatabaseID, req.PrivilegeLevel)
 	if err != nil {
 		jsonError(w, "failed to save user record", http.StatusInternalServerError)
 		return
 	}
 
-	jsonSuccess(w, map[string]interface{}{"id": id, "username": req.Username, "privilege_level": req.PrivilegeLevel})
+	jsonSuccess(w, map[string]interface{}{"id": id, "username": fullUsername, "privilege_level": req.PrivilegeLevel})
 }
 
 func (h *DBUsersHandler) changePassword(w http.ResponseWriter, r *http.Request) {

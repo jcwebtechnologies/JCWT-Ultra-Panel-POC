@@ -76,39 +76,39 @@ export async function render(container) {
             const versionOptions = versions.map(v => `<option value="${v}"${v === '8.4' ? ' selected' : ''}>PHP ${v}</option>`).join('');
             showModal('Add New Site', `
                 <form id="add-site-form" autocomplete="off">
-                    <div class="form-group">
-                        <label class="form-label">Domain</label>
-                        <input type="text" class="form-input" id="site-domain" placeholder="example.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Aliases (optional)</label>
-                        <input type="text" class="form-input" id="site-aliases" placeholder="www.example.com alias.com">
-                        <div class="form-help">Space-separated domain aliases</div>
-                    </div>
                     <div class="form-row">
-                        <div class="form-group" style="flex:1;">
-                            <label class="form-label">System User</label>
-                            <div id="sysuser-auto-wrap">
-                                <div style="display:flex;gap:0;">
-                                    <select class="form-select" id="sysuser-mode" style="border-radius:var(--radius-md) 0 0 var(--radius-md);border-right:none;width:auto;min-width:140px;">
-                                        <option value="auto">Auto Generate</option>
-                                        <option value="custom">Custom</option>
-                                    </select>
-                                    <input type="text" class="form-input mono" id="site-user" readonly style="border-radius:0;flex:1;">
-                                    <button type="button" class="btn btn-secondary" id="sysuser-refresh" title="Regenerate username" style="border-radius:0 var(--radius-md) var(--radius-md) 0;border-left:none;padding:0 var(--space-3);display:flex;align-items:center;"><span class="nav-icon nav-icon-sm">${icons.refreshCw}</span></button>
-                                </div>
-                            </div>
-                            <div class="form-help" id="sysuser-help">Auto-generated (u_ + 8-12 random chars)</div>
+                        <div class="form-group">
+                            <label class="form-label">Domain</label>
+                            <input type="text" class="form-input" id="site-domain" placeholder="example.com" required>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Site Type</label>
-                            <select class="form-select" id="site-type">
-                                <option value="php">PHP Application</option>
-                                <option value="wordpress">WordPress</option>
-                                <option value="html">Static HTML</option>
-                                <option value="proxy">Reverse Proxy</option>
-                            </select>
+                            <label class="form-label">Aliases (optional)</label>
+                            <input type="text" class="form-input" id="site-aliases" placeholder="www.example.com alias.com">
+                            <div class="form-help">Space-separated domain aliases</div>
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">System User</label>
+                        <div id="sysuser-auto-wrap">
+                            <div style="display:flex;gap:0;">
+                                <select class="form-select" id="sysuser-mode" style="border-radius:var(--radius-md) 0 0 var(--radius-md);border-right:none;width:auto;min-width:140px;">
+                                    <option value="auto">Auto Generate</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                                <input type="text" class="form-input mono" id="site-user" readonly style="border-radius:0;flex:1;">
+                                <button type="button" class="btn btn-secondary" id="sysuser-refresh" title="Regenerate username" style="border-radius:0 var(--radius-md) var(--radius-md) 0;border-left:none;padding:0 var(--space-3);display:flex;align-items:center;"><span class="nav-icon nav-icon-sm">${icons.refreshCw}</span></button>
+                            </div>
+                        </div>
+                        <div class="form-help" id="sysuser-help">Auto-generated (u_ + 8-12 random chars)</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Site Type</label>
+                        <select class="form-select" id="site-type">
+                            <option value="php">PHP Application</option>
+                            <option value="wordpress">WordPress</option>
+                            <option value="html">Static HTML</option>
+                            <option value="proxy">Reverse Proxy</option>
+                        </select>
                     </div>
                     <div class="form-row">
                         <div class="form-group" id="php-version-group">

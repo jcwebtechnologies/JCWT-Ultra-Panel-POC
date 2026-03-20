@@ -46,8 +46,11 @@ export async function renderDatabases(container, siteId, site, refreshTabs) {
             showModal('Create Database', `
                 <div class="form-group">
                     <label class="form-label">Database Name</label>
-                    <input type="text" class="form-input" id="new-db-name" placeholder="myapp_db" required pattern="^[a-zA-Z][a-zA-Z0-9_]*$" maxlength="64">
-                    <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Letters, numbers, underscore only. Must start with a letter.</small>
+                    <div style="display:flex;align-items:stretch;">
+                        <span style="background:var(--bg-tertiary);border:1px solid var(--border-primary);border-right:none;padding:var(--space-2) var(--space-3);border-radius:var(--radius-md) 0 0 var(--radius-md);color:var(--text-tertiary);white-space:nowrap;display:flex;align-items:center;" class="mono">${escapeHtml(site.system_user)}_</span>
+                        <input type="text" class="form-input mono" id="new-db-name" placeholder="myapp" required pattern="^[a-z][a-z0-9_]*$" maxlength="47" style="border-radius:0 var(--radius-md) var(--radius-md) 0;">
+                    </div>
+                    <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Lowercase letters, numbers, underscore only. Must start with a letter. Max 47 characters.</small>
                 </div>
             `, `
                 <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
@@ -57,8 +60,8 @@ export async function renderDatabases(container, siteId, site, refreshTabs) {
             document.getElementById('confirm-create-db')?.addEventListener('click', async () => {
                 const dbName = document.getElementById('new-db-name').value.trim();
                 if (!dbName) { showToast('Name required', 'error'); return; }
-                if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(dbName)) {
-                    showToast('Invalid name: use letters, numbers, underscore only (start with a letter)', 'error'); return;
+                if (!/^[a-z][a-z0-9_]*$/.test(dbName) || dbName.length > 47) {
+                    showToast('Invalid name: lowercase letters, numbers, underscore only (start with a letter, max 47 chars)', 'error'); return;
                 }
                 try {
                     await databases.create({ db_name: dbName, site_id: parseInt(siteId) });
@@ -161,8 +164,11 @@ export async function renderDBUsers(container, siteId, site, refreshTabs) {
             showModal('Create Database User', `
                 <div class="form-group">
                     <label class="form-label">Username</label>
-                    <input type="text" class="form-input" id="new-dbuser-name" placeholder="app_user" required pattern="^[a-zA-Z][a-zA-Z0-9_]*$" maxlength="32" autocomplete="off">
-                    <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Letters, numbers, underscore only. Must start with a letter.</small>
+                    <div style="display:flex;align-items:stretch;">
+                        <span style="background:var(--bg-tertiary);border:1px solid var(--border-primary);border-right:none;padding:var(--space-2) var(--space-3);border-radius:var(--radius-md) 0 0 var(--radius-md);color:var(--text-tertiary);white-space:nowrap;display:flex;align-items:center;" class="mono">${escapeHtml(site.system_user)}_</span>
+                        <input type="text" class="form-input mono" id="new-dbuser-name" placeholder="myuser" required pattern="^[a-z][a-z0-9_]*$" maxlength="15" autocomplete="off" style="border-radius:0 var(--radius-md) var(--radius-md) 0;">
+                    </div>
+                    <small style="color: var(--text-tertiary); font-size: var(--font-size-xs);">Lowercase letters, numbers, underscore only. Must start with a letter. Max 15 characters.</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Password</label>
@@ -191,6 +197,9 @@ export async function renderDBUsers(container, siteId, site, refreshTabs) {
                 const databaseId = parseInt(document.getElementById('new-dbuser-db').value);
                 const privilegeLevel = document.getElementById('new-dbuser-priv').value;
                 if (!username) { showToast('Username required', 'error'); return; }
+                if (!/^[a-z][a-z0-9_]*$/.test(username) || username.length > 15) {
+                    showToast('Invalid: lowercase letters, numbers, underscore only (start with a letter, max 15 chars)', 'error'); return;
+                }
                 if (password.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
                 try {
                     await dbUsers.create({ username, password, database_id: databaseId, privilege_level: privilegeLevel });

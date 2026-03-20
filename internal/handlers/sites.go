@@ -505,6 +505,15 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		if req.SiteType == "php" || req.SiteType == "wordpress" {
 			php.RemovePool(h.Cfg.PHPFPMBaseDir, req.PHPVersion, req.SystemUser)
 		}
+		if req.SiteType == "wordpress" {
+			wpDbName := strings.ReplaceAll(req.SystemUser, "-", "_") + "_wp"
+			wpDbUser := wpDbName + "_u"
+			if len(wpDbUser) > 32 {
+				wpDbUser = wpDbUser[:32]
+			}
+			system.MariaDBDropUser(wpDbUser)
+			system.MariaDBDropDatabase(wpDbName)
+		}
 	}
 
 	// Write welcome page (skip for wordpress — WP files will replace it)
@@ -649,6 +658,9 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	exec.Command("sudo", "rsync", "-a", "--delete", wpExtracted+"/", webRoot+"/").Run()
 	exec.Command("sudo", "rm", "-rf", wpExtracted, wpArchive).Run()
 
+	// Fix ownership before running WP-CLI so the site user can write wp-config.php
+	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
+
 	// Create WordPress database and user
 	dbName := strings.ReplaceAll(sysUser, "-", "_") + "_wp"
 	dbUser := dbName + "_u"
@@ -658,6 +670,10 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	if len(dbUser) > 32 {
 		dbUser = dbUser[:32]
 	}
+
+	// Drop any remnants from a previous failed attempt so passwords are always current
+	system.MariaDBDropUser(dbUser)
+	system.MariaDBDropDatabase(dbName)
 
 	if err := system.MariaDBCreateDatabase(dbName); err != nil {
 		return fmt.Errorf("create database: %v", err)
@@ -707,6 +723,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 		"--dbcharset=utf8mb4",
 		"--dbprefix="+wpTablePrefix,
 		"--force",
+		"--skip-check",
 	)
 	if output, err := configCmd.CombinedOutput(); err != nil {
 		log.Printf("WP-CLI config create failed for site %d: %v: %s", siteID, err, string(output))
