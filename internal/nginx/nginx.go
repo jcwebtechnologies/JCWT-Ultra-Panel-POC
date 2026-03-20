@@ -38,12 +38,12 @@ server {
 
 {{- if eq .SiteType "proxy"}}
 {{- if .AccessLog}}
-    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+    access_log /home/{{.User}}/logs/web/{{.Domain}}-access.log;
 {{- else}}
     access_log off;
 {{- end}}
 {{- if .ErrorLog}}
-    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+    error_log /home/{{.User}}/logs/web/{{.Domain}}-error.log;
 {{- else}}
     error_log /dev/null;
 {{- end}}
@@ -61,12 +61,12 @@ server {
     index index.php index.html index.htm;
 
 {{- if .AccessLog}}
-    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+    access_log /home/{{.User}}/logs/web/{{.Domain}}-access.log;
 {{- else}}
     access_log off;
 {{- end}}
 {{- if .ErrorLog}}
-    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+    error_log /home/{{.User}}/logs/web/{{.Domain}}-error.log;
 {{- else}}
     error_log /dev/null;
 {{- end}}
@@ -143,12 +143,12 @@ server {
 
 {{- if eq .SiteType "proxy"}}
 {{- if .AccessLog}}
-    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+    access_log /home/{{.User}}/logs/web/{{.Domain}}-access.log;
 {{- else}}
     access_log off;
 {{- end}}
 {{- if .ErrorLog}}
-    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+    error_log /home/{{.User}}/logs/web/{{.Domain}}-error.log;
 {{- else}}
     error_log /dev/null;
 {{- end}}
@@ -166,12 +166,12 @@ server {
     index index.php index.html index.htm;
 
 {{- if .AccessLog}}
-    access_log /home/{{.User}}/logs/{{.Domain}}-access.log;
+    access_log /home/{{.User}}/logs/web/{{.Domain}}-access.log;
 {{- else}}
     access_log off;
 {{- end}}
 {{- if .ErrorLog}}
-    error_log /home/{{.User}}/logs/{{.Domain}}-error.log;
+    error_log /home/{{.User}}/logs/web/{{.Domain}}-error.log;
 {{- else}}
     error_log /dev/null;
 {{- end}}

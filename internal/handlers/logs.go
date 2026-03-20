@@ -51,9 +51,9 @@ func (h *LogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var logPath string
 	switch logType {
 	case "access":
-		logPath = fmt.Sprintf("/home/%s/logs/%s-access.log", sysUser, domain)
+		logPath = fmt.Sprintf("/home/%s/logs/web/%s-access.log", sysUser, domain)
 	case "error":
-		logPath = fmt.Sprintf("/home/%s/logs/%s-error.log", sysUser, domain)
+		logPath = fmt.Sprintf("/home/%s/logs/web/%s-error.log", sysUser, domain)
 	case "php-error":
 		logPath = fmt.Sprintf("/home/%s/logs/php/%s-error.log", sysUser, sysUser)
 	default:

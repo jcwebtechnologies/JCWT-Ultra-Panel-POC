@@ -29,7 +29,8 @@ type SitesHandler struct {
 }
 
 var domainRegex = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$`)
-var userRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{1,30}$`)
+var userRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{2,15}$`)
+var userSafeRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{1,30}$`)
 
 func (h *SitesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -161,7 +162,7 @@ func (h *SitesHandler) resourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sysUser, _ := site["system_user"].(string)
-	if !userRegex.MatchString(sysUser) {
+	if !userSafeRegex.MatchString(sysUser) {
 		jsonError(w, "invalid system user", http.StatusInternalServerError)
 		return
 	}
@@ -389,7 +390,20 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !userRegex.MatchString(req.SystemUser) {
-		jsonError(w, "invalid system user (lowercase letters, numbers, underscore, 2-31 chars)", http.StatusBadRequest)
+		jsonError(w, "invalid system user (lowercase letters, numbers, underscore, 3-16 chars, must start with letter)", http.StatusBadRequest)
+		return
+	}
+	if strings.Contains(req.SystemUser, "__") {
+		jsonError(w, "system user must not contain consecutive underscores", http.StatusBadRequest)
+		return
+	}
+	reservedNames := map[string]bool{
+		"root": true, "admin": true, "mysql": true, "www": true, "nginx": true,
+		"apache": true, "ftp": true, "user": true, "test": true, "panel": true,
+		"daemon": true, "bin": true, "sys": true, "nobody": true, "www_data": true,
+	}
+	if reservedNames[req.SystemUser] {
+		jsonError(w, "system user name is reserved", http.StatusBadRequest)
 		return
 	}
 	if req.SiteType == "" {
@@ -682,9 +696,9 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Generate wp-config.php using WP-CLI (uses wp-config-sample.php as base,
 	// preserving the standard WordPress file structure with comments).
-	phpBinPath := fmt.Sprintf("php%s", phpVersion)
+	phpBinPath := fmt.Sprintf("/usr/bin/php%s", phpVersion)
 	configCmd := exec.Command("sudo", "-u", sysUser,
-		phpBinPath, wpCLI, "config", "create",
+		phpBinPath, "-d", "pcre.jit=0", wpCLI, "config", "create",
 		"--path="+webRoot,
 		"--dbname="+dbName,
 		"--dbuser="+dbUser,
@@ -720,7 +734,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 
 	// Run WordPress core install via WP-CLI
 	installCmd := exec.Command("sudo", "-u", sysUser,
-		phpBinPath, wpCLI, "core", "install",
+		phpBinPath, "-d", "pcre.jit=0", wpCLI, "core", "install",
 		"--path="+webRoot,
 		"--url=https://"+domain,
 		"--title="+wpSiteTitle,

@@ -1198,10 +1198,10 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/wget -q https\://wordpress.org/* -O /home/[a-z]*
 # WP-CLI and PHP (run as site user only; WP-CLI lives in panel data dir, not /usr/local/bin)
 jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.2 /var/lib/jcwt-panel/tools/wp *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.3 /var/lib/jcwt-panel/tools/wp *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.4 /var/lib/jcwt-panel/tools/wp *
-jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.5 /var/lib/jcwt-panel/tools/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.2 -d pcre.jit=0 /var/lib/jcwt-panel/tools/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.3 -d pcre.jit=0 /var/lib/jcwt-panel/tools/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.4 -d pcre.jit=0 /var/lib/jcwt-panel/tools/wp *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.5 -d pcre.jit=0 /var/lib/jcwt-panel/tools/wp *
 EOF
     chmod 440 /etc/sudoers.d/jcwt-panel
     log_detail "Sudoers: /etc/sudoers.d/jcwt-panel (mode 440)"

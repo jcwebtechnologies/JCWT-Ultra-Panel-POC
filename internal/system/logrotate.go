@@ -17,16 +17,21 @@ func WriteLogrotateConfig(webRootBase, systemUser, domain string) error {
 	}
 
 	logsDir := fmt.Sprintf("%s/%s/logs", webRootBase, systemUser)
+	webLogsDir := fmt.Sprintf("%s/web", logsDir)
 	confName := fmt.Sprintf("jcwt-%s", domain)
 	confPath := fmt.Sprintf("/etc/logrotate.d/%s", confName)
+
+	// Ensure web log directory exists
+	exec.Command("sudo", "mkdir", "-p", webLogsDir).Run()
+	exec.Command("sudo", "chown", systemUser+":"+systemUser, webLogsDir).Run()
 
 	// Ensure PHP log directory exists
 	phpLogsDir := fmt.Sprintf("%s/php", logsDir)
 	exec.Command("sudo", "mkdir", "-p", phpLogsDir).Run()
 	exec.Command("sudo", "chown", systemUser+":"+systemUser, phpLogsDir).Run()
 
-	config := fmt.Sprintf(`%s/%s-access.log
-%s/%s-error.log
+	config := fmt.Sprintf(`%s/web/%s-access.log
+%s/web/%s-error.log
 %s/php/%s-error.log {
     su %s %s
     daily

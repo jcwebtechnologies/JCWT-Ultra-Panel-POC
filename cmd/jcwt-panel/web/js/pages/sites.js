@@ -86,10 +86,19 @@ export async function render(container) {
                         <div class="form-help">Space-separated domain aliases</div>
                     </div>
                     <div class="form-row">
-                        <div class="form-group">
+                        <div class="form-group" style="flex:1;">
                             <label class="form-label">System User</label>
-                            <input type="text" class="form-input" id="site-user" placeholder="example_user" required autocomplete="off">
-                            <div class="form-help">Lowercase, 2-31 chars</div>
+                            <div id="sysuser-auto-wrap">
+                                <div style="display:flex;gap:0;">
+                                    <select class="form-select" id="sysuser-mode" style="border-radius:var(--radius-md) 0 0 var(--radius-md);border-right:none;width:auto;min-width:140px;">
+                                        <option value="auto">Auto Generate</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                    <input type="text" class="form-input mono" id="site-user" readonly style="border-radius:0;flex:1;">
+                                    <button type="button" class="btn btn-secondary" id="sysuser-refresh" title="Regenerate username" style="border-radius:0 var(--radius-md) var(--radius-md) 0;border-left:none;padding:0 var(--space-3);display:flex;align-items:center;"><span class="nav-icon nav-icon-sm">${icons.refreshCw}</span></button>
+                                </div>
+                            </div>
+                            <div class="form-help" id="sysuser-help">Auto-generated (u_ + 8-12 random chars)</div>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Site Type</label>
@@ -174,17 +183,55 @@ export async function render(container) {
                 document.getElementById('wp-fields').style.display = type === 'wordpress' ? 'block' : 'none';
             });
 
-            // Auto-generate user from domain
-            document.getElementById('site-domain')?.addEventListener('input', (e) => {
-                const domain = e.target.value;
-                const user = domain.replace(/\./g, '_').replace(/[^a-z0-9_]/g, '').substring(0, 30);
-                const userInput = document.getElementById('site-user');
-                if (userInput && !userInput.dataset.manual) {
-                    userInput.value = user;
+            // --- System User: auto-generate / custom toggle ---
+            const RESERVED = ['root','admin','mysql','www','nginx','apache','ftp','user','test','panel','daemon','bin','sys','nobody','www_data'];
+            function genUser() {
+                const len = 8 + Math.floor(Math.random() * 5); // 8-12
+                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+                let s = '';
+                for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+                // ensure first char after u_ is a letter (for the overall pattern u_<letter>...)
+                const letters = 'abcdefghijklmnopqrstuvwxyz';
+                s = letters[Math.floor(Math.random() * 26)] + s.slice(1);
+                return 'u_' + s;
+            }
+            function validateUser(val) {
+                if (!/^[a-z][a-z0-9_]{2,15}$/.test(val)) return 'Must be 3-16 chars, start with letter, lowercase letters/numbers/underscore only';
+                if (val.includes('__')) return 'No consecutive underscores';
+                if (RESERVED.includes(val)) return 'Reserved name';
+                return '';
+            }
+            const userInput = document.getElementById('site-user');
+            const modeSelect = document.getElementById('sysuser-mode');
+            const refreshBtn = document.getElementById('sysuser-refresh');
+            const helpText = document.getElementById('sysuser-help');
+            // Set initial auto value
+            userInput.value = genUser();
+            refreshBtn.addEventListener('click', () => {
+                if (modeSelect.value === 'auto') userInput.value = genUser();
+            });
+            modeSelect.addEventListener('change', () => {
+                if (modeSelect.value === 'auto') {
+                    userInput.readOnly = true;
+                    userInput.value = genUser();
+                    refreshBtn.style.display = '';
+                    helpText.textContent = 'Auto-generated (u_ + 8-12 random chars)';
+                    helpText.style.color = '';
+                } else {
+                    userInput.readOnly = false;
+                    userInput.value = '';
+                    userInput.placeholder = 'my_site_user';
+                    refreshBtn.style.display = 'none';
+                    helpText.textContent = '3-16 chars, start with letter, lowercase a-z 0-9 _ only';
+                    helpText.style.color = '';
                 }
             });
-            document.getElementById('site-user')?.addEventListener('input', (e) => {
-                e.target.dataset.manual = 'true';
+            userInput.addEventListener('input', () => {
+                if (modeSelect.value === 'custom') {
+                    const err = validateUser(userInput.value);
+                    helpText.textContent = err || '3-16 chars, start with letter, lowercase a-z 0-9 _ only';
+                    helpText.style.color = err ? 'var(--status-error)' : '';
+                }
             });
 
             document.getElementById('submit-site')?.addEventListener('click', async () => {
@@ -197,6 +244,12 @@ export async function render(container) {
 
                 if (!domain || !systemUser) {
                     showToast('Domain and system user are required', 'error');
+                    return;
+                }
+
+                const userErr = validateUser(systemUser);
+                if (userErr) {
+                    showToast('System user: ' + userErr, 'error');
                     return;
                 }
                 
