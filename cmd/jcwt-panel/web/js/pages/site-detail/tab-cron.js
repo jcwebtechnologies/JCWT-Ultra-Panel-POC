@@ -21,7 +21,7 @@ export async function renderCron(el, siteId) {
                 </div>
             ` : `
                 <div class="table-container" style="border: none;">
-                    <table class="data-table responsive-cards">
+                    <table class="data-table responsive-cards has-actions">
                         <thead><tr><th>Schedule</th><th>Command</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody>
                             ${jobs.map(j => `

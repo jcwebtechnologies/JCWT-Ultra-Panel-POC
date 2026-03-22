@@ -31,7 +31,7 @@ export async function render(container) {
             </div>
         ` : `
             <div class="table-container">
-                <table class="data-table responsive-cards">
+                <table class="data-table responsive-cards has-actions">
                     <thead>
                         <tr>
                             <th>Domain</th>

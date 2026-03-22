@@ -23,7 +23,7 @@ export async function render(container) {
                 <h3 class="card-title">Panel Users</h3>
             </div>
             <div class="table-responsive">
-                <table class="data-table responsive-cards">
+                <table class="data-table responsive-cards has-actions">
                     <thead>
                         <tr>
                             <th>Username</th>
@@ -58,7 +58,7 @@ export async function render(container) {
             <div class="card-header"><h3 class="card-title">Role Permissions</h3></div>
             <div style="padding: var(--space-4);">
                 <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table responsive-cards">
                     <thead>
                         <tr><th>Permission</th><th>👑 Admin</th><th>🔧 Manager</th><th>👁️ Viewer</th></tr>
                     </thead>

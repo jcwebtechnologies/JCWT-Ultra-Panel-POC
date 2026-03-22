@@ -51,7 +51,7 @@ export async function render(container) {
                     </div>
                 ` : `
                     <div class="table-container">
-                        <table class="data-table responsive-cards">
+                        <table class="data-table responsive-cards has-actions">
                             <thead><tr><th>Database Name</th><th>Linked Site</th><th>Created</th><th>Actions</th></tr></thead>
                             <tbody>
                                 ${dbList.map(d => `
@@ -136,7 +136,7 @@ export async function render(container) {
                     </div>
                 ` : `
                     <div class="table-container">
-                        <table class="data-table responsive-cards">
+                        <table class="data-table responsive-cards has-actions">
                             <thead><tr><th>Username</th><th>Database</th><th>Created</th><th>Actions</th></tr></thead>
                             <tbody>
                                 ${userList.map(u => `

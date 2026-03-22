@@ -41,7 +41,7 @@ export function renderSSL(el, site, siteId) {
                 <h3 class="card-title">Uploaded Certificates</h3>
             </div>
             <div class="table-responsive">
-                <table class="data-table responsive-cards">
+                <table class="data-table responsive-cards has-actions">
                     <thead><tr><th>Type</th><th>Label / CN</th><th>SAN</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${certs.map(c => {

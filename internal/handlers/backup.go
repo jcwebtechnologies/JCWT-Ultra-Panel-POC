@@ -514,9 +514,9 @@ func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove file from disk (under user home, need sudo)
+	// Remove file from disk (under user home, need sudo — rule: /usr/bin/rm -rf /home/[a-z]*)
 	if filePath != "" {
-		exec.Command("sudo", "rm", "-f", filePath).Run()
+		exec.Command("sudo", "rm", "-rf", filePath).Run()
 	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "backup deleted"})

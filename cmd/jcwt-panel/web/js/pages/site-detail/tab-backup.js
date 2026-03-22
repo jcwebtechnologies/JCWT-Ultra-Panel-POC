@@ -60,7 +60,7 @@ export async function renderBackups(container, site, siteId) {
                 </div>
             ` : `
                 <div class="table-responsive">
-                    <table class="data-table responsive-cards">
+                    <table class="data-table responsive-cards has-actions">
                         <thead><tr><th>Date</th><th>Size</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody id="backup-tbody"></tbody>
                     </table>

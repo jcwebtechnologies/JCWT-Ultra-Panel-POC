@@ -83,9 +83,17 @@ func (h *DiskUsageHandler) siteTree(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tree := parseDuOutput(string(out), homeDir)
+
+	// Use du -sh for the human-readable total so it matches `du -sh` in the terminal
+	// and the top strip (which also uses du -sh). The byte-count tree is for the
+	// relative breakdown only; the total should reflect actual disk allocation.
 	total := "N/A"
-	if tree != nil {
-		total = tree.SizeStr
+	if shOut, shErr := exec.Command("sudo", "du", "-sh", homeDir).CombinedOutput(); shErr == nil {
+		if fields := strings.Fields(string(shOut)); len(fields) >= 1 {
+			total = fields[0]
+		}
+	} else if tree != nil {
+		total = tree.SizeStr // fallback to parsed bytes total
 	}
 
 	jsonSuccess(w, map[string]interface{}{"tree": tree, "total": total})

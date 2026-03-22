@@ -1984,14 +1984,14 @@ a:hover {
         min-width: 80px;
     }
 
-    .data-table.responsive-cards td:last-child {
+    .data-table.responsive-cards.has-actions td:last-child {
         padding-top: var(--space-2);
         margin-top: var(--space-1);
         border-top: 1px solid var(--border-primary);
         justify-content: flex-end;
     }
 
-    .data-table.responsive-cards td:last-child::before {
+    .data-table.responsive-cards.has-actions td:last-child::before {
         display: none;
     }
 

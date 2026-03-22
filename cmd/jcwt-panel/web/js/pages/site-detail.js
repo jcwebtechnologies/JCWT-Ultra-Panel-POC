@@ -1,5 +1,5 @@
 // JCWT Ultra Panel - Site Detail Page (thin coordinator)
-import { sites, phpVersions, databases } from '../api.js';
+import { sites, phpVersions, databases, dashboard } from '../api.js';
 import { icons, showToast, showModal, closeModal, escapeHtml, showConfirm } from '../app.js';
 import { ROUTES, siteHref } from '../routes.js';
 import { showLoading } from '../ui.js';
@@ -22,10 +22,13 @@ export async function render(container, siteToken, section) {
     if (!siteToken) { container.innerHTML = '<p>No site selected</p>'; return; }
 
     try {
-        const [site, versions] = await Promise.all([
+        const [site, versions, dashStats] = await Promise.all([
             sites.getByToken(siteToken),
-            phpVersions.list()
+            phpVersions.list(),
+            dashboard.stats().catch(() => null)
         ]);
+        const serverIPv4 = (dashStats?.ipv4_addresses || [])[0] || '';
+        const serverIPv6 = (dashStats?.ipv6_addresses || [])[0] || '';
 
         const siteId = site.id;
         let activeSection = section || null;
@@ -76,6 +79,20 @@ export async function render(container, siteToken, section) {
                     <span class="site-info-strip-label">Created</span>
                     <span class="site-info-strip-value">${new Date(site.created_at).toLocaleDateString()}</span>
                 </div>
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">User</span>
+                    <span class="site-info-strip-value"><span class="ip-copy mono" data-ip="${escapeHtml(site.system_user)}" style="cursor:pointer;padding:2px 8px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:var(--font-size-sm);display:inline-flex;align-items:center;gap:4px;" title="Click to copy">${escapeHtml(site.system_user)} <span class="nav-icon" style="width:12px;height:12px;opacity:0.6">${icons.copy}</span></span></span>
+                </div>
+                ${serverIPv4 ? `
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">IPv4</span>
+                    <span class="site-info-strip-value"><span class="ip-copy mono" data-ip="${escapeHtml(serverIPv4)}" style="cursor:pointer;padding:2px 8px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:var(--font-size-sm);display:inline-flex;align-items:center;gap:4px;" title="Click to copy">${escapeHtml(serverIPv4)} <span class="nav-icon" style="width:12px;height:12px;opacity:0.6">${icons.copy}</span></span></span>
+                </div>` : ''}
+                ${serverIPv6 ? `
+                <div class="site-info-strip-item">
+                    <span class="site-info-strip-label">IPv6</span>
+                    <span class="site-info-strip-value"><span class="ip-copy mono" data-ip="${escapeHtml(serverIPv6)}" style="cursor:pointer;padding:2px 8px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:var(--font-size-sm);word-break:break-all;display:inline-flex;align-items:center;gap:4px;" title="Click to copy">${escapeHtml(serverIPv6)} <span class="nav-icon" style="width:12px;height:12px;opacity:0.6">${icons.copy}</span></span></span>
+                </div>` : ''}
                 ${site.site_type === 'wordpress' ? `
                 <div class="site-info-strip-item">
                     <a href="https://${escapeHtml(site.domain)}/wp-admin" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="font-size:var(--font-size-xs);padding:2px 8px;white-space:nowrap;align-self:center;">WP Admin ↗</a>
@@ -299,6 +316,24 @@ export async function render(container, siteToken, section) {
                     // Keep section visible if it matched by title or has matching cards;
                     // always show when query is empty
                     section.style.display = (!q || hasVisible) ? '' : 'none';
+                });
+            });
+
+            // Bind click-to-copy for strip items (system user, IPs)
+            container.querySelectorAll('.ip-copy').forEach(el => {
+                el.addEventListener('click', () => {
+                    const val = el.dataset.ip;
+                    navigator.clipboard.writeText(val).then(() => {
+                        showToast(`Copied: ${val}`, 'success');
+                    }).catch(() => {
+                        const ta = document.createElement('textarea');
+                        ta.value = val;
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta);
+                        showToast(`Copied: ${val}`, 'success');
+                    });
                 });
             });
 

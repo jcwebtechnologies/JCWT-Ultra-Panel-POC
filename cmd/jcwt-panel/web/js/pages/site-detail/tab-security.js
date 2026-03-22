@@ -162,7 +162,7 @@ export async function renderSSHAccess(container, site, siteId) {
             }
             return `
             <div class="table-container">
-                <table class="data-table responsive-cards">
+                <table class="data-table responsive-cards has-actions">
                     <thead>
                         <tr>
                             <th>Name</th>
@@ -449,16 +449,19 @@ export async function renderSSHAccess(container, site, siteId) {
                                 <span class="warning-banner-icon">${icons.alertTriangle}</span>
                                 <span>Keep this private key secure. Never share it publicly.</span>
                             </div>
-                            <textarea class="form-textarea mono" readonly style="min-height:180px;font-size:var(--font-size-xs);">${escapeHtml(data.content)}</textarea>
+                            <textarea class="form-textarea mono" readonly wrap="off" style="min-height:180px;font-size:var(--font-size-xs);white-space:pre;overflow-x:auto;">${escapeHtml(data.content)}</textarea>
                         `, `
                             <button class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Close</button>
                             <button class="btn btn-primary ssh-copy-key">Copy</button>
                             <a class="btn btn-secondary ssh-dl-key" download="${escapeHtml(data.name)}.pem">Download</a>
                         `);
-                        const blob = new Blob([data.content], { type: 'text/plain' });
+                        // Normalize to Unix line endings (\n only) so the downloaded file
+                        // is not corrupted if copied/opened in Windows editors
+                        const keyContent = data.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                        const blob = new Blob([keyContent], { type: 'application/octet-stream' });
                         document.querySelector('.ssh-dl-key').href = URL.createObjectURL(blob);
                         document.querySelector('.ssh-copy-key')?.addEventListener('click', () => {
-                            navigator.clipboard.writeText(data.content).then(() => showToast('Copied', 'success'));
+                            navigator.clipboard.writeText(keyContent).then(() => showToast('Copied', 'success'));
                         });
                     } catch (err) { showToast(err.message, 'error'); }
                 });

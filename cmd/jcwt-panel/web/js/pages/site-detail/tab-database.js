@@ -23,7 +23,7 @@ export async function renderDatabases(container, siteId, site, refreshTabs) {
                 <div class="empty-state-text">Create a database linked to this site.</div>
             </div>` : `
             <div class="table-responsive">
-                <table class="data-table responsive-cards">
+                <table class="data-table responsive-cards has-actions">
                     <thead><tr><th>Database Name</th><th>Users</th><th>Created</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${siteDbs.map(db => {
@@ -135,7 +135,7 @@ export async function renderDBUsers(container, siteId, site, refreshTabs) {
                 <div class="empty-state-text">${siteDbs.length === 0 ? 'Create a database first, then add users.' : 'Create a user with specific privileges for a database.'}</div>
             </div>` : `
             <div class="table-responsive">
-                <table class="data-table responsive-cards">
+                <table class="data-table responsive-cards has-actions">
                     <thead><tr><th>Username</th><th>Database</th><th>Privileges</th><th>Created</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${siteUsers.map(u => `<tr>
