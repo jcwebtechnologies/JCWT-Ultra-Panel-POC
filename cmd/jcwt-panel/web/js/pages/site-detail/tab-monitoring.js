@@ -135,7 +135,7 @@ function renderTreeHTML(children, depth, sortMode) {
     return sorted.map(node => {
         const hasChildren = node.children && node.children.length > 0;
         const indent = depth * 24;
-        const collapsed = depth > 0;
+        const collapsed = true;
         const chevron = hasChildren
             ? `<span class="du-toggle" style="cursor:pointer;display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;transition:transform 0.15s;${collapsed ? '' : 'transform:rotate(90deg);'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></span>`
             : `<span style="display:inline-block;width:18px;"></span>`;

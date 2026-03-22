@@ -1071,7 +1071,7 @@ EOF
     log_info "Configuring sudo privileges..."
     cat > /etc/sudoers.d/jcwt-panel << 'EOF'
 # JCWT Ultra Panel - Scoped privileges for system management
-# NO wildcard bash, rm, cat, tee — all file ops use specific arg patterns
+# NO wildcard bash, rm, tee — all file ops use specific arg patterns
 
 # User management (only useradd/userdel/usermod with controlled args)
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd -m -d /home/[a-z]* -s /bin/bash [a-z]*
@@ -1173,6 +1173,7 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test -f /home/[a-z]*
 
 # Log viewing
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tail -n [0-9]* /home/[a-z]*/logs/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/cat /home/[a-z]*
 
 # Timezone
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/timedatectl set-timezone *
@@ -1205,6 +1206,11 @@ jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php8.5 -d pcre.jit=0 /var/lib/jcwt-panel
 EOF
     chmod 440 /etc/sudoers.d/jcwt-panel
     log_detail "Sudoers: /etc/sudoers.d/jcwt-panel (mode 440)"
+
+    # Set nologin message shown to SSH-disabled site users
+    echo "SSH not available for your account." > /etc/nologin.txt
+    chmod 644 /etc/nologin.txt
+    log_detail "nologin message: /etc/nologin.txt"
 
     systemctl daemon-reload
     systemctl enable jcwt-panel > /dev/null 2>&1

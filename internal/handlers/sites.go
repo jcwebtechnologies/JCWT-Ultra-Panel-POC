@@ -127,15 +127,12 @@ func (h *SitesHandler) diskUsage(w http.ResponseWriter, r *http.Request) {
 		jsonSuccess(w, map[string]interface{}{"size": "N/A"})
 		return
 	}
-	out, err := exec.Command("sudo", "du", "-sh", webRoot).CombinedOutput()
+	// Measure the full home directory so the strip matches the disk usage tab total
+	homeDir := filepath.Dir(webRoot)
+	out, err := exec.Command("sudo", "du", "-sh", homeDir).CombinedOutput()
 	if err != nil {
-		// Try parent directory as fallback
-		parent := filepath.Dir(webRoot)
-		out, err = exec.Command("sudo", "du", "-sh", parent).CombinedOutput()
-		if err != nil {
-			jsonSuccess(w, map[string]interface{}{"size": "N/A"})
-			return
-		}
+		jsonSuccess(w, map[string]interface{}{"size": "N/A"})
+		return
 	}
 	fields := strings.Fields(string(out))
 	size := "N/A"

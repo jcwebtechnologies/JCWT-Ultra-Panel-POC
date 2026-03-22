@@ -99,7 +99,7 @@ export async function render(container) {
                                 <button type="button" class="btn btn-secondary" id="sysuser-refresh" title="Regenerate username" style="border-radius:0 var(--radius-md) var(--radius-md) 0;border-left:none;padding:0 var(--space-3);display:flex;align-items:center;"><span class="nav-icon nav-icon-sm">${icons.refreshCw}</span></button>
                             </div>
                         </div>
-                        <div class="form-help" id="sysuser-help">Auto-generated (u_ + 8-12 random chars)</div>
+                        <div class="form-help" id="sysuser-help">Auto-generated (u_ + 9 random chars)</div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Site Type</label>
@@ -186,13 +186,11 @@ export async function render(container) {
             // --- System User: auto-generate / custom toggle ---
             const RESERVED = ['root','admin','mysql','www','nginx','apache','ftp','user','test','panel','daemon','bin','sys','nobody','www_data'];
             function genUser() {
-                const len = 8 + Math.floor(Math.random() * 5); // 8-12
-                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-                let s = '';
-                for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
-                // ensure first char after u_ is a letter (for the overall pattern u_<letter>...)
                 const letters = 'abcdefghijklmnopqrstuvwxyz';
-                s = letters[Math.floor(Math.random() * 26)] + s.slice(1);
+                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+                // first char is a letter, then 8 more alphanumeric = 9 total chars after u_
+                let s = letters[Math.floor(Math.random() * 26)];
+                for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
                 return 'u_' + s;
             }
             function validateUser(val) {
@@ -215,7 +213,7 @@ export async function render(container) {
                     userInput.readOnly = true;
                     userInput.value = genUser();
                     refreshBtn.style.display = '';
-                    helpText.textContent = 'Auto-generated (u_ + 8-12 random chars)';
+                    helpText.textContent = 'Auto-generated (u_ + 9 random chars)';
                     helpText.style.color = '';
                 } else {
                     userInput.readOnly = false;

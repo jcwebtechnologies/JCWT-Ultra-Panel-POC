@@ -14,7 +14,7 @@ import (
 // Suffix regexes — the system-user prefix is prepended automatically; these validate only the user-supplied suffix.
 // Full DB name  = sysUser (≤16) + "_" + suffix (≤47) ≤ 64  (MariaDB identifier limit)
 // Full username = sysUser (≤16) + "_" + suffix (≤15) ≤ 32  (MariaDB username limit)
-var dbNameSuffixRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{0,46}$`)
+var dbNameSuffixRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{0,15}$`)
 var dbUserSuffixRegex = regexp.MustCompile(`^[a-z][a-z0-9_]{0,14}$`)
 
 type DatabasesHandler struct {

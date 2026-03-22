@@ -93,8 +93,8 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 	}
 
 	phpVersion, _ := site["php_version"].(string)
-	phpBin := fmt.Sprintf("php%s", phpVersion)
-	wpCLI := "/usr/local/bin/wp"
+	phpBin := fmt.Sprintf("/usr/bin/php%s", phpVersion)
+	wpCLI := filepath.Join(h.Cfg.DataDir, "tools", "wp")
 
 	state := loadWPToolsState(h.Cfg.DataDir, sysUser)
 
@@ -151,15 +151,15 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 
 	case "check-updates":
 		out, runErr := exec.Command("sudo", "-u", sysUser,
-			phpBin, wpCLI, "--path="+webRoot,
+			phpBin, "-d", "pcre.jit=0", wpCLI, "--path="+webRoot,
 			"core", "check-update", "--format=json").Output()
 		coreHasUpdate := runErr == nil && strings.TrimSpace(string(out)) != "[]" && strings.TrimSpace(string(out)) != ""
 
 		pluginOut, _ := exec.Command("sudo", "-u", sysUser,
-			phpBin, wpCLI, "--path="+webRoot,
+			phpBin, "-d", "pcre.jit=0", wpCLI, "--path="+webRoot,
 			"plugin", "list", "--update=available", "--format=json").Output()
 		themeOut, _ := exec.Command("sudo", "-u", sysUser,
-			phpBin, wpCLI, "--path="+webRoot,
+			phpBin, "-d", "pcre.jit=0", wpCLI, "--path="+webRoot,
 			"theme", "list", "--update=available", "--format=json").Output()
 
 		var plugins, themes []interface{}
@@ -174,7 +174,7 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 
 	case "core-update":
 		out, runErr := exec.Command("sudo", "-u", sysUser,
-			phpBin, wpCLI, "--path="+webRoot, "core", "update").CombinedOutput()
+			phpBin, "-d", "pcre.jit=0", wpCLI, "--path="+webRoot, "core", "update").CombinedOutput()
 		if runErr != nil {
 			log.Printf("WordPress core-update failed: %s", strings.TrimSpace(string(out)))
 			jsonError(w, "WordPress core update failed", http.StatusInternalServerError)
@@ -184,7 +184,7 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 
 	case "plugin-update":
 		out, runErr := exec.Command("sudo", "-u", sysUser,
-			phpBin, wpCLI, "--path="+webRoot, "plugin", "update", "--all").CombinedOutput()
+			phpBin, "-d", "pcre.jit=0", wpCLI, "--path="+webRoot, "plugin", "update", "--all").CombinedOutput()
 		if runErr != nil {
 			log.Printf("WordPress plugin-update failed: %s", strings.TrimSpace(string(out)))
 			jsonError(w, "WordPress plugin update failed", http.StatusInternalServerError)
@@ -194,7 +194,7 @@ func (h *WordPressHandler) action(w http.ResponseWriter, r *http.Request) {
 
 	case "theme-update":
 		out, runErr := exec.Command("sudo", "-u", sysUser,
-			phpBin, wpCLI, "--path="+webRoot, "theme", "update", "--all").CombinedOutput()
+			phpBin, "-d", "pcre.jit=0", wpCLI, "--path="+webRoot, "theme", "update", "--all").CombinedOutput()
 		if runErr != nil {
 			log.Printf("WordPress theme-update failed: %s", strings.TrimSpace(string(out)))
 			jsonError(w, "WordPress theme update failed", http.StatusInternalServerError)

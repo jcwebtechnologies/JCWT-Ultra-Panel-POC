@@ -303,12 +303,12 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		middleware.RequireRole("admin")(&handlers.SSHHandler{DB: database}),
 	)))
 
-	// Serve uploaded files (require auth to prevent public access)
+	// Serve uploaded files publicly — required so the login page can load branding assets (logo, favicon)
 	uploadsDir := filepath.Join(cfg.DataDir, "uploads")
 	os.MkdirAll(uploadsDir, 0750)
-	mux.Handle("/api/uploads/", middleware.RequireAuth(
+	mux.Handle("/api/uploads/",
 		http.StripPrefix("/api/uploads/", http.FileServer(http.Dir(uploadsDir))),
-	))
+	)
 
 	// Password change endpoint
 	mux.Handle("/api/auth/change-password", middleware.RequireAuth(middleware.RequireCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
