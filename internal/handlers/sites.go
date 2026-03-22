@@ -653,7 +653,11 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	// Move WordPress files to webroot (overwrite welcome page)
 	wpExtracted := filepath.Join(tmpDir, "wordpress")
 	exec.Command("sudo", "rsync", "-a", "--delete", wpExtracted+"/", webRoot+"/").Run()
-	exec.Command("sudo", "rm", "-rf", wpExtracted, wpArchive).Run()
+	// Clean up WordPress temp files via the validated filesystem helper.
+	wpExtRel, _ := filepath.Rel(homeDir, wpExtracted)
+	wpArcRel, _ := filepath.Rel(homeDir, wpArchive)
+	exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, wpExtRel).Run()
+	exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, wpArcRel).Run()
 
 	// Fix ownership before running WP-CLI so the site user can write wp-config.php
 	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()

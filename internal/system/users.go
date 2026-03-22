@@ -223,8 +223,9 @@ func WriteWelcomePage(webRoot, siteType, domain, username string) error {
 
 // DeleteSystemUser removes a system user and their home directory
 func DeleteSystemUser(username string) error {
-	// Force delete with home directory removal
-	cmd := exec.Command("sudo", "userdel", "-r", username)
+	// Delegate home deletion to the validated helper (panel-fsctl calls
+	// userdel --remove --force internally and falls back to safe rm).
+	cmd := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-home", username)
 	cmd.Run() // Ignore error — user might already be deleted
 
 	// Also delete the group (userdel sometimes leaves it behind)

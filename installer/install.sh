@@ -1068,6 +1068,109 @@ EOF
     log_detail "User: $PANEL_USER"
     log_detail "Exec: $PANEL_BIN --data-dir $DATA_DIR --listen [::]:$PANEL_PORT"
 
+    log_info "Installing privileged filesystem helper..."
+    cat > /usr/local/sbin/panel-fsctl << 'FSCTL_EOF'
+#!/bin/bash
+# /usr/local/sbin/panel-fsctl
+# Privileged filesystem operations helper for JCWT Ultra Panel.
+# Called exclusively via: sudo /usr/local/sbin/panel-fsctl <command> [args...]
+#
+# Commands:
+#   delete-home    <user>             Remove user account and home directory
+#   delete-backup  <user> <filename>  Remove one backup file from /home/<user>/backups/
+#   delete-staging <user> <relpath>   Remove temp path inside /home/<user>/tmp/ or backups/staging-*
+#
+# Security properties:
+#   - Validates usernames against ^[a-z][a-z0-9_]{2,15}$ before any action
+#   - Resolves realpath so symlink tricks cannot escape the allowed prefix
+#   - Uses rm --one-file-system --preserve-root=all to contain deletions
+#   - Accepts no shell metacharacters; no wildcards are ever passed to rm
+
+set -euo pipefail
+
+COMMAND="${1:-}"
+shift || true
+
+die() {
+    echo "panel-fsctl: error: $*" >&2
+    exit 1
+}
+
+validate_user() {
+    local u="$1"
+    [[ "$u" =~ ^[a-z][a-z0-9_]{2,15}$ ]] || die "invalid username: $u"
+    id "$u" &>/dev/null || die "user does not exist: $u"
+}
+
+assert_under() {
+    local path="$1" prefix="$2"
+    local real
+    real=$(realpath -m -- "$path") || die "cannot resolve path: $path"
+    [[ "$real" == "$prefix" || "$real" == "$prefix/"* ]] \
+        || die "path escape detected: $real is not under $prefix"
+    echo "$real"
+}
+
+safe_rm() {
+    rm --one-file-system --preserve-root=all -rf -- "$1"
+}
+
+case "$COMMAND" in
+
+    delete-home)
+        [[ $# -eq 1 ]] || die "usage: delete-home <user>"
+        USER="$1"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+        userdel --remove --force "$USER" 2>/dev/null || true
+        if [[ -d "$HOME_DIR" ]]; then
+            REAL_HOME=$(realpath -- "$HOME_DIR") || die "cannot resolve $HOME_DIR"
+            [[ "$REAL_HOME" == "/home/$USER" ]] \
+                || die "home $REAL_HOME does not resolve to expected /home/$USER"
+            safe_rm "$HOME_DIR"
+        fi
+        ;;
+
+    delete-backup)
+        [[ $# -eq 2 ]] || die "usage: delete-backup <user> <filename>"
+        USER="$1"
+        FNAME="$2"
+        validate_user "$USER"
+        [[ "$FNAME" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid backup filename: $FNAME"
+        BACKUP_ROOT="/home/$USER/backups"
+        REAL=$(assert_under "$BACKUP_ROOT/$FNAME" "$BACKUP_ROOT")
+        [[ -e "$REAL" ]] || exit 0
+        safe_rm "$REAL"
+        ;;
+
+    delete-staging)
+        [[ $# -eq 2 ]] || die "usage: delete-staging <user> <relpath>"
+        USER="$1"
+        RELPATH="$2"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+        REAL=$(assert_under "$HOME_DIR/$RELPATH" "$HOME_DIR")
+        [[ "$REAL" != "$HOME_DIR" ]] \
+            || die "refusing to delete the home root itself via delete-staging"
+        ALLOWED=false
+        [[ "$REAL" == "$HOME_DIR/tmp" || "$REAL" == "$HOME_DIR/tmp/"* ]] && ALLOWED=true
+        [[ "$REAL" == "$HOME_DIR/backups/staging-"* ]] && ALLOWED=true
+        $ALLOWED \
+            || die "path $REAL not in an allowed staging area (tmp/ or backups/staging-*)"
+        [[ -e "$REAL" ]] || exit 0
+        safe_rm "$REAL"
+        ;;
+
+    *)
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging"
+        ;;
+
+esac
+FSCTL_EOF
+    chmod 0755 /usr/local/sbin/panel-fsctl
+    chown root:root /usr/local/sbin/panel-fsctl
+    log_detail "Helper: /usr/local/sbin/panel-fsctl (owner root:root, mode 0755)"
+
     log_info "Configuring sudo privileges..."
     cat > /etc/sudoers.d/jcwt-panel << 'EOF'
 # JCWT Ultra Panel - Scoped privileges for system management
@@ -1076,7 +1179,6 @@ EOF
 # User management (only useradd/userdel/usermod with controlled args)
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd -m -d /home/[a-z]* -s /bin/bash [a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd -m -d /home/[a-z]* -s /usr/sbin/nologin [a-z]*
-jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/userdel -r [a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -s /bin/bash [a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -s /usr/sbin/nologin [a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -aG [a-z]* www-data
@@ -1143,7 +1245,8 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/nginx/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-available/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-enabled/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/htpasswd/*
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -rf /home/[a-z]*
+# Home/backup deletion goes through the validated helper — no wildcard rm on /home
+jcwt-panel ALL=(root) NOPASSWD: /usr/local/sbin/panel-fsctl
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /var/lib/jcwt-panel/ssl/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/logrotate.d/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /run/php/php*-fpm-*.sock

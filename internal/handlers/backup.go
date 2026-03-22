@@ -162,7 +162,8 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, sit
 	// Create a staging directory for the backup contents
 	stagingDir := filepath.Join(backupDir, fmt.Sprintf("staging-%s", timestamp))
 	exec.Command("sudo", "mkdir", "-p", stagingDir).Run()
-	defer exec.Command("sudo", "rm", "-rf", stagingDir).Run()
+	stagingRel, _ := filepath.Rel("/home/"+sysUser, stagingDir)
+	defer exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, stagingRel).Run()
 
 	var backupErr error
 
@@ -369,7 +370,8 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 			exec.Command("sudo", "mkdir", "-p", restoreDir).Run()
 			exec.Command("sudo", "chown", sysUser+":"+sysUser, restoreDir).Run()
 			// Clean up staging dir when done
-			defer exec.Command("sudo", "rm", "-rf", restoreDir).Run()
+			restoreRel, _ := filepath.Rel(homeDir, restoreDir)
+			defer exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, restoreRel).Run()
 
 			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "./htdocs")
 			if output, err := cmd.CombinedOutput(); err != nil {
@@ -514,9 +516,17 @@ func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove file from disk (under user home, need sudo — rule: /usr/bin/rm -rf /home/[a-z]*)
+	// Remove file from disk via the validated helper.
+	// Parse sysUser from path: /home/<sysUser>/backups/<filename>
 	if filePath != "" {
-		exec.Command("sudo", "rm", "-rf", filePath).Run()
+		const homeBase = "/home/"
+		if strings.HasPrefix(filePath, homeBase) {
+			parts := strings.SplitN(filePath[len(homeBase):], "/", 3)
+			if len(parts) == 3 && parts[1] == "backups" {
+				exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-backup",
+					parts[0], filepath.Base(filePath)).Run()
+			}
+		}
 	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "backup deleted"})

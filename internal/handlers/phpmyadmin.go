@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -193,8 +194,12 @@ func (h *PhpMyAdminHandler) CleanupStaleTempUsers() {
 		log.Printf("Cleaned up stale PMA temp users at startup")
 	}
 
-	// Remove leftover signon PHP files
-	exec.Command("sudo", "bash", "-c", "rm -f /usr/share/phpmyadmin/signon_*.php").Run()
+	// Remove leftover signon PHP files — glob in Go to avoid shell invocation.
+	if matches, err := filepath.Glob("/usr/share/phpmyadmin/signon_*.php"); err == nil {
+		for _, m := range matches {
+			exec.Command("sudo", "rm", "-f", m).Run()
+		}
+	}
 }
 
 // GetDBInfo returns the database name for a given database ID

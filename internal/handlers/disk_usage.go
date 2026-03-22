@@ -213,7 +213,7 @@ func (h *DiskUsageHandler) cleanupTmp(w http.ResponseWriter, r *http.Request) {
 
 	// Remove and recreate the tmp directory to clear its contents.
 	// This uses only commands already allowed in sudoers (rm -rf, mkdir, chown, chmod).
-	if out, err := exec.Command("sudo", "rm", "-rf", tmpDir).CombinedOutput(); err != nil {
+	if out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, "tmp").CombinedOutput(); err != nil {
 		log.Printf("cleanup rm failed: %s", strings.TrimSpace(string(out)))
 		jsonError(w, "cleanup failed", http.StatusInternalServerError)
 		return

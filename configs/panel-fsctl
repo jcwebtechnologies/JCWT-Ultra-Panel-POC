@@ -1,0 +1,122 @@
+#!/bin/bash
+# /usr/local/sbin/panel-fsctl
+# Privileged filesystem operations helper for JCWT Ultra Panel.
+# Called exclusively via: sudo /usr/local/sbin/panel-fsctl <command> [args...]
+#
+# Commands:
+#   delete-home    <user>             Remove user account and home directory
+#   delete-backup  <user> <filename>  Remove one backup file from /home/<user>/backups/
+#   delete-staging <user> <relpath>   Remove temp path inside /home/<user>/tmp/ or backups/staging-*
+#
+# Security properties:
+#   - Validates usernames against ^[a-z][a-z0-9_]{2,15}$ before any action
+#   - Resolves realpath so symlink tricks cannot escape the allowed prefix
+#   - Uses rm --one-file-system --preserve-root=all to contain deletions
+#   - Accepts no shell metacharacters; no wildcards are ever passed to rm
+
+set -euo pipefail
+
+COMMAND="${1:-}"
+shift || true
+
+die() {
+    echo "panel-fsctl: error: $*" >&2
+    exit 1
+}
+
+# Validate a system username: lowercase start, 3-16 alnum/underscore chars.
+validate_user() {
+    local u="$1"
+    [[ "$u" =~ ^[a-z][a-z0-9_]{2,15}$ ]] || die "invalid username: $u"
+    id "$u" &>/dev/null || die "user does not exist: $u"
+}
+
+# Resolve the canonical path and verify it is strictly inside the expected
+# prefix. Prints the resolved path on success; calls die on violation.
+assert_under() {
+    local path="$1" prefix="$2"
+    local real
+    real=$(realpath -m -- "$path") || die "cannot resolve path: $path"
+    [[ "$real" == "$prefix" || "$real" == "$prefix/"* ]] \
+        || die "path escape detected: $real is not under $prefix"
+    echo "$real"
+}
+
+safe_rm() {
+    rm --one-file-system --preserve-root=all -rf -- "$1"
+}
+
+case "$COMMAND" in
+
+    delete-home)
+        # delete-home <user>
+        # Removes the system user and their home directory.
+        [[ $# -eq 1 ]] || die "usage: delete-home <user>"
+        USER="$1"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+
+        # userdel --remove handles the home dir and mail spool.
+        # --force un-logs any active sessions so the delete can proceed.
+        userdel --remove --force "$USER" 2>/dev/null || true
+
+        # Safety net: if the home persists (can happen when processes still
+        # hold file descriptors), verify the resolved path before removing.
+        if [[ -d "$HOME_DIR" ]]; then
+            REAL_HOME=$(realpath -- "$HOME_DIR") || die "cannot resolve $HOME_DIR"
+            [[ "$REAL_HOME" == "/home/$USER" ]] \
+                || die "home $REAL_HOME does not resolve to expected /home/$USER"
+            safe_rm "$HOME_DIR"
+        fi
+        ;;
+
+    delete-backup)
+        # delete-backup <user> <filename>
+        # Removes a single backup archive from /home/<user>/backups/.
+        # <filename> must be a plain name (no slashes, no ..) — typically *.tar.gz
+        [[ $# -eq 2 ]] || die "usage: delete-backup <user> <filename>"
+        USER="$1"
+        FNAME="$2"
+        validate_user "$USER"
+        # Reject any path separator or dot-dot in the filename.
+        [[ "$FNAME" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid backup filename: $FNAME"
+        BACKUP_ROOT="/home/$USER/backups"
+        REAL=$(assert_under "$BACKUP_ROOT/$FNAME" "$BACKUP_ROOT")
+        [[ -e "$REAL" ]] || exit 0  # already gone — treat as success
+        safe_rm "$REAL"
+        ;;
+
+    delete-staging)
+        # delete-staging <user> <relpath>
+        # Removes a temporary path inside /home/<user>/tmp/ (inclusive) or
+        # /home/<user>/backups/staging-*.
+        # <relpath> is relative to /home/<user>; examples:
+        #   tmp                       (whole tmp dir, for disk-usage cleanup)
+        #   tmp/restore-stage         (restore staging dir)
+        #   tmp/wordpress             (WordPress extraction dir)
+        #   tmp/wordpress.tar.gz      (WordPress archive)
+        #   backups/staging-20060102  (backup creation staging dir)
+        [[ $# -eq 2 ]] || die "usage: delete-staging <user> <relpath>"
+        USER="$1"
+        RELPATH="$2"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+        REAL=$(assert_under "$HOME_DIR/$RELPATH" "$HOME_DIR")
+        [[ "$REAL" != "$HOME_DIR" ]] \
+            || die "refusing to delete the home root itself via delete-staging"
+        # Allow only paths inside tmp/ (the dir itself or anything under it)
+        # or backups/staging-* subdirectories.
+        ALLOWED=false
+        [[ "$REAL" == "$HOME_DIR/tmp" || "$REAL" == "$HOME_DIR/tmp/"* ]] && ALLOWED=true
+        [[ "$REAL" == "$HOME_DIR/backups/staging-"* ]] && ALLOWED=true
+        $ALLOWED \
+            || die "path $REAL not in an allowed staging area (tmp/ or backups/staging-*)"
+        [[ -e "$REAL" ]] || exit 0  # already gone
+        safe_rm "$REAL"
+        ;;
+
+    *)
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging"
+        ;;
+
+esac
