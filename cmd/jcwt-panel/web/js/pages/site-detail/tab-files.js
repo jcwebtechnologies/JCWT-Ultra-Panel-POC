@@ -21,7 +21,10 @@ export async function renderFiles(el, siteId, siteToken) {
 
     try {
         const data = await files.list(siteId);
-        const fbUrl = data.url || `/fb/${siteToken}/`;
+        let fbUrl = data.url || `/fb/${siteToken}/`;
+        if (!fbUrl.endsWith('/login')) {
+            fbUrl = fbUrl.endsWith('/') ? `${fbUrl}login` : `${fbUrl}/login`;
+        }
 
         let retries = 0;
         const maxRetries = 5;

@@ -385,6 +385,11 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('jcwt-theme', next);
+    
+    const iconEl = document.getElementById('theme-icon');
+    if (iconEl) {
+        iconEl.innerHTML = next === 'dark' ? icons.moon : icons.sun;
+    }
 }
 
 // ---- Sidebar / Layout ----
@@ -483,7 +488,10 @@ function renderLayout(pageName) {
                     <h1 class="page-title" id="page-title"></h1>
                 </div>
                 <div class="main-header-right">
-                    <button class="theme-toggle" id="theme-toggle" title="Toggle theme"></button>
+                    <div class="theme-toggle-container" style="display: flex; align-items: center; gap: var(--space-2); margin-right: var(--space-3);">
+                        <span class="nav-icon" style="width: 14px; height: 14px; color: var(--text-secondary);" id="theme-icon">${theme === 'dark' ? icons.moon : icons.sun}</span>
+                        <button class="theme-toggle" id="theme-toggle" title="Toggle theme"></button>
+                    </div>
                     <div class="user-menu-wrapper" style="position: relative;">
                         <div class="user-menu" id="user-menu" style="cursor:pointer" title="Account menu">
                             <div class="user-avatar">${currentUser ? currentUser[0].toUpperCase() : 'A'}</div>
