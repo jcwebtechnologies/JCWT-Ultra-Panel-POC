@@ -125,43 +125,27 @@ func GetSSHFingerprint(pubKey string) (string, error) {
 	return strings.TrimSpace(string(fpOut)), nil
 }
 
-// EnsureSSHDir creates the .ssh directory for a user if it doesn't exist
+// EnsureSSHDir ensures the .ssh directory and permissions exist for a user
 func EnsureSSHDir(username, homeDir string) error {
-	if !safeDomainRegex.MatchString(username) {
-		return fmt.Errorf("invalid username")
-	}
-	sshDir := filepath.Join(homeDir, ".ssh")
-	exec.Command("sudo", "mkdir", "-p", sshDir).Run()
-	exec.Command("sudo", "chmod", "700", sshDir).Run()
-	exec.Command("sudo", "chown", username+":"+username, sshDir).Run()
-	return nil
+	return SyncAuthorizedKeys(username, homeDir, nil)
 }
 
-// SyncAuthorizedKeys writes all authorized public keys to the user's ~/.ssh/authorized_keys
+// SyncAuthorizedKeys writes authorized public keys to the user's ~/.ssh/authorized_keys via panel-fsctl
 func SyncAuthorizedKeys(username, homeDir string, publicKeys []string) error {
 	if !safeDomainRegex.MatchString(username) {
-		return fmt.Errorf("invalid username")
+		return fmt.Errorf("invalid username: %s", username)
 	}
 
-	if err := EnsureSSHDir(username, homeDir); err != nil {
-		return err
-	}
-
-	sshDir := filepath.Join(homeDir, ".ssh")
-	authKeysPath := filepath.Join(sshDir, "authorized_keys")
 	content := strings.Join(publicKeys, "\n")
 	if len(publicKeys) > 0 {
 		content += "\n"
 	}
 
-	cmd := exec.Command("sudo", "tee", authKeysPath)
+	cmd := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "write-authkeys", username)
 	cmd.Stdin = strings.NewReader(content)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("write authorized_keys: %s", strings.TrimSpace(string(output)))
 	}
-
-	exec.Command("sudo", "chmod", "600", authKeysPath).Run()
-	exec.Command("sudo", "chown", username+":"+username, authKeysPath).Run()
 
 	return nil
 }

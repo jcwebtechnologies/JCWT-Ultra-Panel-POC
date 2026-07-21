@@ -194,8 +194,22 @@ case "$COMMAND" in
         safe_rm "$REAL"
         ;;
 
+    write-authkeys)
+        USER="${1:-}"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+        SSH_DIR="$HOME_DIR/.ssh"
+        AUTH_KEYS="$SSH_DIR/authorized_keys"
+        mkdir -p "$SSH_DIR"
+        chmod 0700 "$SSH_DIR"
+        chown "$USER:$USER" "$SSH_DIR"
+        cat > "$AUTH_KEYS"
+        chmod 0600 "$AUTH_KEYS"
+        chown "$USER:$USER" "$AUTH_KEYS"
+        ;;
+
     *)
-        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging"
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys"
         ;;
 esac
 FSCTL_EOF
@@ -203,6 +217,10 @@ FSCTL_EOF
 chmod 0755 /usr/local/sbin/panel-fsctl
 chown root:root /usr/local/sbin/panel-fsctl
 log_ok "Filesystem helper updated"
+
+# Configure iptables alternatives to ensure UFW operates correctly
+update-alternatives --set iptables /usr/sbin/iptables-nft 2>/dev/null || update-alternatives --set iptables /sbin/iptables-legacy 2>/dev/null || true
+update-alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null || update-alternatives --set ip6tables /sbin/ip6tables-legacy 2>/dev/null || true
 
 log_info "Updating sudoers configuration (/etc/sudoers.d/jcwt-panel)..."
 cat > /etc/sudoers.d/jcwt-panel << 'EOF'
@@ -238,23 +256,95 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active mariadb
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active redis-server
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active jcwt-panel
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl is-active ufw
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show nginx --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show nginx --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show php*-fpm --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show php*-fpm --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show mariadb --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show mariadb --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show redis-server --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show redis-server --property=ActiveEnterTimestamp --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show jcwt-panel --property=MemoryCurrent --value
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl show jcwt-panel --property=ActiveEnterTimestamp --value
 
 # Nginx config test
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 
-# File management helper
-jcwt-panel ALL=(root) NOPASSWD: /usr/local/sbin/panel-fsctl *
+# MariaDB client
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysql -e *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysql [a-zA-Z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mysqldump --single-transaction [a-zA-Z]*
 
-# Network & firewall
-jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw *
+# Crontab management
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/crontab -u [a-z]* -
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/crontab -r -u [a-z]*
 
-# SSL cert management (certbot)
+# SSL/TLS
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/openssl req *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/openssl x509 *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/certbot certonly *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/certbot renew *
 
-# Package & service version queries
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/apt-get update
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/apt-get upgrade -y
+# File operations (scoped)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown [a-z]*\:[a-z]* /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chown -R [a-z]*\:[a-z]* /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /etc/nginx/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/chmod [0-9]* /etc/logrotate.d/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/nginx/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-available/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-enabled/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/htpasswd/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/local/sbin/panel-fsctl *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /var/lib/jcwt-panel/ssl/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/logrotate.d/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /run/php/php*-fpm-*.sock
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/php/*/fpm/pool.d/*.conf
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/ln -sf /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/nginx/sites-available/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*/fpm/pool.d/*.conf
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/logrotate.d/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/default/ufw
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /usr/share/phpmyadmin/signon_*.php
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /usr/share/phpmyadmin/signon_*.php
+
+# Tar/archive operations (scoped)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -xzf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -tzf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar cf - -C /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar xf - -C /home/[a-z]*
+
+# Disk usage (read-only)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -sh /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -b /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -sb /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -b --max-depth=3 /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/test -f /home/[a-z]*
+
+# Log viewing
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tail -n [0-9]* /home/[a-z]*/logs/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/cat /home/[a-z]*
+
+# Timezone
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/timedatectl set-timezone *
+
+# htpasswd
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd -c -B -b /etc/nginx/htpasswd/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd -B -b /etc/nginx/htpasswd/*
+
+# Firewall
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw status
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw status *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw allow *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw deny *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw delete *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw disable
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force enable
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force reset
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw default *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw reload
 EOF
 
 chmod 0440 /etc/sudoers.d/jcwt-panel

@@ -1104,8 +1104,23 @@ case "$COMMAND" in
         safe_rm "$REAL"
         ;;
 
+    write-authkeys)
+        [[ $# -eq 1 ]] || die "usage: write-authkeys <user>"
+        USER="$1"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+        SSH_DIR="$HOME_DIR/.ssh"
+        AUTH_KEYS="$SSH_DIR/authorized_keys"
+        mkdir -p "$SSH_DIR"
+        chmod 0700 "$SSH_DIR"
+        chown "$USER:$USER" "$SSH_DIR"
+        cat > "$AUTH_KEYS"
+        chmod 0600 "$AUTH_KEYS"
+        chown "$USER:$USER" "$AUTH_KEYS"
+        ;;
+
     *)
-        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging"
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys"
         ;;
 
 esac
@@ -1191,8 +1206,8 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/nginx/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-available/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-enabled/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/htpasswd/*
-# Home/backup deletion goes through the validated helper — no wildcard rm on /home
-jcwt-panel ALL=(root) NOPASSWD: /usr/local/sbin/panel-fsctl
+# Home/backup deletion & SSH key sync goes through the validated helper — no wildcard rm or tee on /home
+jcwt-panel ALL=(root) NOPASSWD: /usr/local/sbin/panel-fsctl *
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /var/lib/jcwt-panel/ssl/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/logrotate.d/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /run/php/php*-fpm-*.sock
@@ -1202,7 +1217,6 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/nginx/sites-available/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/php/*/fpm/pool.d/*.conf
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/logrotate.d/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /etc/default/ufw
-jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tee /usr/share/phpmyadmin/signon_*.php
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /usr/share/phpmyadmin/signon_*.php
 
@@ -1232,10 +1246,12 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd -c -B -b /etc/nginx/htpasswd/*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/htpasswd -B -b /etc/nginx/htpasswd/*
 
 # Firewall
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw status
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw status *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw allow *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw deny *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw delete *
+jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw disable
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force enable
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force reset
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw default *
