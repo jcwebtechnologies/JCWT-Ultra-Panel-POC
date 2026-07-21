@@ -48,6 +48,15 @@ func IsSSHEnabled(username string) bool {
 	return shell != "/usr/sbin/nologin" && shell != "/bin/false"
 }
 
+// FormatPrivateKey normalizes line endings to Unix \n and ensures a trailing newline.
+func FormatPrivateKey(key string) string {
+	k := strings.TrimSpace(strings.ReplaceAll(key, "\r\n", "\n"))
+	if k == "" {
+		return ""
+	}
+	return k + "\n"
+}
+
 // GenerateSSHKeyPair generates an SSH key pair and returns (publicKey, privateKey, fingerprint, error)
 func GenerateSSHKeyPair(keyType string, bits int, passphrase string) (string, string, string, error) {
 	tmpDir, err := exec.Command("mktemp", "-d").Output()
@@ -90,7 +99,7 @@ func GenerateSSHKeyPair(keyType string, bits int, passphrase string) (string, st
 	}
 	fingerprint := strings.TrimSpace(string(fpOut))
 
-	return strings.TrimSpace(string(pubKey)), strings.TrimSpace(string(privKey)), fingerprint, nil
+	return strings.TrimSpace(string(pubKey)), FormatPrivateKey(string(privKey)), fingerprint, nil
 }
 
 // GetSSHFingerprint returns the fingerprint of a public key string

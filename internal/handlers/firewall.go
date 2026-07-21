@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -13,6 +14,13 @@ import (
 	"github.com/jcwt/ultra-panel/internal/config"
 	"github.com/jcwt/ultra-panel/internal/db"
 )
+
+func execUFWCommand(args ...string) *exec.Cmd {
+	fullArgs := append([]string{"ufw"}, args...)
+	cmd := exec.Command("sudo", fullArgs...)
+	cmd.Env = append(os.Environ(), "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	return cmd
+}
 
 type FirewallHandler struct {
 	DB  *db.DB
@@ -56,7 +64,7 @@ func (h *FirewallHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	// Get ufw status
 	status := "unknown"
-	cmd := exec.Command("sudo", "ufw", "status")
+	cmd := execUFWCommand("status")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		out := string(output)
@@ -183,9 +191,9 @@ func (h *FirewallHandler) toggle(w http.ResponseWriter, r *http.Request) {
 
 	var cmd *exec.Cmd
 	if req.Enable {
-		cmd = exec.Command("sudo", "ufw", "--force", "enable")
+		cmd = execUFWCommand("--force", "enable")
 	} else {
-		cmd = exec.Command("sudo", "ufw", "disable")
+		cmd = execUFWCommand("disable")
 	}
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -210,9 +218,9 @@ func (h *FirewallHandler) syncRulesToUFW() {
 	}
 
 	// Reset ufw
-	exec.Command("sudo", "ufw", "--force", "reset").Run()
-	exec.Command("sudo", "ufw", "default", "deny", "incoming").Run()
-	exec.Command("sudo", "ufw", "default", "allow", "outgoing").Run()
+	execUFWCommand("--force", "reset").Run()
+	execUFWCommand("default", "deny", "incoming").Run()
+	execUFWCommand("default", "allow", "outgoing").Run()
 
 	// Apply all enabled DB rules (defaults are now stored in DB)
 	for _, rule := range rules {
@@ -228,7 +236,7 @@ func (h *FirewallHandler) syncRulesToUFW() {
 		applyUFWRule(action, direction, protocol, port, source)
 	}
 
-	exec.Command("sudo", "ufw", "--force", "enable").Run()
+	execUFWCommand("--force", "enable").Run()
 }
 
 // seedDefaults inserts the 4 essential rules into DB if the table is empty
@@ -249,10 +257,8 @@ func (h *FirewallHandler) seedDefaults() {
 }
 
 func applyUFWRule(action, direction, protocol, port, source string) error {
-	// Build ufw command: sudo ufw [allow|deny|reject] [in|out] [from <source>] [proto <protocol>] [to any port <port>]
-	args := []string{"sudo", "ufw"}
-
-	args = append(args, action)
+	// Build ufw command: ufw [allow|deny|reject] [in|out] [from <source>] [proto <protocol>] [to any port <port>]
+	args := []string{action}
 
 	if direction == "in" {
 		args = append(args, "in")
@@ -270,7 +276,7 @@ func applyUFWRule(action, direction, protocol, port, source string) error {
 
 	args = append(args, "to", "any", "port", port)
 
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := execUFWCommand(args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s: %s", err, string(output))

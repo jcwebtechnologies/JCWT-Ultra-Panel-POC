@@ -455,9 +455,9 @@ export async function renderSSHAccess(container, site, siteId) {
                             <button class="btn btn-primary ssh-copy-key">Copy</button>
                             <a class="btn btn-secondary ssh-dl-key" download="${escapeHtml(data.name)}.pem">Download</a>
                         `);
-                        // Normalize to Unix line endings (\n only) so the downloaded file
-                        // is not corrupted if copied/opened in Windows editors
-                        const keyContent = data.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                        // Normalize to Unix line endings (\n only) and ensure trailing newline
+                        let keyContent = data.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+                        if (keyContent) keyContent += '\n';
                         const blob = new Blob([keyContent], { type: 'application/octet-stream' });
                         document.querySelector('.ssh-dl-key').href = URL.createObjectURL(blob);
                         document.querySelector('.ssh-copy-key')?.addEventListener('click', () => {

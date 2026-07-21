@@ -225,8 +225,8 @@ install_packages() {
     echo "phpmyadmin phpmyadmin/reconfigure-webserver multiselect" | debconf-set-selections 2>/dev/null || true
     echo "phpmyadmin phpmyadmin/dbconfig-install boolean false" | debconf-set-selections 2>/dev/null || true
 
-    log_info "Preparing package list (Nginx, MariaDB, Redis, phpMyAdmin, Utilities)..."
-    CORE_PKGS="nginx libnginx-mod-http-headers-more-filter mariadb-server mariadb-client redis-server phpmyadmin openssl ufw curl wget jq build-essential apache2-utils certbot zip unzip imagemagick ghostscript"
+    log_info "Preparing package list (Nginx, MariaDB, Redis, phpMyAdmin, IPTables, Utilities)..."
+    CORE_PKGS="nginx libnginx-mod-http-headers-more-filter mariadb-server mariadb-client redis-server phpmyadmin iptables openssl ufw curl wget jq build-essential apache2-utils certbot zip unzip imagemagick ghostscript"
 
     PHP_EXTENSIONS="fpm cli mysql curl gd mbstring xml zip intl bcmath opcache readline redis sqlite3 imagick igbinary soap exif"
     PHP_PKGS=""
@@ -1118,6 +1118,9 @@ FSCTL_EOF
     cat > /etc/sudoers.d/jcwt-panel << 'EOF'
 # JCWT Ultra Panel - Scoped privileges for system management
 # NO wildcard bash, rm, tee — all file ops use specific arg patterns
+
+# Ensure full system PATH for sudo executions (resolves ufw/iptables version lookup)
+Defaults:jcwt-panel secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # User management (only useradd/userdel/usermod with controlled args)
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/useradd -m -d /home/[a-z]* -s /bin/bash [a-z]*

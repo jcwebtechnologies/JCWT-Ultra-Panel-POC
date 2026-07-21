@@ -147,7 +147,7 @@ func (h *SSHHandler) viewKey(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "no private key stored for this key", http.StatusNotFound)
 			return
 		}
-		jsonSuccess(w, map[string]interface{}{"content": content, "name": key["name"]})
+		jsonSuccess(w, map[string]interface{}{"content": system.FormatPrivateKey(content), "name": key["name"]})
 	} else {
 		jsonSuccess(w, map[string]interface{}{"content": key["public_key"], "name": key["name"]})
 	}
@@ -241,7 +241,7 @@ func (h *SSHHandler) uploadKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.PublicKey = strings.TrimSpace(req.PublicKey)
-	req.PrivateKey = strings.TrimSpace(req.PrivateKey)
+	req.PrivateKey = system.FormatPrivateKey(req.PrivateKey)
 
 	if req.KeyType == "" {
 		req.KeyType = "rsa"

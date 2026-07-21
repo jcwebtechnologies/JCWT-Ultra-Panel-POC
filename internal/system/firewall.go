@@ -23,6 +23,7 @@ func SetupIPv6Firewall(panelPort string) error {
 	for _, args := range commands {
 		fullArgs := append([]string{"sudo"}, args...)
 		cmd := exec.Command(fullArgs[0], fullArgs[1:]...)
+		cmd.Env = append(os.Environ(), "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("firewall command %v failed: %s: %s", args, err, string(output))
