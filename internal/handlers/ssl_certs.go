@@ -202,7 +202,6 @@ func (h *SSLCertsHandler) create(w http.ResponseWriter, r *http.Request) {
 		wpSt1 := loadWPToolsState(h.Cfg.DataDir, sysUser)
 		wpSec1 = nginx.BuildWPSecurityRules(wpSt1.AllowXMLRPC)
 	}
-	os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
 	vhostData := nginx.VHostData{
 		Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 		SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
@@ -211,12 +210,11 @@ func (h *SSLCertsHandler) create(w http.ResponseWriter, r *http.Request) {
 		ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
 		WordPressSecurityRules: wpSec1,
 	}
-	newTpl1, tplErr1 := nginx.GenerateVHostTemplate(vhostData)
-	if tplErr1 == nil {
-		saveVHostTemplate(h.Cfg.DataDir, domain, newTpl1)
+	if err := nginx.ApplyVHostUpdate(h.Cfg.DataDir, h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {
+		jsonError(w, fmt.Sprintf("failed to update vhost: %v", err), http.StatusInternalServerError)
+		return
 	}
-	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
-	nginx.TestAndReload()
+	nginx.Reload()
 
 	jsonSuccess(w, map[string]interface{}{
 		"id": id, "type": certType, "label": label, "cert_path": certPath,
@@ -270,7 +268,6 @@ func (h *SSLCertsHandler) activate(w http.ResponseWriter, r *http.Request) {
 		wpSt2 := loadWPToolsState(h.Cfg.DataDir, sysUser)
 		wpSec2 = nginx.BuildWPSecurityRules(wpSt2.AllowXMLRPC)
 	}
-	os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
 	vhostData2 := nginx.VHostData{
 		Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 		SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
@@ -279,12 +276,11 @@ func (h *SSLCertsHandler) activate(w http.ResponseWriter, r *http.Request) {
 		ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
 		WordPressSecurityRules: wpSec2,
 	}
-	newTpl2, tplErr2 := nginx.GenerateVHostTemplate(vhostData2)
-	if tplErr2 == nil {
-		saveVHostTemplate(h.Cfg.DataDir, domain, newTpl2)
+	if err := nginx.ApplyVHostUpdate(h.Cfg.DataDir, h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData2); err != nil {
+		jsonError(w, fmt.Sprintf("failed to update vhost: %v", err), http.StatusInternalServerError)
+		return
 	}
-	nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData2)
-	nginx.TestAndReload()
+	nginx.Reload()
 
 	jsonSuccess(w, map[string]interface{}{"message": "certificate activated"})
 }

@@ -32,7 +32,7 @@ func main() {
 	cfg := config.DefaultConfig()
 
 	var allowHTTP bool
-	flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "Listen address (default [::]:8443)")
+	flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "Listen address (default :8443 for dual-stack IPv4/IPv6)")
 	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "Data directory")
 	flag.BoolVar(&allowHTTP, "allow-http", false, "Allow plaintext HTTP (dev only)")
 	flag.Parse()

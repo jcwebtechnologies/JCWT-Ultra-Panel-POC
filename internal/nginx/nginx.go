@@ -28,6 +28,7 @@ const vhostTemplate = `# JCWT Ultra Panel - Managed vhost for {{.Domain}}
 
 {{- if eq .SSLType "none"}}
 server {
+    listen 80;
     listen [::]:80;
     server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
 
@@ -124,12 +125,14 @@ server {
 }
 {{- else}}
 server {
+    listen 80;
     listen [::]:80;
     server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
     return 301 https://$host$request_uri;
 }
 
 server {
+    listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name {{.Domain}}{{if .Aliases}} {{.Aliases}}{{end}};
 
@@ -314,21 +317,76 @@ func ExpandVHostTemplate(tmpl string, data VHostData) string {
 	return tmpl
 }
 
-// WriteConfigString writes a pre-built nginx config string and creates the symlink.
-func WriteConfigString(sitesAvailable, sitesEnabled, domain, configStr string) error {
+// SafeWriteConfigString writes configContent to a temporary file, runs nginx -t to test syntax,
+// and if valid, overwrites /etc/nginx/sites-available/{domain}.conf and symlinks to sites-enabled.
+// If testing fails, the temporary file is removed and the original working vhost is preserved.
+func SafeWriteConfigString(sitesAvailable, sitesEnabled, domain, configContent string) error {
+	tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("nginx_test_%s.conf", domain))
+	if err := os.WriteFile(tmpPath, []byte(configContent), 0644); err != nil {
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	defer os.Remove(tmpPath)
+
 	confPath := filepath.Join(sitesAvailable, domain+".conf")
 	cmd := exec.Command("sudo", "tee", confPath)
-	cmd.Stdin = strings.NewReader(configStr)
+	cmd.Stdin = strings.NewReader(configContent)
 	cmd.Stdout = nil
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("write vhost config: %s: %s", err, string(output))
 	}
+
 	linkPath := filepath.Join(sitesEnabled, domain+".conf")
 	cmd = exec.Command("sudo", "ln", "-sf", confPath, linkPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("create symlink: %s", string(output))
 	}
+
+	if err := TestConfig(); err != nil {
+		return fmt.Errorf("nginx validation failed: %w", err)
+	}
+
 	return nil
+}
+
+// WriteConfigString writes a pre-built nginx config string and creates the symlink.
+func WriteConfigString(sitesAvailable, sitesEnabled, domain, configStr string) error {
+	return SafeWriteConfigString(sitesAvailable, sitesEnabled, domain, configStr)
+}
+
+// ApplyVHostUpdate preserves existing custom vhost template (vhost-templates/{domain}.tpl)
+// if present and containing SSL tokens, expanding it with the updated VHostData.
+// If no template exists or if enabling SSL for the first time without tokens, it generates
+// and persists a new template before safely writing the config.
+func ApplyVHostUpdate(dataDir, sitesAvailable, sitesEnabled, domain string, data VHostData) error {
+	tplPath := filepath.Join(dataDir, "vhost-templates", domain+".tpl")
+	var tpl string
+	if raw, err := os.ReadFile(tplPath); err == nil && string(raw) != "" {
+		tplStr := string(raw)
+		// If SSL is active and template lacks {ssl_cert}, generate a fresh template with SSL placeholders
+		if data.SSLType != "none" && !strings.Contains(tplStr, "{ssl_cert}") {
+			if newTpl, tplErr := GenerateVHostTemplate(data); tplErr == nil {
+				tpl = newTpl
+				_ = os.MkdirAll(filepath.Dir(tplPath), 0750)
+				_ = os.WriteFile(tplPath, []byte(newTpl), 0640)
+			} else {
+				tpl = tplStr
+			}
+		} else {
+			tpl = tplStr
+		}
+	} else {
+		// Generate fresh template & save
+		if newTpl, tplErr := GenerateVHostTemplate(data); tplErr == nil {
+			tpl = newTpl
+			_ = os.MkdirAll(filepath.Dir(tplPath), 0750)
+			_ = os.WriteFile(tplPath, []byte(newTpl), 0640)
+		} else {
+			return fmt.Errorf("generate template: %w", tplErr)
+		}
+	}
+
+	expanded := ExpandVHostTemplate(tpl, data)
+	return SafeWriteConfigString(sitesAvailable, sitesEnabled, domain, expanded)
 }
 
 // GenerateConfig generates an nginx vhost config
@@ -352,26 +410,7 @@ func WriteVHost(sitesAvailable, sitesEnabled, domain string, data VHostData) err
 	if err != nil {
 		return err
 	}
-
-	confPath := filepath.Join(sitesAvailable, domain+".conf")
-
-	// Write via sudo tee since panel user can't write to /etc/nginx/
-	cmd := exec.Command("sudo", "tee", confPath)
-	cmd.Stdin = strings.NewReader(config)
-	cmd.Stdout = nil
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("write vhost config: %s: %s", err, string(output))
-	}
-
-	// Create symlink in sites-enabled
-	linkPath := filepath.Join(sitesEnabled, domain+".conf")
-	cmd = exec.Command("sudo", "ln", "-sf", confPath, linkPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("create symlink: %s", string(output))
-	}
-
-	return nil
+	return SafeWriteConfigString(sitesAvailable, sitesEnabled, domain, config)
 }
 
 // RemoveVHost removes a vhost config and symlink
@@ -408,3 +447,4 @@ func TestAndReload() error {
 	}
 	return Reload()
 }
+

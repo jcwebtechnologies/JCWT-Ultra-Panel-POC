@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"os/exec"
 	"strconv"
 
@@ -66,7 +65,6 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 			wpState := loadWPToolsState(h.Cfg.DataDir, sysUser)
 			wpSecurity = nginx.BuildWPSecurityRules(wpState.AllowXMLRPC)
 		}
-		os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
 		vhostData := nginx.VHostData{
 			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
@@ -75,12 +73,11 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 			ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
 			WordPressSecurityRules: wpSecurity,
 		}
-		newTpl, tplErr := nginx.GenerateVHostTemplate(vhostData)
-		if tplErr == nil {
-			saveVHostTemplate(h.Cfg.DataDir, domain, newTpl)
+		if err := nginx.ApplyVHostUpdate(h.Cfg.DataDir, h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {
+			jsonError(w, fmt.Sprintf("failed to update vhost: %v", err), http.StatusInternalServerError)
+			return
 		}
-		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
-		nginx.TestAndReload()
+		nginx.Reload()
 
 		jsonSuccess(w, map[string]interface{}{"ssl_type": "self-signed", "cert_path": certPath})
 
@@ -121,7 +118,6 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 			wpState2 := loadWPToolsState(h.Cfg.DataDir, sysUser)
 			wpSecurity2 = nginx.BuildWPSecurityRules(wpState2.AllowXMLRPC)
 		}
-		os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
 		vhostData := nginx.VHostData{
 			Domain: domain, Aliases: site["aliases"].(string), User: sysUser,
 			SiteType: siteType, PHPVersion: phpVersion, ProxyURL: proxyURL, WebRoot: webRoot,
@@ -130,12 +126,11 @@ func (h *SSLHandler) manage(w http.ResponseWriter, r *http.Request) {
 			ErrorLog:               func() bool { _, e := siteLogFlags(site); return e }(),
 			WordPressSecurityRules: wpSecurity2,
 		}
-		newTpl2, tplErr2 := nginx.GenerateVHostTemplate(vhostData)
-		if tplErr2 == nil {
-			saveVHostTemplate(h.Cfg.DataDir, domain, newTpl2)
+		if err := nginx.ApplyVHostUpdate(h.Cfg.DataDir, h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {
+			jsonError(w, fmt.Sprintf("failed to update vhost: %v", err), http.StatusInternalServerError)
+			return
 		}
-		nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData)
-		nginx.TestAndReload()
+		nginx.Reload()
 
 		if siteType == "wordpress" {
 			wpUpdateURLScheme(sysUser, phpVersion, webRoot, "https", domain)

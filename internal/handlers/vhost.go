@@ -3,10 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -141,18 +139,8 @@ func (h *VhostHandler) update(w http.ResponseWriter, r *http.Request) {
 	// Expand tokens → actual config
 	expanded := nginx.ExpandVHostTemplate(req.Config, vhostData)
 
-	confPath := filepath.Join(h.Cfg.NginxSitesAvailable, domain+".conf")
-	cmd := exec.Command("sudo", "tee", confPath)
-	cmd.Stdin = strings.NewReader(expanded)
-	cmd.Stdout = nil
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("Failed to write vhost %s: %s", confPath, strings.TrimSpace(string(output)))
-		jsonError(w, "failed to write vhost configuration", http.StatusInternalServerError)
-		return
-	}
-
-	if err := nginx.TestConfig(); err != nil {
-		jsonError(w, fmt.Sprintf("nginx config invalid: %v — config saved but not reloaded", err), http.StatusBadRequest)
+	if err := nginx.SafeWriteConfigString(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, expanded); err != nil {
+		jsonError(w, fmt.Sprintf("invalid vhost configuration: %v", err), http.StatusBadRequest)
 		return
 	}
 

@@ -28,7 +28,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	dataDir := getEnv("JCWT_DATA_DIR", "/var/lib/jcwt-panel")
 	return &Config{
-		ListenAddr:          getEnv("JCWT_LISTEN", "[::]:8443"),
+		ListenAddr:          getEnv("JCWT_LISTEN", ":8443"),
 		DataDir:             dataDir,
 		TLSCert:             filepath.Join(dataDir, "tls", "panel.crt"),
 		TLSKey:              filepath.Join(dataDir, "tls", "panel.key"),

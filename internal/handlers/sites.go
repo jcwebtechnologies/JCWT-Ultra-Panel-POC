@@ -945,29 +945,11 @@ func (h *SitesHandler) update(w http.ResponseWriter, r *http.Request) {
 		os.Rename(oldTplPath, newTplPath)
 	}
 
-	// Use existing template only if SSL type AND aliases are unchanged; any structural
-	// change forces a full regen so that {domain_aliases} is correctly inserted/removed.
-	oldSSLType := site["ssl_type"].(string)
-	oldAliases := site["aliases"].(string)
-	tplPath := vhostTemplatePath(h.Cfg.DataDir, req.Domain)
-	if tpl, tplErr := os.ReadFile(tplPath); tplErr == nil && oldSSLType == req.SSLType && oldAliases == req.Aliases {
-		expanded := nginx.ExpandVHostTemplate(string(tpl), vhostData)
-		if err := nginx.WriteConfigString(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, expanded); err != nil {
-			jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		// Full regen: generate template, save it, then apply
-		newTpl, tplGenErr := nginx.GenerateVHostTemplate(vhostData)
-		if tplGenErr == nil {
-			saveVHostTemplate(h.Cfg.DataDir, req.Domain, newTpl)
-		}
-		if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, vhostData); err != nil {
-			jsonError(w, fmt.Sprintf("failed to write nginx config: %v", err), http.StatusInternalServerError)
-			return
-		}
+	if err := nginx.ApplyVHostUpdate(h.Cfg.DataDir, h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, req.Domain, vhostData); err != nil {
+		jsonError(w, fmt.Sprintf("failed to update nginx config: %v", err), http.StatusInternalServerError)
+		return
 	}
-	nginx.TestAndReload()
+	nginx.Reload()
 
 	jsonSuccess(w, map[string]interface{}{"updated": true})
 }
@@ -1283,17 +1265,11 @@ func (h *SitesHandler) updateLogs(w http.ResponseWriter, r *http.Request) {
 		WordPressSecurityRules: wpSecurity,
 	}
 
-	// Log changes always force a full regen (structural change: on/off)
-	os.Remove(vhostTemplatePath(h.Cfg.DataDir, domain))
-	newTpl, tplGenErr := nginx.GenerateVHostTemplate(vhostData)
-	if tplGenErr == nil {
-		saveVHostTemplate(h.Cfg.DataDir, domain, newTpl)
-	}
-	if err := nginx.WriteVHost(h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {
+	if err := nginx.ApplyVHostUpdate(h.Cfg.DataDir, h.Cfg.NginxSitesAvailable, h.Cfg.NginxSitesEnabled, domain, vhostData); err != nil {
 		jsonError(w, fmt.Sprintf("failed to update nginx config: %v", err), http.StatusInternalServerError)
 		return
 	}
-	nginx.TestAndReload()
+	nginx.Reload()
 
 	jsonSuccess(w, map[string]interface{}{"updated": true})
 }

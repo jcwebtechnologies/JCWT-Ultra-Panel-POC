@@ -219,28 +219,28 @@ install_packages() {
     fi
     log_ok "Ondrej PHP PPA added"
 
-    step_header "Installing Core Services"
+    step_header "Installing Core Services & PHP"
 
-    # ---- Nginx ----
-    log_info "Installing Nginx web server..."
-    apt_run apt-get install -y nginx libnginx-mod-http-headers-more-filter
-    NGINX_VER=$(nginx -v 2>&1 | awk -F/ '{print $2}' || echo "unknown")
-    log_ok "Nginx ${BOLD}v${NGINX_VER}${NC} installed"
-
-    # ---- MariaDB ----
-    log_info "Installing MariaDB server and client..."
-    apt_run apt-get install -y mariadb-server mariadb-client
-    MARIA_VER=$(mariadbd --version 2>/dev/null | awk '{print $3}' || mysql --version 2>/dev/null | awk '{print $5}' | tr -d ',' || echo "unknown")
-    log_ok "MariaDB ${BOLD}${MARIA_VER}${NC} installed"
-
-    # ---- phpMyAdmin ----
-    log_info "Installing phpMyAdmin..."
+    # Pre-configure debconf for phpMyAdmin to avoid interactive prompts
     echo "phpmyadmin phpmyadmin/reconfigure-webserver multiselect" | debconf-set-selections 2>/dev/null || true
     echo "phpmyadmin phpmyadmin/dbconfig-install boolean false" | debconf-set-selections 2>/dev/null || true
-    apt_run apt-get install -y phpmyadmin
+
+    log_info "Preparing package list (Nginx, MariaDB, Redis, phpMyAdmin, Utilities)..."
+    CORE_PKGS="nginx libnginx-mod-http-headers-more-filter mariadb-server mariadb-client redis-server phpmyadmin openssl ufw curl wget jq build-essential apache2-utils certbot zip unzip imagemagick ghostscript"
+
+    PHP_EXTENSIONS="fpm cli mysql curl gd mbstring xml zip intl bcmath opcache readline redis sqlite3 imagick igbinary soap exif"
+    PHP_PKGS=""
+    for VER in 8.2 8.3 8.4; do
+        for EXT in $PHP_EXTENSIONS; do
+            PHP_PKGS="$PHP_PKGS php${VER}-${EXT}"
+        done
+    done
+
+    log_info "Installing core services, PHP 8.2, 8.3, 8.4 & extensions in a single optimized pass..."
+    log_detail "This single-pass installation optimizes speed for all system types..."
+    apt_run apt-get install -y $CORE_PKGS $PHP_PKGS
 
     # Remove any phpMyAdmin nginx configs the package may drop in conf.d
-    # (these contain bare 'location' blocks that are invalid at http{} level)
     rm -f /etc/nginx/conf.d/phpmyadmin.conf
     rm -f /etc/nginx/conf.d/jcwt-phpmyadmin.conf
     rm -f /etc/nginx/conf.d/*phpmyadmin*
@@ -271,12 +271,11 @@ PMACONF
             fi
         done
 
-        # Create persistent signon landing page (shown on logout / expired session)
+        # Create persistent signon landing page
         cat > /usr/share/phpmyadmin/jcwt_signon.php << 'SIGNONPHP'
 <?php
 session_name('SignonSession');
 session_start();
-// Clear any stale session data
 $_SESSION = array();
 session_destroy();
 ?>
@@ -316,10 +315,10 @@ session_destroy();
 </html>
 SIGNONPHP
 
-        # Nginx snippet for /pma/ URL (included inside server blocks via 'include')
+        # Nginx snippet for /pma/ URL
         mkdir -p /etc/nginx/snippets
         cat > /etc/nginx/snippets/phpmyadmin.conf << 'PMANGINX'
-# JCWT Ultra Panel — phpMyAdmin location block (included inside server{})
+# JCWT Ultra Panel — phpMyAdmin location block
 location /pma/ {
     alias /usr/share/phpmyadmin/;
     index index.php;
@@ -335,84 +334,26 @@ location /pma/ {
     }
 }
 PMANGINX
-        log_ok "phpMyAdmin installed (signon auth via panel)"
-    else
-        log_warn "phpMyAdmin directory not found"
-        # Create empty snippet so nginx include doesn't fail
-        mkdir -p /etc/nginx/snippets
-        echo "# phpMyAdmin not installed" > /etc/nginx/snippets/phpmyadmin.conf
+        log_ok "Core services, phpMyAdmin & PHP 8.2, 8.3, 8.4 installed"
     fi
 
-    step_header "Installing PHP Versions"
-
-    PHP_EXTENSIONS="fpm cli mysql curl gd mbstring xml zip intl bcmath opcache readline redis sqlite3 imagick igbinary soap exif"
-
-    for VER in 8.2 8.3 8.4; do
-        log_info "Installing PHP ${BOLD}$VER${NC} Core..."
-        
-        # Install Core first to reduce apt memory pressure on 512MB instances (t4g.nano)
-        apt_run apt-get install -y php${VER}-fpm php${VER}-cli
-
-        log_info "Installing PHP ${BOLD}$VER${NC} Extensions..."
-        
-        # Build extension package list
-        PKG_LIST=""
-        for EXT in $PHP_EXTENSIONS; do
-            if [[ "$EXT" != "fpm" && "$EXT" != "cli" ]]; then
-                PKG_LIST="$PKG_LIST php${VER}-${EXT}"
-            fi
-        done
-
-        # Show what we're installing
-        EXT_COUNT=$(echo "$PHP_EXTENSIONS" | wc -w | tr -d ' ')
-        log_detail "Installing extensions: $(echo $PKG_LIST | sed 's/php[0-9.]*-//g' | sed 's/ /, /g')"
-
-        # Install extensions in a separate transaction
-        apt_run apt-get install -y $PKG_LIST
-
-        # Verify
-        PHP_FULL_VER=$(php${VER} -v 2>/dev/null | head -1 | awk '{print $2}' || echo "$VER.x")
-        log_ok "PHP ${BOLD}${PHP_FULL_VER}${NC} installed with ${EXT_COUNT} extensions"
-    done
-
-    # Reload systemd units after PHP package installs to prevent
-    # "unit file changed on disk" warnings during trigger processing
+    # Reload systemd units after package installs
     systemctl daemon-reload 2>/dev/null || true
 
-    # PHP 8.5 — try but don't fail (some extensions may not exist yet)
+    # PHP 8.5 — optional check in 1 batched pass
     if apt-cache show php8.5-fpm > /dev/null 2>&1; then
-        log_info "Installing PHP ${BOLD}8.5${NC} with extensions..."
-        PHP85_INSTALLED=0
-        PHP85_SKIPPED=0
+        log_info "Checking PHP 8.5 availability..."
+        PHP85_PKGS=""
         for EXT in $PHP_EXTENSIONS; do
-            PKG="php8.5-${EXT}"
-            if apt-cache show "$PKG" > /dev/null 2>&1; then
-                if apt-get install -y "$PKG" > /dev/null 2>&1; then
-                    log_pkg "$PKG"
-                    PHP85_INSTALLED=$((PHP85_INSTALLED + 1))
-                else
-                    log_pkg "$PKG (failed)"
-                    PHP85_SKIPPED=$((PHP85_SKIPPED + 1))
-                fi
-            else
-                PHP85_SKIPPED=$((PHP85_SKIPPED + 1))
+            if apt-cache show "php8.5-${EXT}" > /dev/null 2>&1; then
+                PHP85_PKGS="$PHP85_PKGS php8.5-${EXT}"
             fi
         done
-        if [ "$PHP85_INSTALLED" -gt 0 ]; then
-            PHP85_VER=$(php8.5 -v 2>/dev/null | head -1 | awk '{print $2}' || echo "8.5.x")
-            log_ok "PHP ${BOLD}${PHP85_VER}${NC} installed ($PHP85_INSTALLED extensions, $PHP85_SKIPPED skipped)"
-        else
-            log_warn "PHP 8.5 packages exist but none installed successfully"
+        if [ -n "$PHP85_PKGS" ]; then
+            apt_run apt-get install -y $PHP85_PKGS || true
+            log_ok "PHP 8.5 installed"
         fi
-    else
-        log_warn "PHP 8.5 is not yet available in the repository — skipping"
     fi
-
-    # ---- Utilities ----
-    log_info "Installing utilities (openssl, ufw, curl, wget, jq, gcc, certbot)..."
-    UTIL_PKGS="openssl ufw curl wget jq build-essential apache2-utils certbot zip unzip imagemagick ghostscript"
-    apt_run apt-get install -y $UTIL_PKGS
-    log_ok "Utilities installed"
 
     # ---- Redis Server ----
     step_header "Installing Redis Server"
@@ -763,6 +704,7 @@ DEFAULTHTML
 # JCWT Ultra Panel — Default catch-all vhost
 # Serves a welcome page for any domain not matching a configured site
 server {
+    listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
 
@@ -784,6 +726,7 @@ server {
 
 # HTTPS catch-all — returns the same welcome page for unrecognized domains on 443
 server {
+    listen 443 ssl default_server;
     listen [::]:443 ssl default_server;
     server_name _;
 
@@ -1036,7 +979,7 @@ Wants=mariadb.service nginx.service
 Type=simple
 User=$PANEL_USER
 Group=$PANEL_USER
-ExecStart=$PANEL_BIN --data-dir $DATA_DIR --listen [::]:$PANEL_PORT
+ExecStart=$PANEL_BIN --data-dir $DATA_DIR --listen :$PANEL_PORT
 Restart=always
 RestartSec=5
 StandardOutput=append:$LOG_DIR/panel.log
@@ -1066,7 +1009,7 @@ WantedBy=multi-user.target
 EOF
     log_detail "Service: /etc/systemd/system/jcwt-panel.service"
     log_detail "User: $PANEL_USER"
-    log_detail "Exec: $PANEL_BIN --data-dir $DATA_DIR --listen [::]:$PANEL_PORT"
+    log_detail "Exec: $PANEL_BIN --data-dir $DATA_DIR --listen :$PANEL_PORT"
 
     log_info "Installing privileged filesystem helper..."
     cat > /usr/local/sbin/panel-fsctl << 'FSCTL_EOF'
@@ -1461,7 +1404,14 @@ print_banner() {
 
     echo -e "  ${BOLD}Access Your Panel${NC}"
     echo -e "  ─────────────────────────────────────────"
-    echo -e "  ${CYAN}URL:${NC}       https://[${IPV6_ADDR}]:${PANEL_PORT}"
+    if [ -n "${IPV4_ADDR:-}" ] && [ "$IPV4_ADDR" != "none" ]; then
+        echo -e "  ${CYAN}IPv4 URL:${NC}  https://${IPV4_ADDR}:${PANEL_PORT}"
+    fi
+    if [ -n "${IPV6_ADDR:-}" ] && [ "$IPV6_ADDR" != "::1" ]; then
+        echo -e "  ${CYAN}IPv6 URL:${NC}  https://[${IPV6_ADDR}]:${PANEL_PORT}"
+    elif [ -z "${IPV4_ADDR:-}" ]; then
+        echo -e "  ${CYAN}URL:${NC}       https://[${IPV6_ADDR}]:${PANEL_PORT}"
+    fi
     echo ""
 
     # Check whether setup is still needed by querying the running panel API.
