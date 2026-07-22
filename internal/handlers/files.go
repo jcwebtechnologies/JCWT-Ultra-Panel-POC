@@ -270,11 +270,21 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	dbPath := filepath.Join(panelDir, fmt.Sprintf("filebrowser-%d.db", siteID))
 	fbBin := getFileBrowserBin()
 
-	// Check if DB exists by running config cat with filebrowser (runs as sysUser)
+	// Check if DB exists
 	dbExists := exec.Command("sudo", "-u", sysUser, fbBin, "config", "cat", "--database", dbPath).Run() == nil
 
+	// If DB exists, check if it was initialized with shell execution. If not, reset it so full command permissions take effect.
+	if dbExists {
+		cfgOut, _ := exec.Command("sudo", "-u", sysUser, fbBin, "config", "cat", "--database", dbPath).CombinedOutput()
+		if !strings.Contains(string(cfgOut), "bash") || !strings.Contains(string(cfgOut), "zip") {
+			relDbPath, _ := filepath.Rel("/home/"+sysUser, dbPath)
+			exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, relDbPath).Run()
+			dbExists = false
+		}
+	}
+
 	if !dbExists {
-		// Initialize fresh database WITH noauth in a single step.
+		// Initialize fresh database WITH noauth
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			fbBin, "config", "init",
 			"--database", dbPath,
@@ -284,21 +294,21 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 			return 0, fmt.Errorf("filebrowser config init failed: %s", strings.TrimSpace(string(out)))
 		}
 
-		// noauth requires at least one user record (ID 1) to auto-login as.
-		// Admin with full file & command permissions (archive/extract needs create+modify+execute).
+		// Add admin user with full file & command execution permissions
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			fbBin, "users", "add", "fbuser", "admin-noauth-panel",
-			"--perm.admin=true",
-			"--perm.create=true",
-			"--perm.delete=true",
-			"--perm.rename=true",
-			"--perm.modify=true",
-			"--perm.download=true",
-			"--perm.execute=true",
+			"--perm.admin",
+			"--perm.create",
+			"--perm.delete",
+			"--perm.rename",
+			"--perm.modify",
+			"--perm.download",
+			"--perm.execute",
 			"--viewMode", "mosaic",
 			"--aceEditorTheme", "chrome",
 			"--lockPassword",
 			"--hideDotfiles",
+			"--commands", "zip,unzip,tar,gzip,gunzip,cp,mv,rm,mkdir",
 			"--database", dbPath,
 		).CombinedOutput(); err != nil {
 			log.Printf("File Browser users add failed for site %d: %v: %s", siteID, err, string(out))
@@ -306,24 +316,12 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		}
 	}
 
-	// Always update user permissions & global config — runs for BOTH new and existing DBs.
-	exec.Command("sudo", "-u", sysUser,
-		fbBin, "users", "update", "fbuser",
-		"--perm.admin=true",
-		"--perm.create=true",
-		"--perm.delete=true",
-		"--perm.download=true",
-		"--perm.execute=true",
-		"--perm.modify=true",
-		"--perm.rename=true",
-		"--commands", "zip unzip tar gzip gunzip",
-		"--database", dbPath,
-	).Run()
-
+	// Always update global config with shell execution and user permissions for both new and existing DBs.
 	if out, err := exec.Command("sudo", "-u", sysUser,
 		fbBin, "config", "set",
 		"--database", dbPath,
 		"--auth.method", "noauth",
+		"--shell", "bash -c",
 		"--aceEditorTheme", "chrome",
 		"--branding.theme", "light",
 		"--branding.name", "Neo File Manager",
@@ -332,10 +330,22 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"--lockPassword",
 		"--hideDotfiles",
 		"--viewMode", "mosaic",
-		"--commands", "zip unzip tar gzip gunzip",
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
 	}
+
+	exec.Command("sudo", "-u", sysUser,
+		fbBin, "users", "update", "fbuser",
+		"--perm.admin",
+		"--perm.create",
+		"--perm.delete",
+		"--perm.download",
+		"--perm.execute",
+		"--perm.modify",
+		"--perm.rename",
+		"--commands", "zip,unzip,tar,gzip,gunzip,cp,mv,rm,mkdir",
+		"--database", dbPath,
+	).Run()
 
 	cmd := exec.Command("sudo", "-u", sysUser,
 		fbBin,

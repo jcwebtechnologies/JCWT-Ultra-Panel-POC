@@ -197,6 +197,7 @@ case "$COMMAND" in
         ALLOWED=false
         [[ "$REAL" == "$HOME_DIR/tmp/"* ]] && ALLOWED=true
         [[ "$REAL" == "$HOME_DIR/backups/staging-"* ]] && ALLOWED=true
+        [[ "$REAL" == "$HOME_DIR/"*".panel/filebrowser-"*.db ]] && ALLOWED=true
         $ALLOWED || die "path $REAL not in an allowed staging area"
         [[ -e "$REAL" ]] || exit 0
         safe_rm "$REAL"

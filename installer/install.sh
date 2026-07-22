@@ -1077,19 +1077,17 @@ case "$COMMAND" in
         ;;
 
     delete-staging)
-        [[ $# -eq 2 ]] || die "usage: delete-staging <user> <relpath>"
-        USER="$1"
-        RELPATH="$2"
+        USER="${1:-}"
+        RELPATH="${2:-}"
         validate_user "$USER"
         HOME_DIR="/home/$USER"
-        REAL=$(assert_under "$HOME_DIR/$RELPATH" "$HOME_DIR")
-        [[ "$REAL" != "$HOME_DIR" ]] \
-            || die "refusing to delete the home root itself via delete-staging"
+        TARGET="$HOME_DIR/$RELPATH"
+        REAL=$(realpath -m "$TARGET" 2>/dev/null) || die "cannot resolve path: $TARGET"
         ALLOWED=false
-        [[ "$REAL" == "$HOME_DIR/tmp" || "$REAL" == "$HOME_DIR/tmp/"* ]] && ALLOWED=true
+        [[ "$REAL" == "$HOME_DIR/tmp/"* ]] && ALLOWED=true
         [[ "$REAL" == "$HOME_DIR/backups/staging-"* ]] && ALLOWED=true
-        $ALLOWED \
-            || die "path $REAL not in an allowed staging area (tmp/ or backups/staging-*)"
+        [[ "$REAL" == "$HOME_DIR/"*".panel/filebrowser-"*.db ]] && ALLOWED=true
+        $ALLOWED || die "path $REAL not in an allowed staging area"
         [[ -e "$REAL" ]] || exit 0
         safe_rm "$REAL"
         ;;
