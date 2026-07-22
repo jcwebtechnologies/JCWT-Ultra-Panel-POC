@@ -285,12 +285,16 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		}
 
 		// noauth requires at least one user record (ID 1) to auto-login as.
-		// Non-admin with all file-operation permissions (archive/extract needs create+modify).
+		// Admin with full file & command permissions (archive/extract needs create+modify+execute).
 		if out, err := exec.Command("sudo", "-u", sysUser,
 			fbBin, "users", "add", "fbuser", "admin-noauth-panel",
-			"--perm.admin=false",
-			"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
-			"--perm.download", "--perm.execute",
+			"--perm.admin=true",
+			"--perm.create=true",
+			"--perm.delete=true",
+			"--perm.rename=true",
+			"--perm.modify=true",
+			"--perm.download=true",
+			"--perm.execute=true",
 			"--viewMode", "mosaic",
 			"--aceEditorTheme", "chrome",
 			"--lockPassword",
@@ -302,7 +306,20 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		}
 	}
 
-	// Always apply config — runs for BOTH new and existing DBs.
+	// Always update user permissions & global config — runs for BOTH new and existing DBs.
+	exec.Command("sudo", "-u", sysUser,
+		fbBin, "users", "update", "fbuser",
+		"--perm.admin=true",
+		"--perm.create=true",
+		"--perm.delete=true",
+		"--perm.download=true",
+		"--perm.execute=true",
+		"--perm.modify=true",
+		"--perm.rename=true",
+		"--commands", "zip unzip tar gzip gunzip",
+		"--database", dbPath,
+	).Run()
+
 	if out, err := exec.Command("sudo", "-u", sysUser,
 		fbBin, "config", "set",
 		"--database", dbPath,
@@ -315,7 +332,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		"--lockPassword",
 		"--hideDotfiles",
 		"--viewMode", "mosaic",
-		"--commands", "zip,unzip,tar",
+		"--commands", "zip unzip tar gzip gunzip",
 	).CombinedOutput(); err != nil {
 		log.Printf("File Browser config set failed for site %d (non-fatal): %v: %s", siteID, err, string(out))
 	}
