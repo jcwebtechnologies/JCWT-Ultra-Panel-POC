@@ -885,25 +885,23 @@ setup_panel() {
 install_binary() {
     step_header "Installing Panel Binary"
 
+    export PATH=$PATH:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     PROJECT_DIR="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd || echo "")"
+    if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR" ]; then
+        PROJECT_DIR="$(pwd)"
+    fi
 
-    # Check if the binary exists in the current directory or build it
-    if [ -f "./jcwt-panel" ]; then
-        log_info "Found pre-built binary in current directory"
-        cp ./jcwt-panel "$PANEL_BIN"
-        log_ok "Binary copied to $PANEL_BIN"
-    elif [ -f "$PROJECT_DIR/jcwt-panel" ]; then
-        log_info "Found pre-built binary in project root"
-        cp "$PROJECT_DIR/jcwt-panel" "$PANEL_BIN"
-        log_ok "Binary copied to $PANEL_BIN"
-    elif [ -f "$PROJECT_DIR/cmd/jcwt-panel/main.go" ]; then
-        log_info "Source code found — building from source..."
+    # Remove any stale local binary files so they never override source compilation
+    rm -f "$PROJECT_DIR/jcwt-panel" "./jcwt-panel" "/tmp/jcwt-panel-new" 2>/dev/null || true
+
+    if [ -f "$PROJECT_DIR/cmd/jcwt-panel/main.go" ]; then
+        log_info "Source code found ($PROJECT_DIR/cmd/jcwt-panel/main.go) — building latest binary..."
 
         if ! command -v go > /dev/null 2>&1; then
-            log_info "Go not found — installing Go toolchain..."
+            log_info "Go not found in PATH — installing Go toolchain..."
 
-            # Detect architecture for Go download
             case "$(uname -m)" in
                 aarch64|arm64) GO_ARCH="arm64" ;;
                 x86_64)        GO_ARCH="amd64" ;;
@@ -916,14 +914,12 @@ install_binary() {
             wget -q --show-progress "$GO_URL" -O /tmp/go.tar.gz
             tar -C /usr/local -xzf /tmp/go.tar.gz
             export PATH=$PATH:/usr/local/go/bin
-            rm /tmp/go.tar.gz
+            rm -f /tmp/go.tar.gz
             log_ok "Go ${GOVERSION} (${GO_ARCH}) installed"
         else
             GO_INSTALLED=$(go version | awk '{print $3}')
-            log_ok "Go already installed: $GO_INSTALLED"
+            log_ok "Go toolchain detected: $GO_INSTALLED"
         fi
-
-        export PATH=$PATH:/usr/local/go/bin
 
         cd "$PROJECT_DIR"
 
@@ -931,29 +927,23 @@ install_binary() {
         go mod tidy 2>&1 | { grep -v "^$" || true; } | while read -r line; do
             log_detail "$line"
         done
-        log_ok "Dependencies resolved (go.sum generated)"
+        log_ok "Dependencies resolved"
 
-        log_info "Building JCWT Ultra Panel binary (this may take a minute)..."
-        log_detail "CGO_ENABLED=1 go build -o $PANEL_BIN ./cmd/jcwt-panel/"
+        log_info "Building JCWT Ultra Panel binary..."
         if CGO_ENABLED=1 go build -o "$PANEL_BIN" ./cmd/jcwt-panel/ 2>&1; then
             log_ok "Compilation successful"
         else
-            log_error "Compilation failed — see errors above"
+            log_error "Compilation failed"
+            exit 1
         fi
 
         cd - > /dev/null
-
-        if [ ! -f "$PANEL_BIN" ]; then
-            log_error "Build failed — binary not created at $PANEL_BIN"
-            log_error "Check: cd $PROJECT_DIR && go build -v ./cmd/jcwt-panel/"
-            exit 1
-        fi
-        log_ok "Panel binary built successfully"
+    elif [ -f "$SCRIPT_DIR/jcwt-panel" ]; then
+        log_info "Installing pre-built binary from $SCRIPT_DIR/jcwt-panel..."
+        cp "$SCRIPT_DIR/jcwt-panel" "$PANEL_BIN"
     else
         log_error "Panel binary not found!"
-        log_error "Either:"
-        log_error "  • Place a pre-built 'jcwt-panel' binary in the current directory"
-        log_error "  • Or run this installer from the project root (with cmd/jcwt-panel/main.go)"
+        log_error "Either place a pre-built 'jcwt-panel' binary or run installer from source root."
         exit 1
     fi
 

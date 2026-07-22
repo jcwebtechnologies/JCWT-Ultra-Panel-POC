@@ -84,35 +84,43 @@ echo -e "${NC}"
 # ---- Step 1: Build / Update Panel Binary ----
 step_header "Updating Panel Binary"
 
+export PATH=$PATH:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 UPDATED=false
 
-if [ -n "$PROJECT_DIR" ] && command -v go >/dev/null 2>&1; then
-    log_info "Building latest binary from Go source ($PROJECT_DIR)..."
+# Remove any stale local pre-built binary files so they don't override compilation
+rm -f "$PROJECT_DIR/jcwt-panel" "./jcwt-panel" "$SCRIPT_DIR/jcwt-panel" "/tmp/jcwt-panel-new" 2>/dev/null || true
+
+if [ -n "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/cmd/jcwt-panel/main.go" ]; then
+    log_info "Source code found ($PROJECT_DIR/cmd/jcwt-panel/main.go) — building latest binary..."
+    if ! command -v go >/dev/null 2>&1; then
+        log_warn "Go compiler not found in PATH — installing Go..."
+        case "$(uname -m)" in
+            aarch64|arm64) GO_ARCH="arm64" ;;
+            x86_64)        GO_ARCH="amd64" ;;
+            *)             GO_ARCH="amd64" ;;
+        esac
+        GOVERSION="1.22.5"
+        GO_URL="https://go.dev/dl/go${GOVERSION}.linux-${GO_ARCH}.tar.gz"
+        wget -q --show-progress "$GO_URL" -O /tmp/go.tar.gz
+        tar -C /usr/local -xzf /tmp/go.tar.gz
+        export PATH=$PATH:/usr/local/go/bin
+        rm -f /tmp/go.tar.gz
+    fi
+
     cd "$PROJECT_DIR"
-    if go build -o /tmp/jcwt-panel-new ./cmd/jcwt-panel/; then
-        mv /tmp/jcwt-panel-new "$PANEL_BIN"
+    go mod tidy 2>/dev/null || true
+    if CGO_ENABLED=1 go build -o "$PANEL_BIN" ./cmd/jcwt-panel/; then
         UPDATED=true
         log_ok "Compiled and installed latest panel binary"
     else
-        log_warn "Compilation failed — preserving existing panel binary"
+        die "Compilation failed — see errors above"
     fi
-elif [ -f "$SCRIPT_DIR/jcwt-panel" ]; then
-    log_info "Installing pre-built binary from $SCRIPT_DIR/jcwt-panel..."
-    cp "$SCRIPT_DIR/jcwt-panel" "$PANEL_BIN"
+elif [ -f "$PANEL_BIN" ]; then
+    log_ok "Panel binary found at $PANEL_BIN (re-asserting permissions)"
     UPDATED=true
-    log_ok "Updated panel binary from pre-built package"
-elif [ -f "./jcwt-panel" ]; then
-    log_info "Installing pre-built binary from ./jcwt-panel..."
-    cp "./jcwt-panel" "$PANEL_BIN"
-    UPDATED=true
-    log_ok "Updated panel binary"
 else
-    if [ -f "$PANEL_BIN" ]; then
-        log_ok "Panel binary found at $PANEL_BIN (re-asserting permissions)"
-        UPDATED=true
-    else
-        die "No binary or Go compiler found! Place binary at $PANEL_BIN or run from source root."
-    fi
+    die "No source code or Go binary found! Run updater from project source root."
 fi
 
 chmod +x "$PANEL_BIN"
