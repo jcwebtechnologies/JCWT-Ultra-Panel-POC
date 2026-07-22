@@ -147,6 +147,14 @@ export async function render(container) {
                                 </div>
                             </div>
                             <div class="form-group">
+                                <label class="form-label">WordPress Source</label>
+                                <select class="form-select" id="wp-source">
+                                    <option value="repo" selected>WordPress Official Repo (Always Fetch Latest)</option>
+                                    <option value="cache">Local Cache (Fast Installation)</option>
+                                </select>
+                                <div class="form-help">"Official Repo" downloads the newest release from wordpress.org. "Local Cache" reuses the saved archive on disk.</div>
+                            </div>
+                            <div class="form-group">
                                 <label class="form-label">Table Prefix</label>
                                 <input type="text" class="form-input" id="wp-table-prefix" placeholder="wp_" value="wp_" autocomplete="off" maxlength="20" pattern="^[a-zA-Z_][a-zA-Z0-9_]*_$">
                                 <div class="form-help">Must end with underscore. Letters, numbers, underscore only.</div>
@@ -279,6 +287,7 @@ export async function render(container) {
                     data.wp_admin_password = wpPass;
                     data.wp_site_title = wpTitle;
                     data.wp_table_prefix = wpTablePrefix;
+                    data.wp_source = document.getElementById('wp-source')?.value || 'repo';
                 }
 
                 // Show progress spinner — disable all modal interactions

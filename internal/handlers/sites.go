@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jcwt/ultra-panel/internal/config"
 	"github.com/jcwt/ultra-panel/internal/db"
@@ -375,6 +377,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 		WPAdminPass   string `json:"wp_admin_password"`
 		WPSiteTitle   string `json:"wp_site_title"`
 		WPTablePrefix string `json:"wp_table_prefix"`
+		WPSource      string `json:"wp_source"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -552,7 +555,7 @@ func (h *SitesHandler) create(w http.ResponseWriter, r *http.Request) {
 
 	// WordPress setup: download, extract, create DB/user, generate wp-config.php
 	if req.SiteType == "wordpress" {
-		if err := h.setupWordPress(id, req.Domain, req.SystemUser, webRoot, req.PHPVersion, req.WPAdminUser, req.WPAdminEmail, req.WPAdminPass, req.WPSiteTitle, req.WPTablePrefix); err != nil {
+		if err := h.setupWordPress(id, req.Domain, req.SystemUser, webRoot, req.PHPVersion, req.WPAdminUser, req.WPAdminEmail, req.WPAdminPass, req.WPSiteTitle, req.WPTablePrefix, req.WPSource); err != nil {
 			cleanupSite()
 			jsonError(w, fmt.Sprintf("WordPress setup failed: %v", err), http.StatusInternalServerError)
 			return
@@ -632,20 +635,60 @@ func generatePassword(length int) string {
 	return hex.EncodeToString(b)[:length]
 }
 
+func downloadFile(url, destPath string, forceFetch bool) error {
+	if !forceFetch {
+		if info, err := os.Stat(destPath); err == nil && time.Since(info.ModTime()) < 24*time.Hour && info.Size() > 1000000 {
+			log.Printf("Reusing cached WordPress archive at %s (modified %v ago)", destPath, time.Since(info.ModTime()).Round(time.Second))
+			return nil
+		}
+	}
+
+	log.Printf("Fetching fresh WordPress release from %s...", url)
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP server returned status: %s", resp.Status)
+	}
+
+	tmpFile := destPath + ".tmp"
+	out, err := os.Create(tmpFile)
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		os.Remove(tmpFile)
+		return fmt.Errorf("write stream failed: %w", err)
+	}
+	out.Close()
+
+	return os.Rename(tmpFile, destPath)
+}
+
 // setupWordPress downloads, extracts, and configures WordPress
-func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, phpVersion, wpAdminUser, wpAdminEmail, wpAdminPass, wpSiteTitle, wpTablePrefix string) error {
+func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, phpVersion, wpAdminUser, wpAdminEmail, wpAdminPass, wpSiteTitle, wpTablePrefix, wpSource string) error {
 	homeDir := filepath.Dir(webRoot)
 	tmpDir := filepath.Join(homeDir, "tmp")
 
-	// Download latest WordPress
-	wpArchive := filepath.Join(tmpDir, "wordpress.tar.gz")
-	cmd := exec.Command("sudo", "wget", "-q", "https://wordpress.org/latest.tar.gz", "-O", wpArchive)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("download WordPress: %s", string(output))
+	exec.Command("sudo", "mkdir", "-p", tmpDir).Run()
+	exec.Command("sudo", "chown", sysUser+":"+sysUser, tmpDir).Run()
+
+	// Download latest WordPress directly into /tmp (unprivileged HTTP download — no sudo needed)
+	wpArchive := "/tmp/wordpress-latest.tar.gz"
+	forceFetch := (strings.ToLower(wpSource) != "cache")
+
+	if err := downloadFile("https://wordpress.org/latest.tar.gz", wpArchive, forceFetch); err != nil {
+		return fmt.Errorf("download WordPress: %v", err)
 	}
 
 	// Extract WordPress to webroot (tar extracts to wordpress/ subfolder)
-	cmd = exec.Command("sudo", "tar", "-xzf", wpArchive, "-C", tmpDir)
+	cmd := exec.Command("sudo", "tar", "-xzf", wpArchive, "-C", tmpDir)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("extract WordPress: %s", string(output))
 	}
@@ -655,9 +698,7 @@ func (h *SitesHandler) setupWordPress(siteID int64, domain, sysUser, webRoot, ph
 	exec.Command("sudo", "rsync", "-a", "--delete", wpExtracted+"/", webRoot+"/").Run()
 	// Clean up WordPress temp files via the validated filesystem helper.
 	wpExtRel, _ := filepath.Rel(homeDir, wpExtracted)
-	wpArcRel, _ := filepath.Rel(homeDir, wpArchive)
 	exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, wpExtRel).Run()
-	exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, wpArcRel).Run()
 
 	// Fix ownership before running WP-CLI so the site user can write wp-config.php
 	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, webRoot).Run()
