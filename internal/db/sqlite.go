@@ -688,6 +688,19 @@ func (d *DB) ListBackupMethods() ([]map[string]interface{}, error) {
 	return methods, nil
 }
 
+func (d *DB) GetBackupMethod(id int64) (map[string]interface{}, error) {
+	var mId int64
+	var enabled int
+	var name, mtype, config, created string
+	err := d.Conn.QueryRow("SELECT id, name, type, config, enabled, created_at FROM backup_methods WHERE id = ?", id).Scan(&mId, &name, &mtype, &config, &enabled, &created)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"id": mId, "name": name, "type": mtype, "config": config, "enabled": enabled == 1, "created_at": created,
+	}, nil
+}
+
 func (d *DB) CreateBackupMethod(name, mtype, config string) (int64, error) {
 	res, err := d.Conn.Exec("INSERT INTO backup_methods (name, type, config) VALUES (?, ?, ?)", name, mtype, config)
 	if err != nil {
