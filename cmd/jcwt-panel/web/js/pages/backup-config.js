@@ -34,17 +34,27 @@ export async function render(container) {
                 }
                 listEl.innerHTML = methods.map(m => {
                     let cfgDetail = '';
-                    if (m.type === 'sftp') {
-                        try {
-                            const c = typeof m.config === 'string' ? JSON.parse(m.config) : (m.config || {});
+                    const mType = (m.type || '').toLowerCase();
+                    try {
+                        const c = typeof m.config === 'string' ? JSON.parse(m.config) : (m.config || {});
+                        if (mType === 'sftp') {
                             if (c.host) cfgDetail = ` • ${escapeHtml(c.host)}:${c.port || 22} (${escapeHtml(c.remote_path || '/backups/jcwt-panel')})`;
-                        } catch (e) {}
-                    }
+                        } else if (mType === 'local') {
+                            if (c.path) cfgDetail = ` • ${escapeHtml(c.path)}`;
+                        } else if (mType === 's3') {
+                            if (c.bucket) cfgDetail = ` • s3://${escapeHtml(c.bucket)}`;
+                        } else if (mType === 'gdrive') {
+                            if (c.folder_id) cfgDetail = ` • Folder: ${escapeHtml(c.folder_id)}`;
+                        } else if (mType === 'dropbox') {
+                            if (c.path) cfgDetail = ` • ${escapeHtml(c.path)}`;
+                        }
+                    } catch (e) {}
+
                     return `
                     <div class="settings-row" style="padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);margin-bottom:var(--space-2);">
                         <div class="settings-row-label" style="min-width:auto;">
                             <strong>${escapeHtml(m.name)}</strong>
-                            <small>Type: ${escapeHtml(m.type.toUpperCase())}${cfgDetail} ${m.enabled ? '<span class="status-badge status-active" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Active</span>' : '<span class="status-badge status-inactive" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Disabled</span>'}</small>
+                            <small>Type: ${escapeHtml(mType.toUpperCase())}${cfgDetail} ${m.enabled ? '<span class="status-badge status-active" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Active</span>' : '<span class="status-badge status-inactive" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Disabled</span>'}</small>
                         </div>
                         <div style="display:flex;gap:var(--space-2);">
                             <button type="button" class="btn btn-sm btn-secondary" data-edit-method="${m.id}">Edit</button>
@@ -56,7 +66,7 @@ export async function render(container) {
 
                 listEl.querySelectorAll('[data-edit-method]').forEach(btn => {
                     btn.addEventListener('click', () => {
-                        const mid = parseInt(btn.dataset.editMethod);
+                        const mid = parseInt(btn.dataset.editMethod, 10);
                         const method = methods.find(m => m.id === mid);
                         if (method) openBackupMethodModal(method, loadBackupMethods);
                     });
@@ -64,7 +74,7 @@ export async function render(container) {
 
                 listEl.querySelectorAll('[data-toggle-method]').forEach(btn => {
                     btn.addEventListener('click', async () => {
-                        const mid = parseInt(btn.dataset.toggleMethod);
+                        const mid = parseInt(btn.dataset.toggleMethod, 10);
                         const method = methods.find(m => m.id === mid);
                         if (!method) return;
                         try {
@@ -80,7 +90,7 @@ export async function render(container) {
                         const confirmed = await showConfirm('Delete Backup Method', 'Are you sure you want to delete this backup method? This cannot be undone.');
                         if (!confirmed) return;
                         try {
-                            await backupMethods.delete(parseInt(btn.dataset.deleteMethod));
+                            await backupMethods.delete(parseInt(btn.dataset.deleteMethod, 10));
                             showToast('Backup method deleted', 'success');
                             loadBackupMethods();
                         } catch (err) { showToast(err.message, 'error'); }
@@ -110,7 +120,7 @@ export function openBackupMethodModal(existingMethod = null, onSaved = () => {})
         } catch (e) {}
     }
 
-    const type = existingMethod?.type || 'sftp';
+    const type = (existingMethod?.type || 'sftp').toLowerCase();
     const name = existingMethod?.name || '';
 
     const content = `
@@ -119,17 +129,19 @@ export function openBackupMethodModal(existingMethod = null, onSaved = () => {})
             <input type="text" class="form-input" id="bm-name" value="${escapeHtml(name)}" placeholder='e.g. "Remote SFTP Storage"'>
         </div>
         <div class="form-group">
-            <label class="form-label">Type</label>
+            <label class="form-label">Storage Type *</label>
             <select class="form-select" id="bm-type" ${isEdit ? 'disabled' : ''}>
                 <option value="sftp" ${type === 'sftp' ? 'selected' : ''}>SFTP (SSH File Transfer Protocol)</option>
                 <option value="local" ${type === 'local' ? 'selected' : ''}>Local Server Directory</option>
-                <option value="s3" ${type === 's3' ? 'selected' : ''}>AWS S3 / S3-Compatible</option>
+                <option value="s3" ${type === 's3' ? 'selected' : ''}>AWS S3 / S3-Compatible Storage</option>
                 <option value="gdrive" ${type === 'gdrive' ? 'selected' : ''}>Google Drive</option>
                 <option value="dropbox" ${type === 'dropbox' ? 'selected' : ''}>Dropbox</option>
             </select>
         </div>
 
-        <div id="bm-sftp-fields" style="display: ${type === 'sftp' ? 'block' : 'none'}; padding-top: var(--space-3); border-top: 1px solid var(--border-primary); margin-top: var(--space-3);">
+        <!-- SFTP Fields -->
+        <div id="bm-sftp-fields" class="bm-type-fields" style="display: ${type === 'sftp' ? 'block' : 'none'}; padding-top: var(--space-3); border-top: 1px solid var(--border-primary); margin-top: var(--space-3);">
+            <h4 style="margin-bottom: var(--space-3); font-size: var(--font-size-md); font-weight: 600;">SFTP Connection Details</h4>
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-3);">
                 <div class="form-group">
                     <label class="form-label">Host / IP Address *</label>
@@ -175,11 +187,61 @@ export function openBackupMethodModal(existingMethod = null, onSaved = () => {})
                 <input type="text" class="form-input" id="bm-sftp-path" value="${escapeHtml(existingCfg.remote_path || '/backups/jcwt-panel')}" placeholder="/backups/jcwt-panel">
             </div>
         </div>
+
+        <!-- Local Fields -->
+        <div id="bm-local-fields" class="bm-type-fields" style="display: ${type === 'local' ? 'block' : 'none'}; padding-top: var(--space-3); border-top: 1px solid var(--border-primary); margin-top: var(--space-3);">
+            <div class="form-group">
+                <label class="form-label">Local Storage Directory Path *</label>
+                <input type="text" class="form-input" id="bm-local-path" value="${escapeHtml(existingCfg.path || '/var/lib/jcwt-panel/backups')}" placeholder="/var/lib/jcwt-panel/backups">
+                <div class="form-help">Absolute path on server to store backup archives.</div>
+            </div>
+        </div>
+
+        <!-- S3 Fields -->
+        <div id="bm-s3-fields" class="bm-type-fields" style="display: ${type === 's3' ? 'block' : 'none'}; padding-top: var(--space-3); border-top: 1px solid var(--border-primary); margin-top: var(--space-3);">
+            <h4 style="margin-bottom: var(--space-3); font-size: var(--font-size-md); font-weight: 600;">S3 Object Storage Details</h4>
+            <div class="form-group">
+                <label class="form-label">Bucket Name *</label>
+                <input type="text" class="form-input" id="bm-s3-bucket" value="${escapeHtml(existingCfg.bucket || '')}" placeholder="my-backups-bucket">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Access Key ID *</label>
+                <input type="text" class="form-input" id="bm-s3-access-key" value="${escapeHtml(existingCfg.access_key || '')}" placeholder="AKIAIOSFODNN7EXAMPLE">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Secret Access Key *</label>
+                <input type="password" class="form-input" id="bm-s3-secret-key" value="${existingCfg.has_secret_key ? '********' : ''}" placeholder="${existingCfg.has_secret_key ? 'Leave blank to keep existing secret' : 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Region</label>
+                <input type="text" class="form-input" id="bm-s3-region" value="${escapeHtml(existingCfg.region || 'us-east-1')}" placeholder="us-east-1">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Endpoint URL (Optional)</label>
+                <input type="text" class="form-input" id="bm-s3-endpoint" value="${escapeHtml(existingCfg.endpoint || '')}" placeholder="e.g. s3.us-east-1.amazonaws.com or https://ams3.digitaloceanspaces.com">
+            </div>
+        </div>
+
+        <!-- Google Drive Fields -->
+        <div id="bm-gdrive-fields" class="bm-type-fields" style="display: ${type === 'gdrive' ? 'block' : 'none'}; padding-top: var(--space-3); border-top: 1px solid var(--border-primary); margin-top: var(--space-3);">
+            <div class="form-group">
+                <label class="form-label">Google Drive Folder ID / Path</label>
+                <input type="text" class="form-input" id="bm-gdrive-folder" value="${escapeHtml(existingCfg.folder_id || '')}" placeholder="Folder ID or name">
+            </div>
+        </div>
+
+        <!-- Dropbox Fields -->
+        <div id="bm-dropbox-fields" class="bm-type-fields" style="display: ${type === 'dropbox' ? 'block' : 'none'}; padding-top: var(--space-3); border-top: 1px solid var(--border-primary); margin-top: var(--space-3);">
+            <div class="form-group">
+                <label class="form-label">Dropbox Access Token / Path</label>
+                <input type="text" class="form-input" id="bm-dropbox-path" value="${escapeHtml(existingCfg.path || '/backups')}" placeholder="/backups">
+            </div>
+        </div>
     `;
 
     const footer = `
         <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-            <button type="button" class="btn btn-secondary" id="bm-test-btn" style="display:${type === 'sftp' ? 'inline-block' : 'none'};">⚡ Test Connection</button>
+            <button type="button" class="btn btn-secondary" id="bm-test-btn" style="display:${(type === 'sftp' || type === 's3') ? 'inline-block' : 'none'};">⚡ Test Connection</button>
             <div style="display:flex; gap:var(--space-2); margin-left:auto;">
                 <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
                 <button type="button" class="btn btn-primary" id="bm-save-btn">${isEdit ? 'Save Changes' : 'Add Method'}</button>
@@ -192,14 +254,15 @@ export function openBackupMethodModal(existingMethod = null, onSaved = () => {})
     const typeSelect = modal.querySelector('#bm-type');
     const authSelect = modal.querySelector('#bm-sftp-authtype');
     const testBtn = modal.querySelector('#bm-test-btn');
-    const sftpFields = modal.querySelector('#bm-sftp-fields');
     const passGroup = modal.querySelector('#bm-sftp-pass-group');
     const keyGroup = modal.querySelector('#bm-sftp-key-group');
 
     typeSelect?.addEventListener('change', (e) => {
-        const val = e.target.value;
-        if (sftpFields) sftpFields.style.display = val === 'sftp' ? 'block' : 'none';
-        if (testBtn) testBtn.style.display = val === 'sftp' ? 'inline-block' : 'none';
+        const val = e.target.value.toLowerCase();
+        modal.querySelectorAll('.bm-type-fields').forEach(el => el.style.display = 'none');
+        const targetEl = modal.querySelector(`#bm-${val}-fields`);
+        if (targetEl) targetEl.style.display = 'block';
+        if (testBtn) testBtn.style.display = (val === 'sftp' || val === 's3') ? 'inline-block' : 'none';
     });
 
     authSelect?.addEventListener('change', (e) => {
@@ -208,23 +271,51 @@ export function openBackupMethodModal(existingMethod = null, onSaved = () => {})
         if (keyGroup) keyGroup.style.display = isKey ? 'block' : 'none';
     });
 
-    function getSFTPConfigFromModal() {
-        return {
-            host: modal.querySelector('#bm-sftp-host')?.value?.trim(),
-            port: parseInt(modal.querySelector('#bm-sftp-port')?.value || '22', 10),
-            username: modal.querySelector('#bm-sftp-user')?.value?.trim(),
-            auth_type: modal.querySelector('#bm-sftp-authtype')?.value,
-            password: modal.querySelector('#bm-sftp-pass')?.value,
-            private_key: modal.querySelector('#bm-sftp-key')?.value,
-            key_passphrase: modal.querySelector('#bm-sftp-passphrase')?.value,
-            remote_path: modal.querySelector('#bm-sftp-path')?.value?.trim() || '/backups/jcwt-panel'
-        };
+    function getBackupConfigFromModal(mType) {
+        const t = (mType || 'sftp').toLowerCase();
+        if (t === 'sftp') {
+            return {
+                host: modal.querySelector('#bm-sftp-host')?.value?.trim(),
+                port: parseInt(modal.querySelector('#bm-sftp-port')?.value || '22', 10),
+                username: modal.querySelector('#bm-sftp-user')?.value?.trim(),
+                auth_type: modal.querySelector('#bm-sftp-authtype')?.value,
+                password: modal.querySelector('#bm-sftp-pass')?.value,
+                private_key: modal.querySelector('#bm-sftp-key')?.value,
+                key_passphrase: modal.querySelector('#bm-sftp-passphrase')?.value,
+                remote_path: modal.querySelector('#bm-sftp-path')?.value?.trim() || '/backups/jcwt-panel'
+            };
+        } else if (t === 'local') {
+            return {
+                path: modal.querySelector('#bm-local-path')?.value?.trim() || '/var/lib/jcwt-panel/backups'
+            };
+        } else if (t === 's3') {
+            return {
+                bucket: modal.querySelector('#bm-s3-bucket')?.value?.trim(),
+                access_key: modal.querySelector('#bm-s3-access-key')?.value?.trim(),
+                secret_key: modal.querySelector('#bm-s3-secret-key')?.value,
+                region: modal.querySelector('#bm-s3-region')?.value?.trim() || 'us-east-1',
+                endpoint: modal.querySelector('#bm-s3-endpoint')?.value?.trim()
+            };
+        } else if (t === 'gdrive') {
+            return {
+                folder_id: modal.querySelector('#bm-gdrive-folder')?.value?.trim()
+            };
+        } else if (t === 'dropbox') {
+            return {
+                path: modal.querySelector('#bm-dropbox-path')?.value?.trim()
+            };
+        }
+        return {};
     }
 
     testBtn?.addEventListener('click', async () => {
-        const sftpCfg = getSFTPConfigFromModal();
-        if (!sftpCfg.host) { showToast('Host / IP address is required', 'error'); return; }
-        if (!sftpCfg.username) { showToast('Username is required', 'error'); return; }
+        const mType = (typeSelect?.value || 'sftp').toLowerCase();
+        const sftpCfg = getBackupConfigFromModal(mType);
+
+        if (mType === 'sftp') {
+            if (!sftpCfg.host) { showToast('Host / IP address is required', 'error'); return; }
+            if (!sftpCfg.username) { showToast('Username is required', 'error'); return; }
+        }
 
         testBtn.disabled = true;
         const origText = testBtn.innerHTML;
@@ -235,11 +326,11 @@ export function openBackupMethodModal(existingMethod = null, onSaved = () => {})
                 method: 'POST',
                 body: JSON.stringify({
                     id: existingMethod?.id || 0,
-                    type: 'sftp',
+                    type: mType,
                     config: sftpCfg
                 })
             });
-            showToast(res.message || 'SFTP Connection Successful!', 'success');
+            showToast(res.message || 'Connection Successful!', 'success');
         } catch (err) {
             showToast(err.message, 'error');
         } finally {
@@ -250,12 +341,11 @@ export function openBackupMethodModal(existingMethod = null, onSaved = () => {})
 
     modal.querySelector('#bm-save-btn')?.addEventListener('click', async () => {
         const mName = modal.querySelector('#bm-name')?.value?.trim();
-        const mType = typeSelect?.value;
+        const mType = (typeSelect?.value || 'sftp').toLowerCase();
         if (!mName) { showToast('Method name is required', 'error'); return; }
 
-        let cfgObj = {};
+        const cfgObj = getBackupConfigFromModal(mType);
         if (mType === 'sftp') {
-            cfgObj = getSFTPConfigFromModal();
             if (!cfgObj.host || !cfgObj.username) {
                 showToast('SFTP Host and Username are required', 'error');
                 return;

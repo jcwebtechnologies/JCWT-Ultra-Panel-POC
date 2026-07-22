@@ -229,17 +229,27 @@ export async function render(container) {
                 }
                 listEl.innerHTML = methods.map(m => {
                     let cfgDetail = '';
-                    if (m.type === 'sftp') {
-                        try {
-                            const c = typeof m.config === 'string' ? JSON.parse(m.config) : (m.config || {});
+                    const mType = (m.type || '').toLowerCase();
+                    try {
+                        const c = typeof m.config === 'string' ? JSON.parse(m.config) : (m.config || {});
+                        if (mType === 'sftp') {
                             if (c.host) cfgDetail = ` • ${escapeHtml(c.host)}:${c.port || 22} (${escapeHtml(c.remote_path || '/backups/jcwt-panel')})`;
-                        } catch (e) {}
-                    }
+                        } else if (mType === 'local') {
+                            if (c.path) cfgDetail = ` • ${escapeHtml(c.path)}`;
+                        } else if (mType === 's3') {
+                            if (c.bucket) cfgDetail = ` • s3://${escapeHtml(c.bucket)}`;
+                        } else if (mType === 'gdrive') {
+                            if (c.folder_id) cfgDetail = ` • Folder: ${escapeHtml(c.folder_id)}`;
+                        } else if (mType === 'dropbox') {
+                            if (c.path) cfgDetail = ` • ${escapeHtml(c.path)}`;
+                        }
+                    } catch (e) {}
+
                     return `
                     <div class="settings-row" style="padding:var(--space-3);border:1px solid var(--border-primary);border-radius:var(--radius-md);margin-bottom:var(--space-2);">
                         <div class="settings-row-label" style="min-width:auto;">
                             <strong>${escapeHtml(m.name)}</strong>
-                            <small>Type: ${escapeHtml(m.type.toUpperCase())}${cfgDetail} ${m.enabled ? '<span class="status-badge status-active" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Active</span>' : '<span class="status-badge status-inactive" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Disabled</span>'}</small>
+                            <small>Type: ${escapeHtml(mType.toUpperCase())}${cfgDetail} ${m.enabled ? '<span class="status-badge status-active" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Active</span>' : '<span class="status-badge status-inactive" style="display:inline-block;padding:2px 8px;font-size:11px;margin-left:6px;">Disabled</span>'}</small>
                         </div>
                         <div style="display:flex;gap:var(--space-2);">
                             <button type="button" class="btn btn-sm btn-secondary" data-edit-method="${m.id}">Edit</button>
