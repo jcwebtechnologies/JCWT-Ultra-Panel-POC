@@ -10,10 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
-// TestSFTPConnection tests SSH/SFTP connectivity and remote directory write access
+// TestSFTPConnection tests SSH/SFTP connectivity and remote directory write access.
+// It prioritizes the pure SFTP protocol subsystem (which works on shell-disabled SFTP servers
+// like AWS Transfer, chrooted accounts, Hetzner Storage Boxes, free SFTP hosts, etc.)
+// and falls back to SSH shell execution if SFTP subsystem is unavailable.
 func TestSFTPConnection(host string, port int, user, authType, password, privateKey, passphrase, remotePath string) error {
 	client, err := dialSSH(host, port, user, authType, password, privateKey, passphrase)
 	if err != nil {
@@ -21,19 +25,37 @@ func TestSFTPConnection(host string, port int, user, authType, password, private
 	}
 	defer client.Close()
 
+	if remotePath == "" {
+		remotePath = "/backups/jcwt-panel"
+	}
+	remoteDir := filepath.ToSlash(remotePath)
+	probePath := filepath.ToSlash(filepath.Join(remoteDir, ".jcwt_probe"))
+
+	// 1. Try pure SFTP subsystem (WinSCP/FileZilla standard protocol — no interactive shell required)
+	sftpClient, err := sftp.NewClient(client)
+	if err == nil {
+		defer sftpClient.Close()
+
+		if err := sftpClient.MkdirAll(remoteDir); err != nil {
+			return fmt.Errorf("SFTP mkdir '%s' failed: %w", remoteDir, err)
+		}
+
+		f, err := sftpClient.Create(probePath)
+		if err != nil {
+			return fmt.Errorf("SFTP write test in '%s' failed: %w", remoteDir, err)
+		}
+		f.Close()
+		_ = sftpClient.Remove(probePath)
+		return nil
+	}
+
+	// 2. Fallback to SSH shell session execution if SFTP subsystem channel is unavailable
 	session, err := client.NewSession()
 	if err != nil {
 		return fmt.Errorf("create SSH session: %w", err)
 	}
 	defer session.Close()
 
-	if remotePath == "" {
-		remotePath = "/backups/jcwt-panel"
-	}
-
-	// Ensure remote directory exists and is writable
-	probePath := filepath.ToSlash(filepath.Join(remotePath, ".jcwt_probe"))
-	remoteDir := filepath.ToSlash(remotePath)
 	cmd := fmt.Sprintf("mkdir -p %s && touch %s && rm -f %s",
 		shellQuote(remoteDir), shellQuote(probePath), shellQuote(probePath))
 
@@ -45,19 +67,14 @@ func TestSFTPConnection(host string, port int, user, authType, password, private
 	return nil
 }
 
-// UploadViaSFTP transfers a local file to a remote path over SFTP/SSH
+// UploadViaSFTP transfers a local file to a remote path over SFTP/SSH.
+// It uses pure SFTP file transfer streams, falling back to SSH shell pipe if needed.
 func UploadViaSFTP(host string, port int, user, authType, password, privateKey, passphrase, remotePath, localFilePath string) error {
 	client, err := dialSSH(host, port, user, authType, password, privateKey, passphrase)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("create SSH session: %w", err)
-	}
-	defer session.Close()
 
 	localFile, err := os.Open(localFilePath)
 	if err != nil {
@@ -71,6 +88,34 @@ func UploadViaSFTP(host string, port int, user, authType, password, privateKey, 
 	}
 	remoteDir := filepath.ToSlash(remotePath)
 	destPath := filepath.ToSlash(filepath.Join(remoteDir, fileName))
+
+	// 1. Try pure SFTP subsystem transfer
+	sftpClient, err := sftp.NewClient(client)
+	if err == nil {
+		defer sftpClient.Close()
+
+		if err := sftpClient.MkdirAll(remoteDir); err != nil {
+			return fmt.Errorf("SFTP mkdir '%s' failed: %w", remoteDir, err)
+		}
+
+		remoteFile, err := sftpClient.Create(destPath)
+		if err != nil {
+			return fmt.Errorf("SFTP create '%s' failed: %w", destPath, err)
+		}
+		defer remoteFile.Close()
+
+		if _, err := io.Copy(remoteFile, localFile); err != nil {
+			return fmt.Errorf("SFTP upload stream to '%s' failed: %w", destPath, err)
+		}
+		return nil
+	}
+
+	// 2. Fallback to SSH shell session execution
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("create SSH session: %w", err)
+	}
+	defer session.Close()
 
 	cmd := fmt.Sprintf("mkdir -p %s && cat > %s", shellQuote(remoteDir), shellQuote(destPath))
 
