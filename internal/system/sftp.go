@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -67,6 +68,30 @@ func TestSFTPConnection(host string, port int, user, authType, password, private
 	return nil
 }
 
+type cmdReadCloser struct {
+	io.Reader
+	cmd *exec.Cmd
+}
+
+func (c *cmdReadCloser) Close() error {
+	if c.cmd != nil && c.cmd.Process != nil {
+		_ = c.cmd.Wait()
+	}
+	return nil
+}
+
+func openLocalFile(path string) (io.ReadCloser, error) {
+	cmd := exec.Command("sudo", "cat", path)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("read local backup '%s': %w", path, err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("stream local backup '%s': %w", path, err)
+	}
+	return &cmdReadCloser{Reader: stdout, cmd: cmd}, nil
+}
+
 // UploadViaSFTP transfers a local file to a remote path over SFTP/SSH.
 // It uses pure SFTP file transfer streams, falling back to SSH shell pipe if needed.
 func UploadViaSFTP(host string, port int, user, authType, password, privateKey, passphrase, remotePath, localFilePath string) error {
@@ -76,9 +101,9 @@ func UploadViaSFTP(host string, port int, user, authType, password, privateKey, 
 	}
 	defer client.Close()
 
-	localFile, err := os.Open(localFilePath)
+	localFile, err := openLocalFile(localFilePath)
 	if err != nil {
-		return fmt.Errorf("open local file: %w", err)
+		return err
 	}
 	defer localFile.Close()
 

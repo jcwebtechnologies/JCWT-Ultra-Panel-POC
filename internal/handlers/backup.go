@@ -170,7 +170,7 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, met
 	backupDir := filepath.Join(h.Cfg.WebRootBase, sysUser, "backups")
 	exec.Command("sudo", "mkdir", "-p", backupDir).Run()
 	exec.Command("sudo", "chown", sysUser+":"+sysUser, backupDir).Run()
-	exec.Command("sudo", "chmod", "0750", backupDir).Run()
+	exec.Command("sudo", "chmod", "0755", backupDir).Run()
 
 	timestamp := time.Now().Format("20060102-150405")
 	backupName := fmt.Sprintf("%s-%s-%s.tar.gz", domain, backupType, timestamp)
