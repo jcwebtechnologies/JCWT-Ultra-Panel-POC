@@ -486,6 +486,149 @@ func (h *FilesHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, map[string]interface{}{"deleted": true, "path": cleanPath})
 }
 
+// CompressFile compresses a folder or file into a .zip or .tar.gz archive
+func (h *FilesHandler) CompressFile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SiteID     int64  `json:"site_id"`
+		Target     string `json:"target"`
+		OutputName string `json:"output_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	site, err := h.DB.GetSite(req.SiteID)
+	if err != nil {
+		jsonError(w, "site not found", http.StatusNotFound)
+		return
+	}
+
+	sysUser, _ := site["system_user"].(string)
+	if sysUser == "" {
+		jsonError(w, "site missing system user", http.StatusInternalServerError)
+		return
+	}
+
+	homeDir := filepath.Join(h.Cfg.WebRootBase, sysUser)
+	cleanTarget := strings.TrimPrefix(filepath.Clean("/"+req.Target), "/")
+	if cleanTarget == "." || cleanTarget == "" {
+		cleanTarget = "htdocs"
+	}
+
+	fullTarget := filepath.Join(homeDir, cleanTarget)
+	absHome, _ := filepath.Abs(homeDir)
+	absTarget, _ := filepath.Abs(fullTarget)
+
+	if !strings.HasPrefix(absTarget, absHome+string(os.PathSeparator)) && absTarget != absHome {
+		jsonError(w, "target is outside site directory", http.StatusForbidden)
+		return
+	}
+
+	if req.OutputName == "" {
+		req.OutputName = "archive.zip"
+	}
+	req.OutputName = filepath.Base(req.OutputName)
+	if !strings.HasSuffix(req.OutputName, ".zip") && !strings.HasSuffix(req.OutputName, ".tar.gz") {
+		req.OutputName += ".zip"
+	}
+
+	targetDir := filepath.Dir(absTarget)
+	baseTarget := filepath.Base(absTarget)
+	fullOutput := filepath.Join(targetDir, req.OutputName)
+
+	var cmd *exec.Cmd
+	if strings.HasSuffix(req.OutputName, ".tar.gz") {
+		cmd = exec.Command("sudo", "-u", sysUser, "tar", "-czf", fullOutput, "-C", targetDir, baseTarget)
+	} else {
+		cmd = exec.Command("sudo", "-u", sysUser, "zip", "-r", fullOutput, baseTarget)
+		cmd.Dir = targetDir
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Compression failed for site %d (%s): %s", req.SiteID, fullTarget, strings.TrimSpace(string(out)))
+		jsonError(w, fmt.Sprintf("compression failed: %s", strings.TrimSpace(string(out))), http.StatusInternalServerError)
+		return
+	}
+
+	jsonSuccess(w, map[string]interface{}{"message": "compressed successfully", "archive": req.OutputName})
+}
+
+// ExtractFile extracts a .zip or .tar.gz / .tgz archive into a destination directory
+func (h *FilesHandler) ExtractFile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SiteID      int64  `json:"site_id"`
+		ArchivePath string `json:"archive_path"`
+		Destination string `json:"destination"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	site, err := h.DB.GetSite(req.SiteID)
+	if err != nil {
+		jsonError(w, "site not found", http.StatusNotFound)
+		return
+	}
+
+	sysUser, _ := site["system_user"].(string)
+	if sysUser == "" {
+		jsonError(w, "site missing system user", http.StatusInternalServerError)
+		return
+	}
+
+	homeDir := filepath.Join(h.Cfg.WebRootBase, sysUser)
+	cleanArchive := strings.TrimPrefix(filepath.Clean("/"+req.ArchivePath), "/")
+	fullArchive := filepath.Join(homeDir, cleanArchive)
+
+	absHome, _ := filepath.Abs(homeDir)
+	absArchive, _ := filepath.Abs(fullArchive)
+	if !strings.HasPrefix(absArchive, absHome+string(os.PathSeparator)) {
+		jsonError(w, "archive path is outside site directory", http.StatusForbidden)
+		return
+	}
+
+	cleanDest := strings.TrimPrefix(filepath.Clean("/"+req.Destination), "/")
+	if cleanDest == "." || cleanDest == "" {
+		cleanDest = filepath.Dir(cleanArchive)
+	}
+	fullDest := filepath.Join(homeDir, cleanDest)
+	absDest, _ := filepath.Abs(fullDest)
+	if !strings.HasPrefix(absDest, absHome+string(os.PathSeparator)) && absDest != absHome {
+		jsonError(w, "destination is outside site directory", http.StatusForbidden)
+		return
+	}
+
+	// Ensure destination directory exists via sudo
+	exec.Command("sudo", "mkdir", "-p", absDest).Run()
+	exec.Command("sudo", "chown", sysUser+":"+sysUser, absDest).Run()
+
+	var cmd *exec.Cmd
+	lowerArchive := strings.ToLower(absArchive)
+	if strings.HasSuffix(lowerArchive, ".zip") {
+		cmd = exec.Command("sudo", "-u", sysUser, "unzip", "-o", absArchive, "-d", absDest)
+	} else if strings.HasSuffix(lowerArchive, ".tar.gz") || strings.HasSuffix(lowerArchive, ".tgz") || strings.HasSuffix(lowerArchive, ".tar") {
+		cmd = exec.Command("sudo", "-u", sysUser, "tar", "-xzf", absArchive, "-C", absDest)
+	} else {
+		jsonError(w, "unsupported archive format (only .zip and .tar.gz / .tgz / .tar supported)", http.StatusBadRequest)
+		return
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Extraction failed for site %d (%s): %s", req.SiteID, absArchive, strings.TrimSpace(string(out)))
+		jsonError(w, fmt.Sprintf("extraction failed: %s", strings.TrimSpace(string(out))), http.StatusInternalServerError)
+		return
+	}
+
+	// Ensure proper file ownership after extraction
+	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, absDest).Run()
+
+	jsonSuccess(w, map[string]interface{}{"message": "extracted successfully"})
+}
+
 // StartIdleReaper launches a background goroutine that stops File Browser instances
 // idle for more than 15 minutes. This prevents leaked processes when users navigate away.
 func (h *FilesHandler) StartIdleReaper() {

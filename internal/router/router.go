@@ -176,6 +176,12 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	mux.Handle("/api/files/delete", middleware.RequireAuth(middleware.RequireCSRF(
 		middleware.RequireRole("admin", "manager")(http.HandlerFunc(filesHandler.DeleteFile)),
 	)))
+	mux.Handle("/api/files/compress", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(http.HandlerFunc(filesHandler.CompressFile)),
+	)))
+	mux.Handle("/api/files/extract", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(http.HandlerFunc(filesHandler.ExtractFile)),
+	)))
 
 	// File Browser reverse proxy — admin + manager only
 	mux.Handle("/fb/", middleware.RequireAuth(

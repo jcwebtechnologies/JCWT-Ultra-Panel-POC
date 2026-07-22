@@ -124,6 +124,8 @@ export const files = {
     list: (siteId) => request(`/api/files?site_id=${siteId}`),
     stop: (siteId) => request(`/api/files?site_id=${siteId}`, { method: 'DELETE' }),
     deleteFile: (siteId, path) => request('/api/files/delete', { method: 'POST', body: JSON.stringify({ site_id: siteId, path }) }),
+    compress: (siteId, target, outputName) => request('/api/files/compress', { method: 'POST', body: JSON.stringify({ site_id: siteId, target, output_name: outputName }) }),
+    extract: (siteId, archivePath, destination) => request('/api/files/extract', { method: 'POST', body: JSON.stringify({ site_id: siteId, archive_path: archivePath, destination }) }),
 };
 
 // PHP Settings
