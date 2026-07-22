@@ -1270,6 +1270,10 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force reset
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw default *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw reload
 
+# Filebrowser (run as any site user)
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/filebrowser *
+
 # Rsync (for backup restore)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*
 

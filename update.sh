@@ -208,20 +208,8 @@ case "$COMMAND" in
         chown "$USER:$USER" "$AUTH_KEYS"
         ;;
 
-    ensure-panel-dir)
-        USER="${1:-}"
-        WEB_ROOT="${2:-}"
-        validate_user "$USER"
-        HOME_DIR="/home/$USER"
-        PANEL_DIR="$WEB_ROOT/.panel"
-        assert_under "$PANEL_DIR" "$HOME_DIR" >/dev/null
-        mkdir -p "$PANEL_DIR"
-        chmod 0700 "$PANEL_DIR"
-        chown "$USER:$USER" "$PANEL_DIR"
-        ;;
-
     *)
-        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys, ensure-panel-dir"
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys"
         ;;
 esac
 FSCTL_EOF
@@ -357,6 +345,10 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force enable
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force reset
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw default *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw reload
+
+# Filebrowser (run as any site user)
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/filebrowser *
 EOF
 
 chmod 0440 /etc/sudoers.d/jcwt-panel

@@ -389,6 +389,11 @@ type spaHandler struct {
 func (s spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
+	// Set Cache-Control header for static JS/CSS/HTML so updated panel builds are loaded immediately
+	if strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".css") || strings.HasSuffix(path, ".html") || path == "/" {
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+	}
+
 	// Try to serve the file directly
 	f, err := s.fs.Open(path)
 	if err != nil {

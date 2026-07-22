@@ -268,14 +268,15 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 
 	panelDir := filepath.Join(webRoot, ".panel")
 	dbPath := filepath.Join(panelDir, fmt.Sprintf("filebrowser-%d.db", siteID))
+	fbBin := getFileBrowserBin()
 
 	// Check if DB exists by running config cat with filebrowser (runs as sysUser)
-	dbExists := exec.Command("sudo", "-u", sysUser, "/usr/local/bin/filebrowser", "config", "cat", "--database", dbPath).Run() == nil
+	dbExists := exec.Command("sudo", "-u", sysUser, fbBin, "config", "cat", "--database", dbPath).Run() == nil
 
 	if !dbExists {
 		// Initialize fresh database WITH noauth in a single step.
 		if out, err := exec.Command("sudo", "-u", sysUser,
-			"/usr/local/bin/filebrowser", "config", "init",
+			fbBin, "config", "init",
 			"--database", dbPath,
 			"--auth.method", "noauth",
 		).CombinedOutput(); err != nil {
@@ -286,7 +287,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 		// noauth requires at least one user record (ID 1) to auto-login as.
 		// Non-admin with all file-operation permissions (archive/extract needs create+modify).
 		if out, err := exec.Command("sudo", "-u", sysUser,
-			"/usr/local/bin/filebrowser", "users", "add", "fbuser", "admin-noauth-panel",
+			fbBin, "users", "add", "fbuser", "admin-noauth-panel",
 			"--perm.admin=false",
 			"--perm.create", "--perm.delete", "--perm.rename", "--perm.modify",
 			"--perm.download", "--perm.execute",
@@ -302,13 +303,8 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	}
 
 	// Always apply config — runs for BOTH new and existing DBs.
-	// This ensures --commands and other settings are correct even when the DB was
-	// created before these settings were added or when they need to be updated.
-	// NOTE: --commands must be comma-separated WITHOUT spaces; File Browser parses
-	// it as a StringSlice CSV and leading spaces become part of the command name,
-	// causing "unzip" to not match " unzip" and silently blocking the feature.
 	if out, err := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser", "config", "set",
+		fbBin, "config", "set",
 		"--database", dbPath,
 		"--auth.method", "noauth",
 		"--aceEditorTheme", "chrome",
@@ -325,7 +321,7 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	}
 
 	cmd := exec.Command("sudo", "-u", sysUser,
-		"/usr/local/bin/filebrowser",
+		fbBin,
 		"--root", webRoot,
 		"--address", "127.0.0.1",
 		"--port", strconv.Itoa(port),
@@ -583,4 +579,14 @@ func (p *reverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // MarshalJSON implements json.Marshaler for consistent API responses
 func jsonMarshal(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
+}
+
+func getFileBrowserBin() string {
+	if _, err := os.Stat("/usr/local/bin/filebrowser"); err == nil {
+		return "/usr/local/bin/filebrowser"
+	}
+	if _, err := os.Stat("/usr/bin/filebrowser"); err == nil {
+		return "/usr/bin/filebrowser"
+	}
+	return "/usr/local/bin/filebrowser"
 }

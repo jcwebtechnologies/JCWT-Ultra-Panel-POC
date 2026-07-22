@@ -357,6 +357,10 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force enable
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw --force reset
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw default *
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/ufw reload
+
+# Filebrowser (run as any site user)
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/local/bin/filebrowser *
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/filebrowser *
 EOF
 
 chmod 0440 /etc/sudoers.d/jcwt-panel
