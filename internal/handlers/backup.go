@@ -264,9 +264,9 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, met
 		return
 	}
 
-	// Set correct ownership on the backup file
+	// Set correct ownership on the backup file (0644 so jcwt-panel daemon can read for SFTP upload)
 	exec.Command("sudo", "chown", sysUser+":"+sysUser, backupPath).Run()
-	exec.Command("sudo", "chmod", "0640", backupPath).Run()
+	exec.Command("sudo", "chmod", "0644", backupPath).Run()
 
 	// Get backup file size
 	var size string
