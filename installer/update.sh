@@ -331,10 +331,17 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /usr/share/phpmyadmin/signon_*.ph
 
 # Tar/archive operations (scoped)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]* -C /home/[a-z]* *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]* -C /home/[a-z]* .
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -xzf /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -tzf /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar cf - -C /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar xf - -C /home/[a-z]*
+
+# Rsync (for backup restore & staging)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*/* /home/[a-z]*/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]* /home/[a-z]*
 
 # Disk usage (read-only)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -sh /home/[a-z]*

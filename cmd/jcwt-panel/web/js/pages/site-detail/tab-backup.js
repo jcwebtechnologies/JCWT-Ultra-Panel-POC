@@ -61,7 +61,7 @@ export async function renderBackups(container, site, siteId) {
             ` : `
                 <div class="table-responsive">
                     <table class="data-table responsive-cards has-actions">
-                        <thead><tr><th>Date</th><th>Size</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>Date</th><th>Size</th><th>Type</th><th>Destination</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody id="backup-tbody"></tbody>
                     </table>
                 </div>
@@ -83,7 +83,8 @@ export async function renderBackups(container, site, siteId) {
                 <tr>
                     <td data-label="Date">${new Date(b.created_at).toLocaleString()}</td>
                     <td data-label="Size">${b.size ? formatBytes(parseInt(b.size)) : (b.status === 'in_progress' ? '...' : 'N/A')}</td>
-                    <td data-label="Type"><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${b.type}</span></td>
+                    <td data-label="Type"><span class="badge ${b.type === 'auto' ? 'badge-info' : 'badge-primary'}">${escapeHtml(b.type || 'full')}</span></td>
+                    <td data-label="Destination"><span class="status-badge status-active">${escapeHtml(b.method || 'Local')}</span></td>
                     <td data-label="Status"><span class="badge ${b.status === 'completed' ? 'badge-success' : b.status === 'in_progress' ? 'badge-warning' : 'badge-danger'}">${b.status === 'in_progress' ? 'In Progress' : b.status}</span></td>
                     <td>
                         <div class="table-actions">
@@ -122,39 +123,76 @@ export async function renderBackups(container, site, siteId) {
         document.getElementById('refresh-backups')?.addEventListener('click', () => renderBackups(container, site, siteId));
 
         document.getElementById('create-backup-btn')?.addEventListener('click', async () => {
-            if (!await showConfirm('Create Backup', `Create a backup of ${escapeHtml(site.domain)} now? This may take a moment for large sites.`, 'Create Backup', 'btn-primary')) return;
-            const btn = document.getElementById('create-backup-btn');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Creating...';
-            try {
-                const result = await request('/api/backups', {
-                    method: 'POST',
-                    body: JSON.stringify({ site_id: parseInt(siteId) }),
-                });
-                const backupId = result.id;
-                showToast('Backup started in background...', 'info');
-                const poll = setInterval(async () => {
-                    try {
-                        const status = await request('/api/backups?action=status', {
-                            method: 'POST',
-                            body: JSON.stringify({ backup_id: backupId }),
-                        });
-                        if (status.status === 'completed') {
-                            clearInterval(poll);
-                            showToast('Backup completed successfully!', 'success');
-                            renderBackups(container, site, siteId);
-                        } else if (status.status === 'failed') {
-                            clearInterval(poll);
-                            showToast('Backup failed', 'error');
-                            renderBackups(container, site, siteId);
-                        }
-                    } catch { clearInterval(poll); }
-                }, 3000);
-            } catch (err) {
-                showToast(err.message, 'error');
-                btn.disabled = false;
-                btn.innerHTML = `${icons.plus} Create Backup Now`;
-            }
+            const methodOptions = [
+                '<option value="0">Local Storage (/home/' + escapeHtml(site.system_user || '') + '/backups)</option>',
+                ...(data.methods || []).map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml((m.type || '').toUpperCase())})</option>`)
+            ].join('');
+
+            const content = `
+                <div class="form-group">
+                    <label class="form-label">Backup Type</label>
+                    <select class="form-select" id="cb-type">
+                        <option value="full">Full Backup (Web Files + Databases + Cron)</option>
+                        <option value="files">Files Only (Web Root Directory)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Backup Destination</label>
+                    <select class="form-select" id="cb-method">
+                        ${methodOptions}
+                    </select>
+                </div>
+            `;
+            const footer = `
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-overlay').remove()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="cb-start-btn">Start Backup</button>
+            `;
+
+            const modal = showModal('Create Backup Now', content, footer);
+
+            modal.querySelector('#cb-start-btn')?.addEventListener('click', async () => {
+                const bType = modal.querySelector('#cb-type').value;
+                const mId = parseInt(modal.querySelector('#cb-method').value, 10);
+                closeModal();
+
+                const btn = document.getElementById('create-backup-btn');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="loading-spinner btn-spinner"></span> Creating...';
+                }
+
+                try {
+                    const result = await request('/api/backups', {
+                        method: 'POST',
+                        body: JSON.stringify({ site_id: parseInt(siteId, 10), type: bType, method_id: mId }),
+                    });
+                    const backupId = result.id;
+                    showToast('Backup started in background...', 'info');
+                    const poll = setInterval(async () => {
+                        try {
+                            const status = await request('/api/backups?action=status', {
+                                method: 'POST',
+                                body: JSON.stringify({ backup_id: backupId }),
+                            });
+                            if (status.status === 'completed') {
+                                clearInterval(poll);
+                                showToast('Backup completed successfully!', 'success');
+                                renderBackups(container, site, siteId);
+                            } else if (status.status === 'failed') {
+                                clearInterval(poll);
+                                showToast('Backup failed', 'error');
+                                renderBackups(container, site, siteId);
+                            }
+                        } catch { clearInterval(poll); }
+                    }, 3000);
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = `${icons.plus} Create Backup Now`;
+                    }
+                }
+            });
         });
 
         function bindBackupActions() {

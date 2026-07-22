@@ -765,8 +765,13 @@ func (d *DB) CreateBackupPending(siteID int64, btype, method string) (int64, err
 	return res.LastInsertId()
 }
 
-// UpdateBackupStatus updates a backup's status, file_path, and size
-func (d *DB) UpdateBackupStatus(id int64, status, filePath, size string) error {
+// UpdateBackupStatus updates a backup's status, file_path, size, and optional method label
+func (d *DB) UpdateBackupStatus(id int64, status, filePath, size, method string) error {
+	if method != "" {
+		_, err := d.Conn.Exec("UPDATE backups SET status = ?, file_path = ?, size = ?, method = ? WHERE id = ?",
+			status, filePath, size, method, id)
+		return err
+	}
 	_, err := d.Conn.Exec("UPDATE backups SET status = ?, file_path = ?, size = ? WHERE id = ?",
 		status, filePath, size, id)
 	return err

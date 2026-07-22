@@ -216,8 +216,20 @@ case "$COMMAND" in
         chown "$USER:$USER" "$AUTH_KEYS"
         ;;
 
+    ensure-panel-dir)
+        USER="${1:-}"
+        WEB_ROOT="${2:-}"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+        PANEL_DIR="$WEB_ROOT/.panel"
+        assert_under "$PANEL_DIR" "$HOME_DIR" >/dev/null
+        mkdir -p "$PANEL_DIR"
+        chmod 0700 "$PANEL_DIR"
+        chown "$USER:$USER" "$PANEL_DIR"
+        ;;
+
     *)
-        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys"
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys, ensure-panel-dir"
         ;;
 esac
 FSCTL_EOF
@@ -319,10 +331,17 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rm -f /usr/share/phpmyadmin/signon_*.ph
 
 # Tar/archive operations (scoped)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]* -C /home/[a-z]* *
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -czf /home/[a-z]* -C /home/[a-z]* .
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -xzf /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar -tzf /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar cf - -C /home/[a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/tar xf - -C /home/[a-z]*
+
+# Rsync (for backup restore & staging)
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]*/* /home/[a-z]*/*
+jcwt-panel ALL=(root) NOPASSWD: /usr/bin/rsync -a --delete /home/[a-z]* /home/[a-z]*
 
 # Disk usage (read-only)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/du -sh /home/[a-z]*

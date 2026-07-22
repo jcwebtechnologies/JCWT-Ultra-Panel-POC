@@ -115,8 +115,9 @@ func (h *BackupHandler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SiteID int64  `json:"site_id"`
-		Type   string `json:"type"` // "full", "files", "database"
+		SiteID   int64  `json:"site_id"`
+		Type     string `json:"type"`      // "full", "files", "db"
+		MethodID int64  `json:"method_id"` // 0 for local, > 0 for backup_methods record
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -133,8 +134,17 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	initialMethod := "local"
+	if req.MethodID > 0 {
+		if methodObj, err := h.DB.GetBackupMethod(req.MethodID); err == nil && methodObj != nil {
+			if name, ok := methodObj["name"].(string); ok && name != "" {
+				initialMethod = name
+			}
+		}
+	}
+
 	// Create a pending backup record
-	id, err := h.DB.CreateBackupPending(req.SiteID, req.Type, "local")
+	id, err := h.DB.CreateBackupPending(req.SiteID, req.Type, initialMethod)
 	if err != nil {
 		jsonError(w, "failed to create backup record", http.StatusInternalServerError)
 		return
@@ -144,10 +154,10 @@ func (h *BackupHandler) create(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, map[string]interface{}{"id": id, "status": "in_progress"})
 
 	// Run backup in background
-	go h.runBackup(id, req.SiteID, req.Type, site)
+	go h.runBackup(id, req.SiteID, req.Type, req.MethodID, site)
 }
 
-func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, site map[string]interface{}) {
+func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, methodID int64, site map[string]interface{}) {
 	domain := site["domain"].(string)
 	webRoot := site["web_root"].(string)
 	sysUser := site["system_user"].(string)
@@ -179,7 +189,8 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, sit
 	case "full":
 		htdocsStaging := filepath.Join(stagingDir, "htdocs")
 		exec.Command("sudo", "mkdir", "-p", htdocsStaging).Run()
-		cmd := exec.Command("sudo", "rsync", "-a", "--delete", webRoot+"/", htdocsStaging+"/")
+		cleanWebRoot := strings.TrimSuffix(webRoot, "/")
+		cmd := exec.Command("sudo", "rsync", "-a", "--delete", cleanWebRoot+"/", htdocsStaging+"/")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			backupErr = fmt.Errorf("backup failed copying files: %s", string(output))
 		}
@@ -244,7 +255,7 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, sit
 
 	if backupErr != nil {
 		log.Printf("Backup %d failed: %v", backupID, backupErr)
-		h.DB.UpdateBackupStatus(backupID, "failed", "", "")
+		h.DB.UpdateBackupStatus(backupID, "failed", "", "", "")
 		return
 	}
 
@@ -262,8 +273,61 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, sit
 		}
 	}
 
-	h.DB.UpdateBackupStatus(backupID, "completed", backupPath, size)
-	log.Printf("Backup %d completed: %s (%s bytes)", backupID, backupPath, size)
+	methodLabel := "Local"
+
+	// If a remote backup method was selected (e.g. SFTP), perform remote upload!
+	if methodID > 0 {
+		if methodObj, err := h.DB.GetBackupMethod(methodID); err == nil && methodObj != nil {
+			mType, _ := methodObj["type"].(string)
+			mName, _ := methodObj["name"].(string)
+
+			if strings.ToLower(mType) == "sftp" {
+				var cfg map[string]interface{}
+				if cfgStr, ok := methodObj["config"].(string); ok {
+					_ = json.Unmarshal([]byte(cfgStr), &cfg)
+				}
+				if cfg != nil {
+					host, _ := cfg["host"].(string)
+					portStr, _ := cfg["port"].(string)
+					port, _ := strconv.Atoi(portStr)
+					if port == 0 {
+						if pNum, ok := cfg["port"].(float64); ok {
+							port = int(pNum)
+						} else {
+							port = 22
+						}
+					}
+					user, _ := cfg["username"].(string)
+					authType, _ := cfg["auth_type"].(string)
+					password, _ := cfg["password"].(string)
+					privateKey, _ := cfg["private_key"].(string)
+					passphrase, _ := cfg["key_passphrase"].(string)
+					remotePath, _ := cfg["remote_path"].(string)
+
+					if crypto.IsEncrypted(password) {
+						password, _ = crypto.Decrypt(password)
+					}
+					if crypto.IsEncrypted(privateKey) {
+						privateKey, _ = crypto.Decrypt(privateKey)
+					}
+
+					log.Printf("Uploading backup %d (%s) to remote SFTP %s:%d...", backupID, backupPath, host, port)
+					if err := system.UploadViaSFTP(host, port, user, authType, password, privateKey, passphrase, remotePath, backupPath); err != nil {
+						log.Printf("Backup %d remote SFTP upload failed: %v", backupID, err)
+						h.DB.UpdateBackupStatus(backupID, "failed", backupPath, size, "SFTP (Failed)")
+						return
+					}
+					methodLabel = fmt.Sprintf("SFTP (%s)", host)
+					if mName != "" {
+						methodLabel = mName
+					}
+				}
+			}
+		}
+	}
+
+	h.DB.UpdateBackupStatus(backupID, "completed", backupPath, size, methodLabel)
+	log.Printf("Backup %d completed: %s (%s bytes, method: %s)", backupID, backupPath, size, methodLabel)
 
 	// Clean old backups based on schedule retention
 	schedule, _ := h.DB.GetBackupSchedule(siteID)
