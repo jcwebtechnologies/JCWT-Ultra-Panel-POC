@@ -398,16 +398,83 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 
 	webRoot := site["web_root"].(string)
 	sysUser := site["system_user"].(string)
-	backupPath := backup["file_path"].(string)
+	backupPath, _ := backup["file_path"].(string)
+	methodStr, _ := backup["method"].(string)
+	fileName := filepath.Base(backupPath)
 
-	// Verify backup file exists
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		jsonError(w, "backup file not found on disk", http.StatusNotFound)
+	var archivePathToUse string
+	var cleanupTmpFile string
+
+	// 1. Prioritize restoring from Remote Destination (SFTP) if backup was configured with SFTP/remote method
+	if methodStr != "" && strings.ToLower(methodStr) != "local" {
+		methods, _ := h.DB.ListBackupMethods()
+		for _, m := range methods {
+			mType, _ := m["type"].(string)
+			mName, _ := m["name"].(string)
+			if strings.EqualFold(mType, "sftp") || strings.EqualFold(mName, methodStr) || strings.HasPrefix(strings.ToLower(methodStr), "sftp") {
+				if cfgStr, ok := m["config"].(string); ok {
+					var cfg map[string]interface{}
+					_ = json.Unmarshal([]byte(cfgStr), &cfg)
+					if cfg != nil {
+						host, _ := cfg["host"].(string)
+						portStr, _ := cfg["port"].(string)
+						port, _ := strconv.Atoi(portStr)
+						if port == 0 {
+							if pNum, ok := cfg["port"].(float64); ok {
+								port = int(pNum)
+							} else {
+								port = 22
+							}
+						}
+						user, _ := cfg["username"].(string)
+						authType, _ := cfg["auth_type"].(string)
+						password, _ := cfg["password"].(string)
+						privateKey, _ := cfg["private_key"].(string)
+						passphrase, _ := cfg["key_passphrase"].(string)
+						remotePath, _ := cfg["remote_path"].(string)
+
+						if crypto.IsEncrypted(password) {
+							password, _ = crypto.Decrypt(password)
+						}
+						if crypto.IsEncrypted(privateKey) {
+							privateKey, _ = crypto.Decrypt(privateKey)
+						}
+
+						tmpTarget := fmt.Sprintf("/tmp/jcwt-restore-%d-%s", req.BackupID, fileName)
+						log.Printf("Fetching remote SFTP backup %s from %s for restore...", fileName, host)
+						if err := system.DownloadViaSFTP(host, port, user, authType, password, privateKey, passphrase, remotePath, fileName, tmpTarget); err == nil {
+							archivePathToUse = tmpTarget
+							cleanupTmpFile = tmpTarget
+							log.Printf("Successfully fetched remote backup %s to %s", fileName, tmpTarget)
+						} else {
+							log.Printf("Failed to fetch remote backup over SFTP: %v (falling back to local archive)", err)
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
+	// 2. Fallback to Local Archive on Disk if remote fetch wasn't performed or failed
+	if archivePathToUse == "" {
+		if exec.Command("sudo", "test", "-f", backupPath).Run() == nil {
+			archivePathToUse = backupPath
+			log.Printf("Restoring backup %d from local disk archive: %s", req.BackupID, backupPath)
+		}
+	}
+
+	if cleanupTmpFile != "" {
+		defer os.Remove(cleanupTmpFile)
+	}
+
+	if archivePathToUse == "" {
+		jsonError(w, "backup archive file not found on remote storage or local disk", http.StatusNotFound)
 		return
 	}
 
 	// List archive contents to detect backup style (no extraction needed)
-	listCmd := exec.Command("sudo", "tar", "-tzf", backupPath)
+	listCmd := exec.Command("sudo", "tar", "-tzf", archivePathToUse)
 	listOut, err := listCmd.Output()
 	if err != nil {
 		jsonError(w, "failed to read backup archive", http.StatusInternalServerError)
@@ -435,19 +502,16 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	// Restore files
 	if req.RestoreFiles {
 		if isNewStyle {
-			// Extract htdocs/ from archive directly into webroot using a temp dir under the user's home
 			homeDir := filepath.Dir(webRoot)
 			restoreDir := filepath.Join(homeDir, "tmp", "restore-stage")
 			exec.Command("sudo", "mkdir", "-p", restoreDir).Run()
 			exec.Command("sudo", "chown", sysUser+":"+sysUser, restoreDir).Run()
-			// Clean up staging dir when done
 			restoreRel, _ := filepath.Rel(homeDir, restoreDir)
 			defer exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "delete-staging", sysUser, restoreRel).Run()
 
-			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "./htdocs")
+			cmd := exec.Command("sudo", "tar", "-xzf", archivePathToUse, "-C", restoreDir, "./htdocs")
 			if output, err := cmd.CombinedOutput(); err != nil {
-				// Try without ./ prefix (legacy backups)
-				cmd = exec.Command("sudo", "tar", "-xzf", backupPath, "-C", restoreDir, "htdocs")
+				cmd = exec.Command("sudo", "tar", "-xzf", archivePathToUse, "-C", restoreDir, "htdocs")
 				if output2, err2 := cmd.CombinedOutput(); err2 != nil {
 					log.Printf("restore files failed: %s / %s", string(output), string(output2))
 					jsonError(w, "restore files failed", http.StatusInternalServerError)
@@ -464,7 +528,7 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			// Old-style: extract directly over web root parent
-			cmd := exec.Command("sudo", "tar", "-xzf", backupPath, "-C", filepath.Dir(webRoot))
+			cmd := exec.Command("sudo", "tar", "-xzf", archivePathToUse, "-C", filepath.Dir(webRoot))
 			if output, err := cmd.CombinedOutput(); err != nil {
 				log.Printf("restore failed: %s", string(output))
 				jsonError(w, "restore failed", http.StatusInternalServerError)
@@ -475,7 +539,7 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 		restored = append(restored, "files")
 	}
 
-	// Restore databases — pipe directly from archive, no temp files
+	// Restore databases — pipe directly from archive
 	if req.RestoreDBs && len(dbFiles) > 0 {
 		allowedDBs := make(map[string]bool)
 		if len(req.RestoreDBNames) > 0 {
@@ -494,12 +558,11 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			// Ensure the database exists before importing
+			// Ensure database exists before importing
 			createSQL := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", dbName)
 			exec.Command("sudo", "mysql", "-e", createSQL).Run()
 
-			// Extract .sql.gz to stdout and pipe through gunzip into mysql
-			tarCmd := exec.Command("sudo", "tar", "-xzf", backupPath, "--to-stdout", dbFile)
+			tarCmd := exec.Command("sudo", "tar", "-xzf", archivePathToUse, "--to-stdout", dbFile)
 			gunzipCmd := exec.Command("gunzip")
 			mysqlCmd := exec.Command("sudo", "mysql", dbName)
 			pipe1, err := tarCmd.StdoutPipe()
@@ -539,13 +602,12 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Restore cron jobs — extract to stdout, no temp file
+	// Restore cron jobs
 	if req.RestoreCron && isNewStyle && hasCron {
-		cronCmd := exec.Command("sudo", "tar", "-xzf", backupPath, "--to-stdout", "cron_jobs.json")
+		cronCmd := exec.Command("sudo", "tar", "-xzf", archivePathToUse, "--to-stdout", "cron_jobs.json")
 		cronData, err := cronCmd.Output()
 		if err != nil {
-			// Try with ./ prefix
-			cronCmd = exec.Command("sudo", "tar", "-xzf", backupPath, "--to-stdout", "./cron_jobs.json")
+			cronCmd = exec.Command("sudo", "tar", "-xzf", archivePathToUse, "--to-stdout", "./cron_jobs.json")
 			cronData, err = cronCmd.Output()
 		}
 		if err == nil {
@@ -581,14 +643,63 @@ func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath, err := h.DB.DeleteBackup(id)
+	backup, err := h.DB.GetBackup(id)
 	if err != nil {
 		jsonError(w, "backup not found", http.StatusNotFound)
 		return
 	}
 
-	// Remove file from disk via the validated helper.
-	// Parse sysUser from path: /home/<sysUser>/backups/<filename>
+	filePath, _ := backup["file_path"].(string)
+	methodStr, _ := backup["method"].(string)
+
+	// 1. Delete remote backup file if stored on remote destination (e.g. SFTP)
+	if methodStr != "" && strings.ToLower(methodStr) != "local" {
+		methods, _ := h.DB.ListBackupMethods()
+		for _, m := range methods {
+			mType, _ := m["type"].(string)
+			mName, _ := m["name"].(string)
+			if strings.EqualFold(mType, "sftp") || strings.EqualFold(mName, methodStr) || strings.HasPrefix(strings.ToLower(methodStr), "sftp") {
+				if cfgStr, ok := m["config"].(string); ok {
+					var cfg map[string]interface{}
+					_ = json.Unmarshal([]byte(cfgStr), &cfg)
+					if cfg != nil {
+						host, _ := cfg["host"].(string)
+						portStr, _ := cfg["port"].(string)
+						port, _ := strconv.Atoi(portStr)
+						if port == 0 {
+							if pNum, ok := cfg["port"].(float64); ok {
+								port = int(pNum)
+							} else {
+								port = 22
+							}
+						}
+						user, _ := cfg["username"].(string)
+						authType, _ := cfg["auth_type"].(string)
+						password, _ := cfg["password"].(string)
+						privateKey, _ := cfg["private_key"].(string)
+						passphrase, _ := cfg["key_passphrase"].(string)
+						remotePath, _ := cfg["remote_path"].(string)
+
+						if crypto.IsEncrypted(password) {
+							password, _ = crypto.Decrypt(password)
+						}
+						if crypto.IsEncrypted(privateKey) {
+							privateKey, _ = crypto.Decrypt(privateKey)
+						}
+
+						rFileName := filepath.Base(filePath)
+						log.Printf("Deleting remote SFTP backup file %s from %s...", rFileName, host)
+						if err := system.DeleteViaSFTP(host, port, user, authType, password, privateKey, passphrase, remotePath, rFileName); err != nil {
+							log.Printf("Failed to delete remote SFTP backup file %s: %v", rFileName, err)
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
+	// 2. Remove local file from disk via panel-fsctl helper
 	if filePath != "" {
 		const homeBase = "/home/"
 		if strings.HasPrefix(filePath, homeBase) {
@@ -598,6 +709,13 @@ func (h *BackupHandler) delete(w http.ResponseWriter, r *http.Request) {
 					parts[0], filepath.Base(filePath)).Run()
 			}
 		}
+	}
+
+	// 3. Delete database record
+	_, err = h.DB.DeleteBackup(id)
+	if err != nil {
+		jsonError(w, "failed to delete backup record", http.StatusInternalServerError)
+		return
 	}
 
 	jsonSuccess(w, map[string]interface{}{"message": "backup deleted"})
@@ -616,17 +734,75 @@ func (h *BackupHandler) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath := backup["file_path"].(string)
+	filePath, _ := backup["file_path"].(string)
+	methodStr, _ := backup["method"].(string)
+	fileName := filepath.Base(filePath)
 
-	// Check file exists via sudo (panel user may not have direct access)
-	checkCmd := exec.Command("sudo", "test", "-f", filePath)
-	if err := checkCmd.Run(); err != nil {
-		jsonError(w, "backup file not found on disk", http.StatusNotFound)
+	var downloadPathToUse string
+	var cleanupDownloadTmp string
+
+	// 1. Check local file on disk
+	if exec.Command("sudo", "test", "-f", filePath).Run() == nil {
+		downloadPathToUse = filePath
+	} else if methodStr != "" && strings.ToLower(methodStr) != "local" {
+		// 2. If local file was deleted but backup was saved on remote SFTP, fetch remote file for download
+		methods, _ := h.DB.ListBackupMethods()
+		for _, m := range methods {
+			mType, _ := m["type"].(string)
+			mName, _ := m["name"].(string)
+			if strings.EqualFold(mType, "sftp") || strings.EqualFold(mName, methodStr) || strings.HasPrefix(strings.ToLower(methodStr), "sftp") {
+				if cfgStr, ok := m["config"].(string); ok {
+					var cfg map[string]interface{}
+					_ = json.Unmarshal([]byte(cfgStr), &cfg)
+					if cfg != nil {
+						host, _ := cfg["host"].(string)
+						portStr, _ := cfg["port"].(string)
+						port, _ := strconv.Atoi(portStr)
+						if port == 0 {
+							if pNum, ok := cfg["port"].(float64); ok {
+								port = int(pNum)
+							} else {
+								port = 22
+							}
+						}
+						user, _ := cfg["username"].(string)
+						authType, _ := cfg["auth_type"].(string)
+						password, _ := cfg["password"].(string)
+						privateKey, _ := cfg["private_key"].(string)
+						passphrase, _ := cfg["key_passphrase"].(string)
+						remotePath, _ := cfg["remote_path"].(string)
+
+						if crypto.IsEncrypted(password) {
+							password, _ = crypto.Decrypt(password)
+						}
+						if crypto.IsEncrypted(privateKey) {
+							privateKey, _ = crypto.Decrypt(privateKey)
+						}
+
+						tmpTarget := fmt.Sprintf("/tmp/jcwt-dl-%s", fileName)
+						log.Printf("Fetching remote SFTP backup %s for download...", fileName)
+						if err := system.DownloadViaSFTP(host, port, user, authType, password, privateKey, passphrase, remotePath, fileName, tmpTarget); err == nil {
+							downloadPathToUse = tmpTarget
+							cleanupDownloadTmp = tmpTarget
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
+	if cleanupDownloadTmp != "" {
+		defer os.Remove(cleanupDownloadTmp)
+	}
+
+	if downloadPathToUse == "" {
+		jsonError(w, "backup file not found on disk or remote storage", http.StatusNotFound)
 		return
 	}
 
 	// Get file size for Content-Length header
-	sizeCmd := exec.Command("sudo", "du", "-b", filePath)
+	sizeCmd := exec.Command("sudo", "du", "-b", downloadPathToUse)
 	if sizeOut, err := sizeCmd.Output(); err == nil {
 		parts := strings.Fields(strings.TrimSpace(string(sizeOut)))
 		if len(parts) > 0 {
@@ -634,13 +810,12 @@ func (h *BackupHandler) download(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filename := filepath.Base(filePath)
 	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
 	w.Header().Set("Cache-Control", "no-store")
 
-	// Stream file content via sudo cat (panel user may not have direct read access)
-	catCmd := exec.Command("sudo", "cat", filePath)
+	// Stream file content via sudo cat
+	catCmd := exec.Command("sudo", "cat", downloadPathToUse)
 	catCmd.Stdout = w
 	catCmd.Run()
 }

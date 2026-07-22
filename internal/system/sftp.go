@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -160,6 +161,87 @@ func UploadViaSFTP(host string, port int, user, authType, password, privateKey, 
 
 	if err := session.Wait(); err != nil {
 		return fmt.Errorf("remote save failed: %w", err)
+	}
+
+	return nil
+}
+
+// DownloadViaSFTP downloads a file from an SFTP server to a local target file path.
+func DownloadViaSFTP(host string, port int, user, authType, password, privateKey, passphrase, remotePath, fileName, localDestPath string) error {
+	client, err := dialSSH(host, port, user, authType, password, privateKey, passphrase)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	if remotePath == "" {
+		remotePath = "/backups/jcwt-panel"
+	}
+	remoteDir := filepath.ToSlash(remotePath)
+	remoteFilePath := filepath.ToSlash(filepath.Join(remoteDir, fileName))
+
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return fmt.Errorf("create SFTP client: %w", err)
+	}
+	defer sftpClient.Close()
+
+	remoteFile, err := sftpClient.Open(remoteFilePath)
+	if err != nil {
+		return fmt.Errorf("open remote file '%s': %w", remoteFilePath, err)
+	}
+	defer remoteFile.Close()
+
+	tmpLocal := localDestPath + ".tmp"
+	localFile, err := os.Create(tmpLocal)
+	if err != nil {
+		return fmt.Errorf("create local temp file '%s': %w", tmpLocal, err)
+	}
+
+	if _, err := io.Copy(localFile, remoteFile); err != nil {
+		localFile.Close()
+		_ = os.Remove(tmpLocal)
+		return fmt.Errorf("SFTP download stream failed: %w", err)
+	}
+	localFile.Close()
+
+	if err := os.Rename(tmpLocal, localDestPath); err != nil {
+		_ = os.Remove(tmpLocal)
+		return fmt.Errorf("finalize local download file: %w", err)
+	}
+	return nil
+}
+
+// DeleteViaSFTP deletes a remote file from an SFTP/SSH server.
+func DeleteViaSFTP(host string, port int, user, authType, password, privateKey, passphrase, remotePath, fileName string) error {
+	client, err := dialSSH(host, port, user, authType, password, privateKey, passphrase)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	if remotePath == "" {
+		remotePath = "/backups/jcwt-panel"
+	}
+	remoteDir := filepath.ToSlash(remotePath)
+	remoteFilePath := filepath.ToSlash(filepath.Join(remoteDir, fileName))
+
+	// 1. Try pure SFTP subsystem deletion
+	sftpClient, err := sftp.NewClient(client)
+	if err == nil {
+		defer sftpClient.Close()
+		if err := sftpClient.Remove(remoteFilePath); err != nil {
+			return fmt.Errorf("SFTP remove '%s' failed: %w", remoteFilePath, err)
+		}
+		return nil
+	}
+
+	// 2. Fallback to SSH shell session execution
+	session, err := client.NewSession()
+	if err == nil {
+		defer session.Close()
+		cmd := fmt.Sprintf("rm -f %s", shellQuote(remoteFilePath))
+		_ = session.Run(cmd)
 	}
 
 	return nil
