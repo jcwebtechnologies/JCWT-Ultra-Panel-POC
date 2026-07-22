@@ -106,10 +106,15 @@ func (h *BackupHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	schedule, _ := h.DB.GetBackupSchedule(siteID)
+	methods, _ := h.DB.ListBackupMethods()
+	if methods == nil {
+		methods = []map[string]interface{}{}
+	}
 
 	jsonSuccess(w, map[string]interface{}{
 		"backups":  backups,
 		"schedule": schedule,
+		"methods":  methods,
 	})
 }
 
