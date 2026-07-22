@@ -214,23 +214,43 @@ func (h *BackupHandler) runBackup(backupID, siteID int64, backupType string, met
 					dumpFile := filepath.Join(dbStaging, dbName+".sql.gz")
 					dumpCmd := exec.Command("sudo", "mysqldump", "--single-transaction", dbName)
 					gzipCmd := exec.Command("gzip")
-					outFile, err := os.Create(dumpFile)
+					teeCmd := exec.Command("sudo", "tee", dumpFile)
+
+					pipe1, err := dumpCmd.StdoutPipe()
 					if err != nil {
-						log.Printf("Failed to create dump file %s: %v", dumpFile, err)
+						log.Printf("Failed pipe1 for %s: %v", dbName, err)
 						continue
 					}
-					gzipCmd.Stdout = outFile
-					pipe, err := dumpCmd.StdoutPipe()
+					gzipCmd.Stdin = pipe1
+
+					pipe2, err := gzipCmd.StdoutPipe()
 					if err != nil {
-						outFile.Close()
+						log.Printf("Failed pipe2 for %s: %v", dbName, err)
 						continue
 					}
-					gzipCmd.Stdin = pipe
-					dumpCmd.Start()
-					gzipCmd.Start()
+					teeCmd.Stdin = pipe2
+					teeCmd.Stdout = nil
+
+					if err := dumpCmd.Start(); err != nil {
+						log.Printf("Failed to start mysqldump for %s: %v", dbName, err)
+						continue
+					}
+					if err := gzipCmd.Start(); err != nil {
+						log.Printf("Failed to start gzip for %s: %v", dbName, err)
+						continue
+					}
+					if err := teeCmd.Start(); err != nil {
+						log.Printf("Failed to start tee for %s: %v", dbName, err)
+						continue
+					}
+
 					dumpCmd.Wait()
 					gzipCmd.Wait()
-					outFile.Close()
+					if err := teeCmd.Wait(); err != nil {
+						log.Printf("Failed to write dump file %s: %v", dumpFile, err)
+					} else {
+						log.Printf("Successfully created database dump for %s at %s", dbName, dumpFile)
+					}
 				}
 			}
 		}
