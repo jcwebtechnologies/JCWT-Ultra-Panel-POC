@@ -262,23 +262,15 @@ func (h *FilesHandler) startInstance(siteID int64, webRoot, sysUser string) (int
 	}
 
 	// Store filebrowser DB in a hidden .panel directory (not tmp/) so cleanupTmp won't delete it.
-	panelDir := filepath.Join(webRoot, ".panel")
-	if out, err := exec.Command("sudo", "mkdir", "-p", panelDir).CombinedOutput(); err != nil {
+	if out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "ensure-panel-dir", sysUser, webRoot).CombinedOutput(); err != nil {
 		return 0, fmt.Errorf("create .panel dir: %s: %w", string(out), err)
 	}
-	if out, err := exec.Command("sudo", "chown", sysUser+":"+sysUser, panelDir).CombinedOutput(); err != nil {
-		return 0, fmt.Errorf("chown .panel dir: %s: %w", string(out), err)
-	}
-	if out, err := exec.Command("sudo", "chmod", "700", panelDir).CombinedOutput(); err != nil {
-		return 0, fmt.Errorf("chmod .panel dir: %s: %w", string(out), err)
-	}
 
+	panelDir := filepath.Join(webRoot, ".panel")
 	dbPath := filepath.Join(panelDir, fmt.Sprintf("filebrowser-%d.db", siteID))
 
-	// Only initialize the DB if it doesn't already exist.
-	// Persisting the DB preserves user preferences, editor settings, and avoids
-	// unnecessary re-initialization on every file browser start.
-	dbExists := exec.Command("sudo", "test", "-f", dbPath).Run() == nil
+	// Check if DB exists by running config cat with filebrowser (runs as sysUser)
+	dbExists := exec.Command("sudo", "-u", sysUser, "/usr/local/bin/filebrowser", "config", "cat", "--database", dbPath).Run() == nil
 
 	if !dbExists {
 		// Initialize fresh database WITH noauth in a single step.

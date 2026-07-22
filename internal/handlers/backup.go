@@ -638,6 +638,13 @@ type BackupMethodsHandler struct {
 
 func (h *BackupMethodsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	action := r.URL.Query().Get("action")
+	if action == "test-connection" && r.Method == "POST" {
+		h.testConnection(w, r)
+		return
+	}
+
 	switch r.Method {
 	case "GET":
 		methods, err := h.DB.ListBackupMethods()
@@ -647,6 +654,11 @@ func (h *BackupMethodsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 		if methods == nil {
 			methods = []map[string]interface{}{}
+		}
+		for _, m := range methods {
+			if cfg, ok := m["config"].(string); ok {
+				m["config"] = sanitizeConfigForUI(cfg)
+			}
 		}
 		jsonSuccess(w, methods)
 	case "POST":
@@ -668,7 +680,8 @@ func (h *BackupMethodsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			jsonError(w, "name is required", http.StatusBadRequest)
 			return
 		}
-		id, err := h.DB.CreateBackupMethod(req.Name, req.Type, req.Config)
+		configToSave := processConfigForSave(req.Type, req.Config, "")
+		id, err := h.DB.CreateBackupMethod(req.Name, req.Type, configToSave)
 		if err != nil {
 			jsonError(w, "failed to create backup method", http.StatusInternalServerError)
 			return
@@ -686,7 +699,15 @@ func (h *BackupMethodsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			jsonError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if err := h.DB.UpdateBackupMethod(req.ID, req.Name, req.Type, req.Config, req.Enabled); err != nil {
+		// Retrieve existing record to retain encrypted password/key if unmodified
+		existingConfig := ""
+		if existing, err := h.DB.GetBackupMethod(req.ID); err == nil {
+			if cfg, ok := existing["config"].(string); ok {
+				existingConfig = cfg
+			}
+		}
+		configToSave := processConfigForSave(req.Type, req.Config, existingConfig)
+		if err := h.DB.UpdateBackupMethod(req.ID, req.Name, req.Type, configToSave, req.Enabled); err != nil {
 			jsonError(w, "failed to update backup method", http.StatusInternalServerError)
 			return
 		}
@@ -706,4 +727,132 @@ func (h *BackupMethodsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	default:
 		http.Error(w, `{"success":false,"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *BackupMethodsHandler) testConnection(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID     int64                  `json:"id"`
+		Type   string                 `json:"type"`
+		Config map[string]interface{} `json:"config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Type == "sftp" {
+		host, _ := req.Config["host"].(string)
+		portStr, _ := req.Config["port"].(string)
+		port, _ := strconv.Atoi(portStr)
+		if port == 0 {
+			if pNum, ok := req.Config["port"].(float64); ok {
+				port = int(pNum)
+			} else {
+				port = 22
+			}
+		}
+		user, _ := req.Config["username"].(string)
+		authType, _ := req.Config["auth_type"].(string)
+		password, _ := req.Config["password"].(string)
+		privateKey, _ := req.Config["private_key"].(string)
+		passphrase, _ := req.Config["key_passphrase"].(string)
+		remotePath, _ := req.Config["remote_path"].(string)
+
+		// If editing existing record and password/key is placeholder, load from DB
+		if (password == "********" || privateKey == "[SSH Private Key Stored]" || password == "" && privateKey == "") && req.ID > 0 {
+			if existing, err := h.DB.GetBackupMethod(req.ID); err == nil {
+				if cfgStr, ok := existing["config"].(string); ok {
+					var exMap map[string]interface{}
+					if json.Unmarshal([]byte(cfgStr), &exMap) == nil {
+						if password == "********" || password == "" {
+							if exPass, ok := exMap["password"].(string); ok {
+								password = exPass
+							}
+						}
+						if privateKey == "[SSH Private Key Stored]" || privateKey == "" {
+							if exKey, ok := exMap["private_key"].(string); ok {
+								privateKey = exKey
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if crypto.IsEncrypted(password) {
+			password, _ = crypto.Decrypt(password)
+		}
+		if crypto.IsEncrypted(privateKey) {
+			privateKey, _ = crypto.Decrypt(privateKey)
+		}
+
+		if err := system.TestSFTPConnection(host, port, user, authType, password, privateKey, passphrase, remotePath); err != nil {
+			jsonError(w, fmt.Sprintf("SFTP connection failed: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		jsonSuccess(w, map[string]interface{}{"message": "SFTP connection successful! Remote host reached and write permissions verified."})
+		return
+	}
+
+	jsonSuccess(w, map[string]interface{}{"message": "Backup destination settings validated."})
+}
+
+func processConfigForSave(mType, cfgJSON, existingConfigJSON string) string {
+	if mType != "sftp" {
+		return cfgJSON
+	}
+	var newMap map[string]interface{}
+	if err := json.Unmarshal([]byte(cfgJSON), &newMap); err != nil {
+		return cfgJSON
+	}
+	var exMap map[string]interface{}
+	if existingConfigJSON != "" {
+		_ = json.Unmarshal([]byte(existingConfigJSON), &exMap)
+	}
+
+	// Handle password
+	if pass, ok := newMap["password"].(string); ok {
+		if pass == "********" && exMap != nil {
+			newMap["password"] = exMap["password"]
+		} else if pass != "" && !crypto.IsEncrypted(pass) {
+			if enc, err := crypto.Encrypt(pass); err == nil {
+				newMap["password"] = enc
+			}
+		}
+	}
+
+	// Handle private key
+	if key, ok := newMap["private_key"].(string); ok {
+		if key == "[SSH Private Key Stored]" && exMap != nil {
+			newMap["private_key"] = exMap["private_key"]
+		} else if key != "" && !crypto.IsEncrypted(key) {
+			if enc, err := crypto.Encrypt(key); err == nil {
+				newMap["private_key"] = enc
+			}
+		}
+	}
+
+	out, err := json.Marshal(newMap)
+	if err != nil {
+		return cfgJSON
+	}
+	return string(out)
+}
+
+func sanitizeConfigForUI(cfgJSON string) string {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(cfgJSON), &m); err != nil {
+		return cfgJSON
+	}
+	if pass, ok := m["password"].(string); ok && pass != "" {
+		m["has_password"] = true
+		m["password"] = "********"
+	}
+	if key, ok := m["private_key"].(string); ok && key != "" {
+		m["has_private_key"] = true
+		m["private_key"] = "[SSH Private Key Stored]"
+	}
+	out, _ := json.Marshal(m)
+	return string(out)
 }

@@ -1119,8 +1119,21 @@ case "$COMMAND" in
         chown "$USER:$USER" "$AUTH_KEYS"
         ;;
 
+    ensure-panel-dir)
+        [[ $# -eq 2 ]] || die "usage: ensure-panel-dir <user> <webroot>"
+        USER="$1"
+        WEB_ROOT="$2"
+        validate_user "$USER"
+        HOME_DIR="/home/$USER"
+        PANEL_DIR="$WEB_ROOT/.panel"
+        assert_under "$PANEL_DIR" "$HOME_DIR" >/dev/null
+        mkdir -p "$PANEL_DIR"
+        chmod 0700 "$PANEL_DIR"
+        chown "$USER:$USER" "$PANEL_DIR"
+        ;;
+
     *)
-        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys"
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys, ensure-panel-dir"
         ;;
 
 esac
