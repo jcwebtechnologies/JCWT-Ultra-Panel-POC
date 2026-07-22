@@ -1148,6 +1148,10 @@ jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -s /usr/sbin/nologin [a-z]*
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/usermod -aG [a-z]* www-data
 jcwt-panel ALL=(root) NOPASSWD: /usr/sbin/groupdel [a-z]*
 
+# PHP CLI & WP-CLI execution (run as root or as site user via sudo -u)
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php*
+jcwt-panel ALL=(ALL) NOPASSWD: /usr/bin/php
+
 # Systemd service control (only allowed services)
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
 jcwt-panel ALL=(root) NOPASSWD: /usr/bin/systemctl reload php*-fpm
