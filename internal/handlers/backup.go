@@ -99,7 +99,7 @@ func (h *BackupHandler) list(w http.ResponseWriter, r *http.Request) {
 				parts := strings.Fields(strings.TrimSpace(string(sizeOut)))
 				if len(parts) > 0 {
 					b["size"] = parts[0]
-					h.DB.UpdateBackupStatus(b["id"].(int64), status, filePath, parts[0])
+					h.DB.UpdateBackupStatus(b["id"].(int64), status, filePath, parts[0], "")
 				}
 			}
 		}
