@@ -44,9 +44,9 @@ export async function renderVueFinder(el, siteId, siteToken) {
             </div>`;
 
         try {
-            // Import Vue 3 and VueFinder directly as ES modules (Single file dist targets!)
-            const Vue = await import('https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js');
-            const VueFinderModule = await import('https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/vuefinder.js');
+            // Import pre-bundled ES modules via esm.sh (automatically resolves internal "vue" imports without bare specifier errors)
+            const Vue = await import('https://esm.sh/vue@3');
+            const VueFinderModule = await import('https://esm.sh/vuefinder@2.4.0');
 
             const VueFinder = VueFinderModule.default || VueFinderModule;
             const Comp = VueFinder.VueFinder || (VueFinder.default && VueFinder.default.VueFinder) || VueFinder.default || VueFinder;
