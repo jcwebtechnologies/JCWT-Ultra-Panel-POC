@@ -128,6 +128,11 @@ export const files = {
     extract: (siteId, archivePath, destination) => request('/api/files/extract', { method: 'POST', body: JSON.stringify({ site_id: siteId, archive_path: archivePath, destination }) }),
 };
 
+// VueFinder (New File Manager pilot)
+export const vuefinder = {
+    url: (siteId) => `/api/vuefinder?site_id=${siteId}`,
+};
+
 // PHP Settings
 export const phpSettings = {
     get: (siteId) => request(`/api/php-settings?site_id=${siteId}`),

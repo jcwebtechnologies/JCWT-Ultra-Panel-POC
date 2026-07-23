@@ -10,6 +10,7 @@ import { renderOverview, renderPHP, renderVhost } from './site-detail/tab-overvi
 import { renderSSL } from './site-detail/tab-ssl.js';
 import { renderCron } from './site-detail/tab-cron.js';
 import { renderFiles } from './site-detail/tab-files.js';
+import { renderVueFinder } from './site-detail/tab-files-new.js';
 import { renderDatabases, renderDBUsers, renderPhpMyAdmin } from './site-detail/tab-database.js';
 import { renderSecurity, renderSSHAccess } from './site-detail/tab-security.js';
 import { renderBackups } from './site-detail/tab-backup.js';
@@ -129,6 +130,10 @@ export async function render(container, siteToken, section) {
                     <div class="site-card" data-section="files">
                         <div class="site-card-icon green"><span class="nav-icon nav-icon-lg">${icons.folder}</span></div>
                         <div class="site-card-title">File Manager</div>
+                    </div>
+                    <div class="site-card" data-section="files-new">
+                        <div class="site-card-icon blue"><span class="nav-icon nav-icon-lg">${icons.folder}</span></div>
+                        <div class="site-card-title">File Manager (New)</div>
                     </div>
                     <div class="site-card" data-section="cron">
                         <div class="site-card-icon orange"><span class="nav-icon nav-icon-lg">${icons.clock}</span></div>
@@ -358,6 +363,7 @@ export async function render(container, siteToken, section) {
                     case 'cron': renderCron(sectionContent, siteId); break;
                     case 'security': renderSecurity(sectionContent, site, siteId, renderPage); break;
                     case 'files': renderFiles(sectionContent, siteId, siteToken); break;
+                    case 'files-new': renderVueFinder(sectionContent, siteId, siteToken); break;
                     case 'vhost': renderVhost(sectionContent, site, siteId); break;
                     case 'backups': renderBackups(sectionContent, site, siteId); break;
                     case 'phpmyadmin': renderPhpMyAdmin(sectionContent, siteId); break;

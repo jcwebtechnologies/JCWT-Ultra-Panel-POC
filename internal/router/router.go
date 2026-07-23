@@ -183,6 +183,12 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 		middleware.RequireRole("admin", "manager")(http.HandlerFunc(filesHandler.ExtractFile)),
 	)))
 
+	// VueFinder (New File Manager pilot) — admin + manager only
+	vueFinderHandler := &handlers.VueFinderHandler{DB: database, Cfg: cfg}
+	mux.Handle("/api/vuefinder", middleware.RequireAuth(middleware.RequireCSRF(
+		middleware.RequireRole("admin", "manager")(vueFinderHandler),
+	)))
+
 	// File Browser reverse proxy — admin + manager only
 	mux.Handle("/fb/", middleware.RequireAuth(
 		middleware.RequireRole("admin", "manager")(http.HandlerFunc(filesHandler.ProxyHandler())),
