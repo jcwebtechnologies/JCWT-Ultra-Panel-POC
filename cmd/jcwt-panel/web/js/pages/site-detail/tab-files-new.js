@@ -57,7 +57,7 @@ export async function renderVueFinder(el, siteId, siteToken) {
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>VueFinder</title>
-                <link rel="stylesheet" href="https://unpkg.com/vuefinder@2.4.0/dist/style.css">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/style.css">
                 <style>
                     body { margin: 0; padding: 0; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
                     #vuefinder { height: 100vh; }
@@ -65,25 +65,33 @@ export async function renderVueFinder(el, siteId, siteToken) {
             </head>
             <body>
                 <div id="vuefinder"></div>
-                <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-                <script src="https://unpkg.com/vuefinder@2.4.0/dist/vuefinder.iife.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/vuefinder.iife.js"></script>
                 <script>
-                    const { createApp } = Vue;
-                    const app = createApp({
-                        template: '<vue-finder id="vf" :request="requestConfig" />',
-                        data() {
-                            return {
-                                requestConfig: {
-                                    baseUrl: '${apiUrl}',
-                                    headers: {
-                                        'X-CSRF-Token': '${document.querySelector('meta[name="csrf-token"]')?.content || ''}'
-                                    }
-                                }
-                            };
+                    (function() {
+                        if (typeof Vue === 'undefined') {
+                            document.getElementById('vuefinder').innerHTML = '<div style="padding: 20px; color: #ef4444;">Failed to load Vue framework scripts. Please refresh.</div>';
+                            return;
                         }
-                    });
-                    app.use(VueFinder);
-                    app.mount('#vuefinder');
+                        const { createApp } = Vue;
+                        const app = createApp({
+                            template: '<vue-finder id="vf" :request="requestConfig" />',
+                            data() {
+                                return {
+                                    requestConfig: {
+                                        baseUrl: '${apiUrl}',
+                                        headers: {
+                                            'X-CSRF-Token': '${document.querySelector('meta[name="csrf-token"]')?.content || ''}'
+                                        }
+                                    }
+                                };
+                            }
+                        });
+                        if (window.VueFinder) {
+                            app.use(window.VueFinder);
+                        }
+                        app.mount('#vuefinder');
+                    })();
                 </script>
             </body>
             </html>
