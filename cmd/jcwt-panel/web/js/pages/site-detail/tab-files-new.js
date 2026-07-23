@@ -1,21 +1,6 @@
 import { vuefinder } from '../../api.js';
 import { icons, showToast, escapeHtml } from '../../app.js';
 
-function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const existing = document.querySelector(`script[src="${src}"]`);
-        if (existing) {
-            resolve();
-            return;
-        }
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = () => resolve();
-        s.onerror = (err) => reject(new Error(`Failed to load script: ${src}`));
-        document.head.appendChild(s);
-    });
-}
-
 export async function renderVueFinder(el, siteId, siteToken) {
     const apiUrl = vuefinder.url(siteId);
 
@@ -59,25 +44,11 @@ export async function renderVueFinder(el, siteId, siteToken) {
             </div>`;
 
         try {
-            // Load standalone single-file global bundles (No +esm recursive module waterfalls!)
-            if (!window.Vue) {
-                await loadScript('https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js');
-            }
-            if (!window.VueFinder) {
-                try {
-                    await loadScript('https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/vuefinder.js');
-                } catch {
-                    await loadScript('https://unpkg.com/vuefinder@2.4.0/dist/vuefinder.js');
-                }
-            }
+            // Import Vue 3 and VueFinder directly as ES modules (Single file dist targets!)
+            const Vue = await import('https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js');
+            const VueFinderModule = await import('https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/vuefinder.js');
 
-            const Vue = window.Vue;
-            const VueFinder = window.VueFinder;
-
-            if (!Vue || !VueFinder) {
-                throw new Error('Vue or VueFinder failed to attach to window scope');
-            }
-
+            const VueFinder = VueFinderModule.default || VueFinderModule;
             const Comp = VueFinder.VueFinder || (VueFinder.default && VueFinder.default.VueFinder) || VueFinder.default || VueFinder;
 
             mountArea.innerHTML = `<div id="vf-root" style="height:70vh;width:100%;"></div>`;
@@ -101,8 +72,8 @@ export async function renderVueFinder(el, siteId, siteToken) {
 
             if (VueFinder.install) {
                 app.use(VueFinder);
-            } else if (VueFinder.default && VueFinder.default.install) {
-                app.use(VueFinder.default);
+            } else if (VueFinderModule.install) {
+                app.use(VueFinderModule);
             }
 
             app.mount('#vf-root');
