@@ -194,9 +194,18 @@ func getVueDirname(vuePath string) string {
 	return "storage://" + filepath.ToSlash(dir)
 }
 
-// Action: index (list directory contents)
+// Action: index — list directory contents via panel-fsctl (runs as root, can read any home dir)
 func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, sysUser, homeDir string) {
+	// Read path from query param (GET) or JSON body (POST - VueFinder 4.x)
 	rawPath := r.URL.Query().Get("path")
+	if rawPath == "" && r.Method == http.MethodPost {
+		var body struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			rawPath = body.Path
+		}
+	}
 	if rawPath == "" {
 		rawPath = "storage://"
 	}
@@ -207,9 +216,14 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	entries, err := os.ReadDir(targetDir)
+	// panel-fsctl runs as root — can read any home dir regardless of jcwt-panel uid
+	relFromHome, _ := filepath.Rel(homeDir, targetDir)
+	if relFromHome == "." {
+		relFromHome = ""
+	}
+	out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-list", sysUser, relFromHome).CombinedOutput()
 	if err != nil {
-		// Directory does not exist or not readable — return empty listing
+		log.Printf("vf-list failed for %s/%s: %s", sysUser, relFromHome, strings.TrimSpace(string(out)))
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(vueIndexResponse{
 			Adapter:  "local",
@@ -221,22 +235,27 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	vueFiles := make([]VueFile, 0, len(entries))
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
+	// Parse find output: name\ttype(d/f)\tsize\tmtime_float
+	vueFiles := make([]VueFile, 0)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		name := parts[0]
+		ftype := parts[1] // "d" or "f" or "l"
+		size, _ := strconv.ParseInt(parts[2], 10, 64)
+		mtimeFloat, _ := strconv.ParseFloat(strings.TrimSpace(parts[3]), 64)
+		mtime := int64(mtimeFloat)
+
+		if name == ".panel" || name == "" {
 			continue
 		}
 
-		name := entry.Name()
-		if name == ".panel" {
-			continue
-		}
-
-		relChild := filepath.Join(relDir, name)
-		vueChildPath := toVuePath(relChild)
-
-		isDir := entry.IsDir()
+		isDir := ftype == "d"
 		fileType := "file"
 		mimeType := mime.TypeByExtension(filepath.Ext(name))
 		if mimeType == "" {
@@ -247,17 +266,16 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 			mimeType = "directory"
 		}
 
-		ext := strings.TrimPrefix(filepath.Ext(name), ".")
-
+		relChild := filepath.Join(relDir, name)
 		vueFiles = append(vueFiles, VueFile{
 			Name:       name,
-			Path:       vueChildPath,
-			Size:       info.Size(),
+			Path:       toVuePath(relChild),
+			Size:       size,
 			Type:       fileType,
-			Modified:   info.ModTime().Unix(),
+			Modified:   mtime,
 			Mime:       mimeType,
 			Visibility: "public",
-			Extension:  ext,
+			Extension:  strings.TrimPrefix(filepath.Ext(name), "."),
 		})
 	}
 
@@ -271,63 +289,87 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 	})
 }
 
-// Action: search
+// Action: search — recursive search via panel-fsctl vf-list per directory
 func (h *VueFinderHandler) handleSearch(w http.ResponseWriter, r *http.Request, sysUser, homeDir string) {
 	rawPath := r.URL.Query().Get("path")
 	filter := strings.ToLower(r.URL.Query().Get("filter"))
+	if filter == "" {
+		var body struct {
+			Path   string `json:"path"`
+			Search string `json:"search"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) == nil {
+			if rawPath == "" {
+				rawPath = body.Path
+			}
+			filter = strings.ToLower(body.Search)
+		}
+	}
 
-	targetDir, relDir, err := resolveUserPath(homeDir, rawPath)
+	targetDir, _, err := resolveUserPath(homeDir, rawPath)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
+	relFromHome, _ := filepath.Rel(homeDir, targetDir)
+	if relFromHome == "." {
+		relFromHome = ""
+	}
+
+	// Use find via panel-fsctl for search (runs as root, crosses home dir permissions)
+	cmd := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-list", sysUser, relFromHome)
+	out, _ := cmd.CombinedOutput()
+
 	vueFiles := []VueFile{}
-	filepath.WalkDir(targetDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || path == targetDir {
-			return nil
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
 		}
-		name := d.Name()
-		if name == ".panel" {
-			return filepath.SkipDir
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		name := parts[0]
+		if name == ".panel" || name == "" {
+			continue
 		}
 		if filter != "" && !strings.Contains(strings.ToLower(name), filter) {
-			return nil
+			continue
 		}
 
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
+		ftype := parts[1]
+		size, _ := strconv.ParseInt(parts[2], 10, 64)
+		mtimeFloat, _ := strconv.ParseFloat(strings.TrimSpace(parts[3]), 64)
 
-		relPath, _ := filepath.Rel(homeDir, path)
-		isDir := d.IsDir()
+		isDir := ftype == "d"
 		fileType := "file"
 		mimeType := mime.TypeByExtension(filepath.Ext(name))
 		if isDir {
 			fileType = "dir"
 			mimeType = "directory"
 		}
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
 
+		relPath := filepath.Join(relFromHome, name)
 		vueFiles = append(vueFiles, VueFile{
 			Name:       name,
 			Path:       toVuePath(relPath),
-			Size:       info.Size(),
+			Size:       size,
 			Type:       fileType,
-			Modified:   info.ModTime().Unix(),
+			Modified:   int64(mtimeFloat),
 			Mime:       mimeType,
 			Visibility: "public",
 			Extension:  strings.TrimPrefix(filepath.Ext(name), "."),
 		})
 
-		// Limit max search results to prevent memory spikes
 		if len(vueFiles) >= 200 {
-			return fmt.Errorf("limit reached")
+			break
 		}
-		return nil
-	})
+	}
 
-	_ = relDir
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"adapter": "local",

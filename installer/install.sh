@@ -1204,9 +1204,16 @@ case "$COMMAND" in
     vf-list)
         USER="${1:-}"; RELPATH="${2:-}"
         validate_user "$USER"
-        TARGET="/home/$USER/$RELPATH"
-        assert_under "$TARGET" "/home/$USER/"
-        ls -la --time-style=+%s "$TARGET"
+        HOME_DIR="/home/$USER"
+        if [ -n "$RELPATH" ]; then
+            TARGET="$HOME_DIR/$RELPATH"
+            assert_under "$TARGET" "$HOME_DIR/"
+        else
+            TARGET="$HOME_DIR"
+        fi
+        # Output tab-separated: name<TAB>type(d/f)<TAB>size<TAB>mtime_unix
+        # panel-fsctl runs as root so can read any home dir
+        find "$TARGET" -maxdepth 1 ! -path "$TARGET" -printf '%f\t%y\t%s\t%T@\n' 2>/dev/null | head -2000
         ;;
 
     *)
