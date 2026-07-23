@@ -49,9 +49,13 @@ type vueIndexResponse struct {
 }
 
 func (h *VueFinderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// site_id: ?site_id= query param, form value, or X-Site-Id header (4.x clean baseURL mode)
 	siteIDStr := r.URL.Query().Get("site_id")
 	if siteIDStr == "" {
 		siteIDStr = r.FormValue("site_id")
+	}
+	if siteIDStr == "" {
+		siteIDStr = r.Header.Get("X-Site-Id")
 	}
 	siteID, err := strconv.ParseInt(siteIDStr, 10, 64)
 	if err != nil || siteID <= 0 {
@@ -72,12 +76,32 @@ func (h *VueFinderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	homeDir := filepath.Join(h.Cfg.WebRootBase, sysUser)
-	action := r.URL.Query().Get("q")
+
+	// Action resolution:
+	//   VueFinder 4.x: POST /api/vuefinder/{action}  (path suffix after /api/vuefinder)
+	//   VueFinder 2.x: GET/POST /api/vuefinder?q={action}
+	action := ""
+	if suffix := strings.TrimPrefix(r.URL.Path, "/api/vuefinder"); suffix != "" {
+		action = strings.Trim(suffix, "/")
+	}
+	if action == "" {
+		action = r.URL.Query().Get("q")
+	}
 	if action == "" {
 		action = r.FormValue("q")
 	}
 	if action == "" && r.Method == "GET" {
 		action = "index"
+	}
+
+	// Map VueFinder 4.x hyphenated action names to handler names
+	switch action {
+	case "create-file":
+		action = "mkfile"
+	case "create-folder":
+		action = "mkdir"
+	case "extract":
+		action = "unarchive"
 	}
 
 	switch action {

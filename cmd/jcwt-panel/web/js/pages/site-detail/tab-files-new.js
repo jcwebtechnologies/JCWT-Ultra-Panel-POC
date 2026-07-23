@@ -1,21 +1,18 @@
-import { vuefinder } from '../../api.js';
+import { getCsrfToken } from '../../api.js';
 import { showToast, escapeHtml } from '../../app.js';
 
-// These are resolved via the importmap in index.html pointing to /js/vendor/vue.esm-browser.prod.js
+// Vue resolved via importmap in index.html → /js/vendor/vue.esm-browser.prod.js
 import { createApp, h } from 'vue';
 
 let vfModuleCache = null;
 async function loadVueFinder() {
     if (!vfModuleCache) {
-        // vuefinder.bundle.js has vue marked external — the importmap above resolves it
         vfModuleCache = await import('/js/vendor/vuefinder.bundle.js');
     }
     return vfModuleCache;
 }
 
 export async function renderVueFinder(el, siteId, siteToken) {
-    const apiUrl = vuefinder.url(siteId);
-
     el.innerHTML = `
     <div class="card" style="padding: var(--space-4);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
@@ -44,7 +41,7 @@ export async function renderVueFinder(el, siteId, siteToken) {
         const mountArea = document.getElementById('vf-mount-area');
         if (!mountArea) return;
 
-        // Unmount any previous app instance
+        // Unmount any previous Vue instance
         if (vfApp) {
             try { vfApp.unmount(); } catch (_) {}
             vfApp = null;
@@ -68,11 +65,14 @@ export async function renderVueFinder(el, siteId, siteToken) {
             if (!VueFinderPlugin) throw new Error('VueFinderPlugin not found in bundle');
             if (!RemoteDriver)    throw new Error('RemoteDriver not found in bundle');
 
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-
+            // Base URL is clean — site_id passed via X-Site-Id header so VueFinder 4.x
+            // correctly constructs: POST /api/vuefinder/{action}  (not ?site_id=6/action)
             const driver = new RemoteDriver({
-                baseURL: apiUrl,
-                headers: { 'X-CSRF-Token': csrfToken },
+                baseURL: '/api/vuefinder',
+                headers: {
+                    'X-CSRF-Token': getCsrfToken(),
+                    'X-Site-Id':    String(siteId),
+                },
             });
 
             mountArea.innerHTML = '<div id="vf-root" style="height:72vh;width:100%;"></div>';

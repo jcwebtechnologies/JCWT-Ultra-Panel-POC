@@ -184,10 +184,15 @@ func Setup(database *db.DB, cfg *config.Config, authMgr *auth.Manager, webFS htt
 	)))
 
 	// VueFinder (New File Manager pilot) — admin + manager only
+	// Registered with and without trailing slash:
+	//   /api/vuefinder      — VueFinder 2.x ?q=action protocol
+	//   /api/vuefinder/     — VueFinder 4.x /{action} path protocol
 	vueFinderHandler := &handlers.VueFinderHandler{DB: database, Cfg: cfg}
-	mux.Handle("/api/vuefinder", middleware.RequireAuth(middleware.RequireCSRF(
+	vueFinderWrapped := middleware.RequireAuth(middleware.RequireCSRF(
 		middleware.RequireRole("admin", "manager")(vueFinderHandler),
-	)))
+	))
+	mux.Handle("/api/vuefinder", vueFinderWrapped)
+	mux.Handle("/api/vuefinder/", vueFinderWrapped)
 
 	// File Browser reverse proxy — admin + manager only
 	mux.Handle("/fb/", middleware.RequireAuth(
