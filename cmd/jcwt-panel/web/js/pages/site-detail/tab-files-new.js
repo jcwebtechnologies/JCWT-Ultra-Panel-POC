@@ -28,7 +28,7 @@ export async function renderVueFinder(el, siteId, siteToken) {
         const link = document.createElement('link');
         link.id = 'vuefinder-css';
         link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/style.css';
+        link.href = '/css/vendor/vuefinder.css';
         document.head.appendChild(link);
     }
 
@@ -44,9 +44,9 @@ export async function renderVueFinder(el, siteId, siteToken) {
             </div>`;
 
         try {
-            // Import pre-bundled ES modules via esm.sh (automatically resolves internal "vue" imports without bare specifier errors)
-            const Vue = await import('https://esm.sh/vue@3');
-            const VueFinderModule = await import('https://esm.sh/vuefinder@2.4.0');
+            // Import self-contained local ES modules (0 external CDN requests!)
+            const Vue = await import('../../vendor/vue.esm-browser.prod.js');
+            const VueFinderModule = await import('../../vendor/vuefinder.js');
 
             const VueFinder = VueFinderModule.default || VueFinderModule;
             const Comp = VueFinder.VueFinder || (VueFinder.default && VueFinder.default.VueFinder) || VueFinder.default || VueFinder;
