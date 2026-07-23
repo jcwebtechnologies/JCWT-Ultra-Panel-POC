@@ -176,22 +176,26 @@ func toVuePath(relPath string) string {
 	relPath = filepath.ToSlash(relPath)
 	relPath = strings.TrimPrefix(relPath, "/")
 	if relPath == "." || relPath == "" {
-		return "storage://"
+		return "local://"
 	}
-	return "storage://" + relPath
+	return "local://" + relPath
 }
 
 func getVueDirname(vuePath string) string {
-	if vuePath == "storage://" || vuePath == "storage:" || vuePath == "" {
-		return "storage://"
+	if vuePath == "local://" || vuePath == "local:" || vuePath == "storage://" || vuePath == "" {
+		return "local://"
 	}
-	p := strings.TrimPrefix(vuePath, "storage://")
+	// Strip any scheme prefix (local:// or storage://)
+	p := vuePath
+	if idx := strings.Index(p, "://"); idx != -1 {
+		p = p[idx+3:]
+	}
 	p = strings.TrimPrefix(p, "/")
 	dir := filepath.Dir(p)
 	if dir == "." || dir == "" {
-		return "storage://"
+		return "local://"
 	}
-	return "storage://" + filepath.ToSlash(dir)
+	return "local://" + filepath.ToSlash(dir)
 }
 
 // Action: index — list directory contents via panel-fsctl (runs as root, can read any home dir)
@@ -207,7 +211,7 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 		}
 	}
 	if rawPath == "" {
-		rawPath = "storage://"
+		rawPath = "local://"
 	}
 
 	targetDir, relDir, err := resolveUserPath(homeDir, rawPath)
