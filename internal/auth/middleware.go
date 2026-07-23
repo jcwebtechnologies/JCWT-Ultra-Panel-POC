@@ -120,7 +120,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		// Skip CSP for filebrowser routes — filebrowser's Ace editor loads themes/modes from cdn.jsdelivr.net
 		if !strings.HasPrefix(r.URL.Path, "/fb/") {
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://unpkg.com; frame-src 'self' blob: https://www.google.com; img-src 'self' data: blob: https:;")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://unpkg.com; connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com; frame-src 'self' blob: https://www.google.com; img-src 'self' data: blob: https:;")
 		}
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 

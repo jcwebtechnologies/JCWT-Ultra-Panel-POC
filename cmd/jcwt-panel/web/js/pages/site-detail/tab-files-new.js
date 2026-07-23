@@ -74,20 +74,20 @@ export async function renderVueFinder(el, siteId, siteToken) {
             <body>
                 <div id="vuefinder"></div>
                 <script type="module">
-                    import { createApp } from 'vue';
+                    import { createApp, h } from 'vue';
                     import VueFinder from 'vuefinder';
 
                     const app = createApp({
-                        template: '<vue-finder id="vf" :request="requestConfig" />',
-                        data() {
-                            return {
-                                requestConfig: {
+                        render() {
+                            return h(VueFinder, {
+                                id: 'vf',
+                                request: {
                                     baseUrl: '${apiUrl}',
                                     headers: {
                                         'X-CSRF-Token': '${document.querySelector('meta[name="csrf-token"]')?.content || ''}'
                                     }
                                 }
-                            };
+                            });
                         }
                     });
                     app.use(VueFinder);
