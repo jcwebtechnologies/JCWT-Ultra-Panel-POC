@@ -1,0 +1,17 @@
+{
+  "name": "jcwt-panel-frontend",
+  "version": "1.0.0",
+  "description": "Frontend vendor build for JCWT Ultra Panel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:vendor": "node build-vendor.js"
+  },
+  "dependencies": {
+    "vuefinder": "^4.6.0",
+    "vue": "^3.5.22"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
