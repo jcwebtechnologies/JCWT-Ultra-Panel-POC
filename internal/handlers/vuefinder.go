@@ -207,10 +207,9 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	// Use sudo -u to list directory contents safely as sysUser
-	out, err := exec.Command("sudo", "-u", sysUser, "ls", "-la", "--time-style=+%s", targetDir).CombinedOutput()
+	entries, err := os.ReadDir(targetDir)
 	if err != nil {
-		// If directory does not exist, return empty listing
+		// Directory does not exist or not readable — return empty listing
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(vueIndexResponse{
 			Adapter:  "local",
@@ -222,12 +221,6 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	entries, err := os.ReadDir(targetDir)
-	if err != nil {
-		// Fallback parse if direct stat works
-		entries = []os.DirEntry{}
-	}
-
 	vueFiles := make([]VueFile, 0, len(entries))
 	for _, entry := range entries {
 		info, err := entry.Info()
@@ -236,7 +229,6 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 		}
 
 		name := entry.Name()
-		// Hide hidden .panel configuration folder
 		if name == ".panel" {
 			continue
 		}
@@ -268,7 +260,6 @@ func (h *VueFinderHandler) handleIndex(w http.ResponseWriter, r *http.Request, s
 			Extension:  ext,
 		})
 	}
-	_ = out
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(vueIndexResponse{
@@ -367,15 +358,16 @@ func (h *VueFinderHandler) handleMkdir(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
+	// Relative path from home dir (panel-fsctl requires relative path under /home/USER/)
 	newDirPath := filepath.Join(targetParent, cleanName)
-	out, err := exec.Command("sudo", "-u", sysUser, "mkdir", "-p", newDirPath).CombinedOutput()
+	relNewDir, _ := filepath.Rel(homeDir, newDirPath)
+	out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-mkdir", sysUser, relNewDir).CombinedOutput()
 	if err != nil {
-		log.Printf("mkdir failed for %s: %s", newDirPath, string(out))
+		log.Printf("mkdir failed for %s: %s", newDirPath, strings.TrimSpace(string(out)))
 		jsonError(w, "failed to create directory", http.StatusInternalServerError)
 		return
 	}
 
-	exec.Command("sudo", "chmod", "0755", newDirPath).Run()
 	jsonSuccess(w, map[string]interface{}{"status": true, "message": "directory created"})
 }
 
@@ -403,14 +395,14 @@ func (h *VueFinderHandler) handleMkfile(w http.ResponseWriter, r *http.Request, 
 	}
 
 	newFilePath := filepath.Join(targetParent, cleanName)
-	out, err := exec.Command("sudo", "-u", sysUser, "touch", newFilePath).CombinedOutput()
+	relNewFile, _ := filepath.Rel(homeDir, newFilePath)
+	out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-mkfile", sysUser, relNewFile).CombinedOutput()
 	if err != nil {
-		log.Printf("mkfile failed for %s: %s", newFilePath, string(out))
+		log.Printf("mkfile failed for %s: %s", newFilePath, strings.TrimSpace(string(out)))
 		jsonError(w, "failed to create file", http.StatusInternalServerError)
 		return
 	}
 
-	exec.Command("sudo", "chmod", "0644", newFilePath).Run()
 	jsonSuccess(w, map[string]interface{}{"status": true, "message": "file created"})
 }
 
@@ -438,9 +430,11 @@ func (h *VueFinderHandler) handleRename(w http.ResponseWriter, r *http.Request, 
 	}
 
 	newPath := filepath.Join(filepath.Dir(oldPath), cleanName)
-	out, err := exec.Command("sudo", "-u", sysUser, "mv", oldPath, newPath).CombinedOutput()
+	relOld, _ := filepath.Rel(homeDir, oldPath)
+	relNew, _ := filepath.Rel(homeDir, newPath)
+	out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-rename", sysUser, relOld, relNew).CombinedOutput()
 	if err != nil {
-		log.Printf("rename failed from %s to %s: %s", oldPath, newPath, string(out))
+		log.Printf("rename failed from %s to %s: %s", oldPath, newPath, strings.TrimSpace(string(out)))
 		jsonError(w, "failed to rename item", http.StatusInternalServerError)
 		return
 	}
@@ -473,9 +467,10 @@ func (h *VueFinderHandler) handleDelete(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 
-		out, err := exec.Command("sudo", "-u", sysUser, "rm", "-rf", targetPath).CombinedOutput()
+		relTarget, _ := filepath.Rel(homeDir, targetPath)
+		out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-delete", sysUser, relTarget).CombinedOutput()
 		if err != nil {
-			log.Printf("delete failed for %s: %s", targetPath, string(out))
+			log.Printf("delete failed for %s: %s", targetPath, strings.TrimSpace(string(out)))
 			jsonError(w, "failed to delete item", http.StatusInternalServerError)
 			return
 		}
@@ -508,9 +503,13 @@ func (h *VueFinderHandler) handleCopy(w http.ResponseWriter, r *http.Request, sy
 			return
 		}
 
-		out, err := exec.Command("sudo", "-u", sysUser, "cp", "-r", srcPath, destDir).CombinedOutput()
+		relSrc, _ := filepath.Rel(homeDir, srcPath)
+		// dest for copy is the directory; panel-fsctl vf-copy takes src and dest
+		destFile := filepath.Join(destDir, filepath.Base(srcPath))
+		relDest, _ := filepath.Rel(homeDir, destFile)
+		out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-copy", sysUser, relSrc, relDest).CombinedOutput()
 		if err != nil {
-			log.Printf("copy failed from %s to %s: %s", srcPath, destDir, string(out))
+			log.Printf("copy failed from %s to %s: %s", srcPath, destDir, strings.TrimSpace(string(out)))
 			jsonError(w, "failed to copy item", http.StatusInternalServerError)
 			return
 		}
@@ -543,9 +542,12 @@ func (h *VueFinderHandler) handleMove(w http.ResponseWriter, r *http.Request, sy
 			return
 		}
 
-		out, err := exec.Command("sudo", "-u", sysUser, "mv", srcPath, destDir).CombinedOutput()
+		relSrc, _ := filepath.Rel(homeDir, srcPath)
+		destFile := filepath.Join(destDir, filepath.Base(srcPath))
+		relDest, _ := filepath.Rel(homeDir, destFile)
+		out, err := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-move", sysUser, relSrc, relDest).CombinedOutput()
 		if err != nil {
-			log.Printf("move failed from %s to %s: %s", srcPath, destDir, string(out))
+			log.Printf("move failed from %s to %s: %s", srcPath, destDir, strings.TrimSpace(string(out)))
 			jsonError(w, "failed to move item", http.StatusInternalServerError)
 			return
 		}
@@ -591,15 +593,15 @@ func (h *VueFinderHandler) handleUpload(w http.ResponseWriter, r *http.Request, 
 			cleanFileName := filepath.Base(part.FileName())
 			destFilePath := filepath.Join(targetPath, cleanFileName)
 
-			// Stream upload directly to disk via sudo -u sysUser tee
-			cmd := exec.Command("sudo", "-u", sysUser, "tee", destFilePath)
+			// Stream upload via panel-fsctl vf-write (reads from stdin)
+			relDest, _ := filepath.Rel(homeDir, destFilePath)
+			cmd := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-write", sysUser, relDest)
 			cmd.Stdin = part
-			if err := cmd.Run(); err != nil {
-				log.Printf("upload failed for %s: %v", destFilePath, err)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				log.Printf("upload failed for %s: %s", destFilePath, strings.TrimSpace(string(out)))
 				jsonError(w, "failed to save uploaded file", http.StatusInternalServerError)
 				return
 			}
-			exec.Command("sudo", "chmod", "0644", destFilePath).Run()
 		}
 	}
 
@@ -625,7 +627,7 @@ func (h *VueFinderHandler) handleDownload(w http.ResponseWriter, r *http.Request
 		// Compress directory on the fly for download
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", filepath.Base(targetPath)))
-		cmd := exec.Command("sudo", "-u", sysUser, "zip", "-r", "-", filepath.Base(targetPath))
+		cmd := exec.Command("sudo", "/usr/bin/zip", "-r", "-", filepath.Base(targetPath))
 		cmd.Dir = filepath.Dir(targetPath)
 		cmd.Stdout = w
 		cmd.Run()
@@ -635,7 +637,9 @@ func (h *VueFinderHandler) handleDownload(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(targetPath)))
 	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 
-	cmd := exec.Command("sudo", "-u", sysUser, "cat", "--", targetPath)
+	// Read file via panel-fsctl vf-read (validates path stays under home dir)
+	relPath, _ := filepath.Rel(homeDir, targetPath)
+	cmd := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-read", sysUser, relPath)
 	cmd.Stdout = w
 	cmd.Run()
 }
@@ -655,7 +659,8 @@ func (h *VueFinderHandler) handlePreview(w http.ResponseWriter, r *http.Request,
 	}
 	w.Header().Set("Content-Type", mimeType)
 
-	cmd := exec.Command("sudo", "-u", sysUser, "cat", "--", targetPath)
+	relPath, _ := filepath.Rel(homeDir, targetPath)
+	cmd := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-read", sysUser, relPath)
 	cmd.Stdout = w
 	cmd.Run()
 }
@@ -677,10 +682,11 @@ func (h *VueFinderHandler) handleSave(w http.ResponseWriter, r *http.Request, sy
 		return
 	}
 
-	cmd := exec.Command("sudo", "-u", sysUser, "tee", targetPath)
+	relPath, _ := filepath.Rel(homeDir, targetPath)
+	cmd := exec.Command("sudo", "/usr/local/sbin/panel-fsctl", "vf-write", sysUser, relPath)
 	cmd.Stdin = strings.NewReader(body.Content)
-	if err := cmd.Run(); err != nil {
-		log.Printf("save file failed for %s: %v", targetPath, err)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Printf("save file failed for %s: %s", targetPath, strings.TrimSpace(string(out)))
 		jsonError(w, "failed to save file content", http.StatusInternalServerError)
 		return
 	}
@@ -731,21 +737,23 @@ func (h *VueFinderHandler) handleArchive(w http.ResponseWriter, r *http.Request,
 
 	var cmd *exec.Cmd
 	if strings.HasSuffix(archiveName, ".tar.gz") {
-		cmdArgs := append([]string{"-u", sysUser, "tar", "-czf", fullOutput, "-C", targetDir}, itemBases...)
-		cmd = exec.Command("sudo", cmdArgs...)
+		cmdArgs := append([]string{"sudo", "/usr/bin/tar", "-czf", fullOutput, "-C", targetDir}, itemBases...)
+		cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	} else {
-		cmdArgs := append([]string{"-u", sysUser, "zip", "-r", fullOutput}, itemBases...)
-		cmd = exec.Command("sudo", cmdArgs...)
+		cmdArgs := append([]string{"sudo", "/usr/bin/zip", "-r", fullOutput}, itemBases...)
+		cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
 		cmd.Dir = targetDir
 	}
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("archive failed: %s", string(out))
+		log.Printf("archive failed: %s", strings.TrimSpace(string(out)))
 		jsonError(w, "compression failed", http.StatusInternalServerError)
 		return
 	}
 
+	// Fix ownership after archive creation
+	exec.Command("sudo", "/usr/bin/chown", sysUser+":"+sysUser, fullOutput).Run()
 	jsonSuccess(w, map[string]interface{}{"status": true, "archive": archiveName})
 }
 
@@ -796,9 +804,9 @@ func (h *VueFinderHandler) handleUnarchive(w http.ResponseWriter, r *http.Reques
 	var cmd *exec.Cmd
 	lower := strings.ToLower(archivePath)
 	if strings.HasSuffix(lower, ".zip") {
-		cmd = exec.Command("sudo", "-u", sysUser, "unzip", "-o", archivePath, "-d", destDir)
+		cmd = exec.Command("sudo", "/usr/bin/unzip", "-o", archivePath, "-d", destDir)
 	} else if strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") || strings.HasSuffix(lower, ".tar") {
-		cmd = exec.Command("sudo", "-u", sysUser, "tar", "-xzf", archivePath, "-C", destDir)
+		cmd = exec.Command("sudo", "/usr/bin/tar", "-xzf", archivePath, "-C", destDir)
 	} else {
 		jsonError(w, "unsupported archive format", http.StatusBadRequest)
 		return
@@ -806,12 +814,12 @@ func (h *VueFinderHandler) handleUnarchive(w http.ResponseWriter, r *http.Reques
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("unarchive failed for %s: %s", archivePath, string(out))
+		log.Printf("unarchive failed for %s: %s", archivePath, strings.TrimSpace(string(out)))
 		jsonError(w, "extraction failed", http.StatusInternalServerError)
 		return
 	}
 
-	exec.Command("sudo", "chown", "-R", sysUser+":"+sysUser, destDir).Run()
+	exec.Command("sudo", "/usr/bin/chown", "-R", sysUser+":"+sysUser, destDir).Run()
 	jsonSuccess(w, map[string]interface{}{"status": true, "message": "unarchived successfully"})
 }
 

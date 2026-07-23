@@ -229,8 +229,98 @@ case "$COMMAND" in
         chown "$USER:$USER" "$PANEL_DIR"
         ;;
 
+    # VueFinder file manager operations — all paths validated under /home/USER/
+    vf-mkdir)
+        USER="${1:-}"; RELPATH="${2:-}"
+        validate_user "$USER"
+        TARGET="/home/$USER/$RELPATH"
+        assert_under "$TARGET" "/home/$USER/"
+        mkdir -p "$TARGET"
+        chmod 0755 "$TARGET"
+        chown "$USER:$USER" "$TARGET"
+        ;;
+
+    vf-mkfile)
+        USER="${1:-}"; RELPATH="${2:-}"
+        validate_user "$USER"
+        TARGET="/home/$USER/$RELPATH"
+        assert_under "$TARGET" "/home/$USER/"
+        touch "$TARGET"
+        chmod 0644 "$TARGET"
+        chown "$USER:$USER" "$TARGET"
+        ;;
+
+    vf-rename)
+        USER="${1:-}"; RELOLD="${2:-}"; RELNEW="${3:-}"
+        validate_user "$USER"
+        OLD="/home/$USER/$RELOLD"
+        NEW="/home/$USER/$RELNEW"
+        assert_under "$OLD" "/home/$USER/"
+        assert_under "$NEW" "/home/$USER/"
+        mv -- "$OLD" "$NEW"
+        ;;
+
+    vf-delete)
+        USER="${1:-}"; RELPATH="${2:-}"
+        validate_user "$USER"
+        TARGET="/home/$USER/$RELPATH"
+        REAL=$(realpath -m "$TARGET" 2>/dev/null) || die "cannot resolve: $TARGET"
+        [[ "$REAL" != "/home/$USER" ]] || die "cannot delete home directory"
+        assert_under "$REAL" "/home/$USER/"
+        [[ -e "$REAL" ]] || exit 0
+        safe_rm "$REAL"
+        ;;
+
+    vf-copy)
+        USER="${1:-}"; RELSRC="${2:-}"; RELDEST="${3:-}"
+        validate_user "$USER"
+        SRC="/home/$USER/$RELSRC"
+        DEST="/home/$USER/$RELDEST"
+        assert_under "$SRC" "/home/$USER/"
+        assert_under "$DEST" "/home/$USER/"
+        cp -r -- "$SRC" "$DEST"
+        chown -R "$USER:$USER" "$DEST"
+        ;;
+
+    vf-move)
+        USER="${1:-}"; RELSRC="${2:-}"; RELDEST="${3:-}"
+        validate_user "$USER"
+        SRC="/home/$USER/$RELSRC"
+        DEST="/home/$USER/$RELDEST"
+        assert_under "$SRC" "/home/$USER/"
+        assert_under "$DEST" "/home/$USER/"
+        mv -- "$SRC" "$DEST"
+        ;;
+
+    vf-write)
+        # Reads file content from stdin and writes it to TARGET
+        USER="${1:-}"; RELPATH="${2:-}"
+        validate_user "$USER"
+        TARGET="/home/$USER/$RELPATH"
+        assert_under "$TARGET" "/home/$USER/"
+        cat > "$TARGET"
+        chmod 0644 "$TARGET"
+        chown "$USER:$USER" "$TARGET"
+        ;;
+
+    vf-read)
+        USER="${1:-}"; RELPATH="${2:-}"
+        validate_user "$USER"
+        TARGET="/home/$USER/$RELPATH"
+        assert_under "$TARGET" "/home/$USER/"
+        cat -- "$TARGET"
+        ;;
+
+    vf-list)
+        USER="${1:-}"; RELPATH="${2:-}"
+        validate_user "$USER"
+        TARGET="/home/$USER/$RELPATH"
+        assert_under "$TARGET" "/home/$USER/"
+        ls -la --time-style=+%s "$TARGET"
+        ;;
+
     *)
-        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys, ensure-panel-dir"
+        die "unknown command '${COMMAND}'. Valid: delete-home, delete-backup, delete-staging, write-authkeys, ensure-panel-dir, vf-mkdir, vf-mkfile, vf-rename, vf-delete, vf-copy, vf-move, vf-write, vf-read, vf-list"
         ;;
 esac
 FSCTL_EOF
