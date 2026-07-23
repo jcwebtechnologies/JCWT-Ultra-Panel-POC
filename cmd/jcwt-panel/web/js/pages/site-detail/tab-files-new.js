@@ -68,7 +68,7 @@ export async function renderVueFinder(el, siteId, siteToken) {
                 </script>
                 <style>
                     body { margin: 0; padding: 0; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
-                    #vuefinder { height: 100vh; }
+                    #vuefinder { height: 100vh; width: 100%; box-sizing: border-box; }
                 </style>
             </head>
             <body>
@@ -77,21 +77,37 @@ export async function renderVueFinder(el, siteId, siteToken) {
                     import { createApp, h } from 'vue';
                     import VueFinder from 'vuefinder';
 
-                    const app = createApp({
-                        render() {
-                            return h(VueFinder, {
-                                id: 'vf',
-                                request: {
-                                    baseUrl: '${apiUrl}',
-                                    headers: {
-                                        'X-CSRF-Token': '${document.querySelector('meta[name="csrf-token"]')?.content || ''}'
-                                    }
-                                }
-                            });
-                        }
+                    window.addEventListener('error', function(e) {
+                        const el = document.getElementById('vuefinder');
+                        if (el) el.innerHTML = '<div style="padding:24px;color:#ef4444;font-family:monospace;font-size:14px;"><strong>VueFinder Error:</strong><br>' + (e.message || e) + '</div>';
                     });
-                    app.use(VueFinder);
-                    app.mount('#vuefinder');
+
+                    try {
+                        const Comp = VueFinder.VueFinder || (VueFinder.default && VueFinder.default.VueFinder) || VueFinder.default || VueFinder;
+                        const app = createApp({
+                            render() {
+                                return h(Comp, {
+                                    id: 'vf',
+                                    url: '${apiUrl}',
+                                    request: {
+                                        baseUrl: '${apiUrl}',
+                                        headers: {
+                                            'X-CSRF-Token': '${document.querySelector('meta[name="csrf-token"]')?.content || ''}'
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        if (VueFinder.install) {
+                            app.use(VueFinder);
+                        } else if (VueFinder.default && VueFinder.default.install) {
+                            app.use(VueFinder.default);
+                        }
+                        app.mount('#vuefinder');
+                    } catch (err) {
+                        const el = document.getElementById('vuefinder');
+                        if (el) el.innerHTML = '<div style="padding:24px;color:#ef4444;font-family:monospace;font-size:14px;"><strong>Initialization Error:</strong><br>' + (err.stack || err.message) + '</div>';
+                    }
                 </script>
             </body>
             </html>
