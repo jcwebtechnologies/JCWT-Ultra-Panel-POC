@@ -1,6 +1,18 @@
 import { vuefinder } from '../../api.js';
 import { showToast, escapeHtml } from '../../app.js';
 
+// These are resolved via the importmap in index.html pointing to /js/vendor/vue.esm-browser.prod.js
+import { createApp, h } from 'vue';
+
+let vfModuleCache = null;
+async function loadVueFinder() {
+    if (!vfModuleCache) {
+        // vuefinder.bundle.js has vue marked external — the importmap above resolves it
+        vfModuleCache = await import('/js/vendor/vuefinder.bundle.js');
+    }
+    return vfModuleCache;
+}
+
 export async function renderVueFinder(el, siteId, siteToken) {
     const apiUrl = vuefinder.url(siteId);
 
@@ -15,13 +27,7 @@ export async function renderVueFinder(el, siteId, siteToken) {
                 <button class="btn btn-sm btn-ghost" id="vf-reload">↻ Reload</button>
             </div>
         </div>
-        <div id="vf-mount-area" style="min-height: 600px; width: 100%;">
-            <div class="empty-state" id="vf-loading">
-                <div class="loading-spinner" style="margin: 0 auto var(--space-3);"></div>
-                <div class="empty-state-title">Loading VueFinder File Manager...</div>
-                <div class="empty-state-text">Initializing native file manager.</div>
-            </div>
-        </div>
+        <div id="vf-mount-area" style="min-height: 600px; width: 100%;"></div>
     </div>`;
 
     if (!document.getElementById('vuefinder-css')) {
@@ -32,64 +38,62 @@ export async function renderVueFinder(el, siteId, siteToken) {
         document.head.appendChild(link);
     }
 
+    let vfApp = null;
+
     async function init() {
         const mountArea = document.getElementById('vf-mount-area');
         if (!mountArea) return;
 
+        // Unmount any previous app instance
+        if (vfApp) {
+            try { vfApp.unmount(); } catch (_) {}
+            vfApp = null;
+        }
+
         mountArea.innerHTML = `
-            <div class="empty-state" id="vf-loading">
+            <div class="empty-state" style="padding: var(--space-8);">
                 <div class="loading-spinner" style="margin: 0 auto var(--space-3);"></div>
-                <div class="empty-state-title">Loading VueFinder File Manager...</div>
-                <div class="empty-state-text">Initializing native file manager.</div>
+                <div class="empty-state-title">Loading File Manager...</div>
             </div>`;
 
         try {
-            // Single fully self-contained bundle — zero bare specifier imports, zero CDN calls
-            const { createApp, h } = await import('/js/vendor/vuefinder.bundle.js');
-            const vfMod = await import('/js/vendor/vuefinder.bundle.js');
+            const vfMod = await loadVueFinder();
 
-            // VueFinder exports: { VueFinder, VueFinderPlugin, RemoteDriver, default, ... }
-            const VueFinderComp = vfMod.VueFinder || vfMod.default?.VueFinder || vfMod.default;
-            const VueFinderPlugin = vfMod.VueFinderPlugin || vfMod.default?.VueFinderPlugin || vfMod.default;
-            const RemoteDriver = vfMod.RemoteDriver || vfMod.default?.RemoteDriver;
+            // VueFinder 4.x named exports
+            const VueFinderComp   = vfMod.VueFinder;
+            const VueFinderPlugin = vfMod.VueFinderPlugin;
+            const RemoteDriver    = vfMod.RemoteDriver;
 
-            if (!VueFinderComp) throw new Error('VueFinder component not found in bundle exports');
-
-            mountArea.innerHTML = `<div id="vf-root" style="height:72vh;width:100%;"></div>`;
+            if (!VueFinderComp)   throw new Error('VueFinder component not found in bundle');
+            if (!VueFinderPlugin) throw new Error('VueFinderPlugin not found in bundle');
+            if (!RemoteDriver)    throw new Error('RemoteDriver not found in bundle');
 
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-            const driver = RemoteDriver
-                ? new RemoteDriver({
-                    baseURL: apiUrl,
-                    headers: { 'X-CSRF-Token': csrfToken },
-                })
-                : null;
-
-            const app = createApp({
-                render() {
-                    return h(VueFinderComp, {
-                        id: 'vf',
-                        ...(driver ? { driver } : { url: apiUrl }),
-                        request: {
-                            baseUrl: apiUrl,
-                            headers: { 'X-CSRF-Token': csrfToken },
-                        },
-                    });
-                }
+            const driver = new RemoteDriver({
+                baseURL: apiUrl,
+                headers: { 'X-CSRF-Token': csrfToken },
             });
 
-            app.use(VueFinderPlugin);
-            app.mount('#vf-root');
+            mountArea.innerHTML = '<div id="vf-root" style="height:72vh;width:100%;"></div>';
+
+            vfApp = createApp({
+                render() {
+                    return h(VueFinderComp, { id: 'vf', driver });
+                }
+            });
+            vfApp.use(VueFinderPlugin);
+            vfApp.mount('#vf-root');
 
         } catch (err) {
             console.error('VueFinder init failed:', err);
-            const mountArea = document.getElementById('vf-mount-area');
-            if (mountArea) {
-                mountArea.innerHTML = `
+            const area = document.getElementById('vf-mount-area');
+            if (area) {
+                area.innerHTML = `
                     <div class="empty-state" style="padding: var(--space-4);">
                         <div class="empty-state-title" style="color: var(--status-error);">VueFinder Load Error</div>
-                        <pre style="font-size:12px; text-align:left; background: var(--bg-tertiary); padding: 12px; border-radius: 6px; overflow:auto; margin: 12px 0; white-space:pre-wrap;">${escapeHtml(err.stack || err.message || String(err))}</pre>
+                        <pre style="font-size:12px; text-align:left; background: var(--bg-tertiary); padding: 12px;
+                                    border-radius: 6px; overflow:auto; margin: 12px 0; white-space:pre-wrap;">${escapeHtml(err.stack || err.message || String(err))}</pre>
                         <button class="btn btn-sm btn-primary" id="vf-retry-btn">Retry</button>
                     </div>`;
                 document.getElementById('vf-retry-btn')?.addEventListener('click', init);
