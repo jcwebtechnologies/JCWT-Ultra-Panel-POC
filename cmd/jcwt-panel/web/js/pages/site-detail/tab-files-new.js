@@ -66,7 +66,7 @@ export async function renderVueFinder(el, siteId, siteToken) {
             <body>
                 <div id="vuefinder"></div>
                 <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
-                <script src="https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/vuefinder.iife.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/vuefinder.js"></script>
                 <script>
                     (function() {
                         if (typeof Vue === 'undefined') {
