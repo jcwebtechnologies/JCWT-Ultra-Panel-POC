@@ -2,6 +2,8 @@ import { vuefinder } from '../../api.js';
 import { icons, showToast, escapeHtml } from '../../app.js';
 
 export async function renderVueFinder(el, siteId, siteToken) {
+    const apiUrl = vuefinder.url(siteId);
+
     el.innerHTML = `
     <div class="card" style="padding: var(--space-4);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); flex-wrap: wrap; gap: var(--space-2);">
@@ -13,84 +15,90 @@ export async function renderVueFinder(el, siteId, siteToken) {
                 <button class="btn btn-sm btn-ghost" id="vf-reload">↻ Reload</button>
             </div>
         </div>
-        <div id="vf-container" style="min-height: 600px; position: relative;">
-            <iframe id="vf-iframe" style="width: 100%; height: 75vh; border: 1px solid var(--border-primary); border-radius: var(--radius-md); background: #0f172a;"></iframe>
+        <div id="vf-mount-area" style="min-height: 600px; width: 100%;">
+            <div class="empty-state" id="vf-loading">
+                <div class="loading-spinner" style="margin: 0 auto var(--space-3);"></div>
+                <div class="empty-state-title">Loading VueFinder File Manager...</div>
+                <div class="empty-state-text">Initializing pilot native file manager.</div>
+            </div>
         </div>
     </div>`;
 
-    const apiUrl = vuefinder.url(siteId);
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-
-    function initVueFinder() {
-        const iframe = document.getElementById('vf-iframe');
-        if (!iframe) return;
-
-        iframe.srcdoc = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VueFinder</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/dist/style.css">
-    <script type="importmap">
-    {
-        "imports": {
-            "vue": "https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js",
-            "vuefinder": "https://cdn.jsdelivr.net/npm/vuefinder@2.4.0/+esm"
-        }
+    if (!document.getElementById('vuefinder-css')) {
+        const link = document.createElement('link');
+        link.id = 'vuefinder-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/vuefinder/dist/style.css';
+        document.head.appendChild(link);
     }
-    </script>
-    <style>
-        html, body { margin: 0; padding: 0; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; height: 100%; width: 100%; overflow: hidden; }
-        #vuefinder { height: 100vh; width: 100%; box-sizing: border-box; }
-    </style>
-</head>
-<body>
-    <div id="vuefinder"></div>
-    <script type="module">
-        import { createApp, h } from 'vue';
-        import VueFinder from 'vuefinder';
 
-        window.addEventListener('error', function(e) {
-            const el = document.getElementById('vuefinder');
-            if (el) el.innerHTML = '<div style="padding:24px;color:#ef4444;font-family:monospace;font-size:14px;"><strong>VueFinder Error:</strong><br>' + (e.message || e) + '</div>';
-        });
+    async function init() {
+        const mountArea = document.getElementById('vf-mount-area');
+        if (!mountArea) return;
+
+        mountArea.innerHTML = `
+            <div class="empty-state" id="vf-loading">
+                <div class="loading-spinner" style="margin: 0 auto var(--space-3);"></div>
+                <div class="empty-state-title">Loading VueFinder File Manager...</div>
+                <div class="empty-state-text">Initializing pilot native file manager.</div>
+            </div>`;
 
         try {
+            // Dynamically import Vue 3 and VueFinder ES modules directly in parent window context
+            const Vue = await import('https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js');
+            const VueFinderModule = await import('https://cdn.jsdelivr.net/npm/vuefinder/+esm');
+
+            const VueFinder = VueFinderModule.default || VueFinderModule;
             const Comp = VueFinder.VueFinder || (VueFinder.default && VueFinder.default.VueFinder) || VueFinder.default || VueFinder;
-            const app = createApp({
+
+            mountArea.innerHTML = `<div id="vf-root" style="height:70vh;width:100%;"></div>`;
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+            const app = Vue.createApp({
                 render() {
-                    return h(Comp, {
+                    return Vue.h(Comp, {
                         id: 'vf',
-                        url: '${apiUrl}',
+                        url: apiUrl,
                         request: {
-                            baseUrl: '${apiUrl}',
+                            baseUrl: apiUrl,
                             headers: {
-                                'X-CSRF-Token': '${csrfToken}'
+                                'X-CSRF-Token': csrfToken
                             }
                         }
                     });
                 }
             });
+
             if (VueFinder.install) {
                 app.use(VueFinder);
-            } else if (VueFinder.default && VueFinder.default.install) {
-                app.use(VueFinder.default);
+            } else if (VueFinderModule.install) {
+                app.use(VueFinderModule);
             }
-            app.mount('#vuefinder');
+
+            app.mount('#vf-root');
+
         } catch (err) {
-            const el = document.getElementById('vuefinder');
-            if (el) el.innerHTML = '<div style="padding:24px;color:#ef4444;font-family:monospace;font-size:14px;"><strong>Initialization Error:</strong><br>' + (err.stack || err.message) + '</div>';
+            console.error('VueFinder load failed:', err);
+            const mountArea = document.getElementById('vf-mount-area');
+            if (mountArea) {
+                mountArea.innerHTML = `
+                    <div class="empty-state p-6">
+                        <div class="empty-state-title" style="color: var(--status-error);">VueFinder Load Error</div>
+                        <div class="empty-state-text" style="font-family: monospace; text-align: left; background: var(--bg-tertiary); padding: 12px; border-radius: 6px; word-break: break-all; margin: 12px 0;">
+                            ${escapeHtml(err.stack || err.message || String(err))}
+                        </div>
+                        <button class="btn btn-sm btn-primary" id="vf-retry-btn">Retry</button>
+                    </div>`;
+                document.getElementById('vf-retry-btn')?.addEventListener('click', init);
+            }
         }
-    </script>
-</body>
-</html>`;
     }
 
-    initVueFinder();
+    init();
 
     document.getElementById('vf-reload')?.addEventListener('click', () => {
-        initVueFinder();
+        init();
         showToast('File Manager reloaded', 'success');
     });
 }
